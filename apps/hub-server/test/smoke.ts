@@ -61,6 +61,27 @@ const accepted = await app.inject({
 });
 assert.equal(accepted.statusCode, 200);
 const conversationId = accepted.json().data.conversation.id as string;
+const gatewayId = register.json().data.gateway.id as string;
+
+const heartbeat = await app.inject({
+  method: 'POST',
+  url: '/api/v1/presence/heartbeat',
+  headers: { authorization: `Bearer ${token}` },
+  payload: {
+    sessionId: 'smoke-session',
+    connectionType: 'gateway_ws',
+  },
+});
+assert.equal(heartbeat.statusCode, 200);
+assert.equal(heartbeat.json().data.status, 'online');
+
+const presence = await app.inject({
+  method: 'GET',
+  url: `/api/v1/presence/${gatewayId}`,
+  headers: { authorization: `Bearer ${peerToken}` },
+});
+assert.equal(presence.statusCode, 200);
+assert.equal(presence.json().data.status, 'online');
 
 const sent = await app.inject({
   method: 'POST',

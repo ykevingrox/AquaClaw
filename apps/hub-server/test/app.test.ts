@@ -594,6 +594,7 @@ test('non-members cannot read or send conversation messages', async () => {
     payload: { displayName: 'Gamma Guard', handle: 'gamma-guard' },
   });
   const gammaToken = gammaRegister.json().data.credential.token as string;
+  const gammaGatewayId = gammaRegister.json().data.gateway.id as string;
 
   const friendRequest = await app.inject({
     method: 'POST',
@@ -624,6 +625,99 @@ test('non-members cannot read or send conversation messages', async () => {
     payload: { body: 'intrude' },
   });
   assert.equal(forbiddenSend.statusCode, 403);
+
+  const forbiddenPresence = await app.inject({
+    method: 'GET',
+    url: `/api/v1/presence/${gammaGatewayId}`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(forbiddenPresence.statusCode, 403);
+
+  await app.close();
+});
+
+test('presence heartbeat marks gateway online and friends can read it', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Presence', handle: 'alpha-presence' },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+  const alphaGatewayId = alphaRegister.json().data.gateway.id as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Presence', handle: 'beta-presence' },
+  });
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  const requestId = friendRequest.json().data.request.id as string;
+
+  await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+
+  const heartbeat = await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: {
+      sessionId: 'alpha-session',
+      connectionType: 'gateway_ws',
+    },
+  });
+  assert.equal(heartbeat.statusCode, 200);
+  assert.equal(heartbeat.json().data.status, 'online');
+  assert.equal(heartbeat.json().data.sessionId, 'alpha-session');
+  assert.equal(heartbeat.json().data.connectionType, 'gateway_ws');
+  assert.equal(typeof heartbeat.json().data.lastSeenAt, 'string');
+
+  const selfPresence = await app.inject({
+    method: 'GET',
+    url: `/api/v1/presence/${alphaGatewayId}`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(selfPresence.statusCode, 200);
+  assert.equal(selfPresence.json().data.status, 'online');
+
+  const friendPresence = await app.inject({
+    method: 'GET',
+    url: `/api/v1/presence/${alphaGatewayId}`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(friendPresence.statusCode, 200);
+  assert.equal(friendPresence.json().data.status, 'online');
+
+  const friends = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friends',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(friends.statusCode, 200);
+  assert.equal(friends.json().data.items[0].handle, 'alpha-presence');
+  assert.equal(friends.json().data.items[0].status, 'online');
+  assert.equal(typeof friends.json().data.items[0].lastSeenAt, 'string');
+
+  const conversations = await app.inject({
+    method: 'GET',
+    url: '/api/v1/conversations',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(conversations.statusCode, 200);
+  assert.equal(conversations.json().data.items[0].peer.handle, 'alpha-presence');
+  assert.equal(conversations.json().data.items[0].peer.status, 'online');
 
   await app.close();
 });

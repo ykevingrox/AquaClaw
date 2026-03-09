@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
 export type GatewayVisibility = 'private' | 'invite_only' | 'friends_only' | 'public';
+export type PresenceStatus = 'online' | 'recently_active' | 'offline';
 
 export interface GatewayRecord {
   id: string;
@@ -10,6 +11,12 @@ export interface GatewayRecord {
   visibility: GatewayVisibility;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GatewayPresenceRecord {
+  gatewayId: string;
+  status: PresenceStatus;
+  lastSeenAt: string | null;
 }
 
 export interface FriendRequestRecord {
@@ -79,6 +86,8 @@ interface CreateMessageInput {
 }
 
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
+const ONLINE_THRESHOLD_MS = 90_000;
+const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
 
 export class InMemoryGatewayStore {
   private readonly gatewaysById = new Map<string, GatewayRecord>();
@@ -88,6 +97,7 @@ export class InMemoryGatewayStore {
   private readonly friendshipsById = new Map<string, FriendshipRecord>();
   private readonly conversationsById = new Map<string, ConversationRecord>();
   private readonly messagesById = new Map<string, MessageRecord>();
+  private readonly lastSeenAtByGatewayId = new Map<string, string>();
 
   register(input: RegisterInput) {
     const normalizedHandle = input.handle.trim().toLowerCase();
@@ -162,6 +172,29 @@ export class InMemoryGatewayStore {
     this.gatewaysById.set(updated.id, updated);
     this.gatewaysByHandle.set(updated.handle, updated);
     return updated;
+  }
+
+  heartbeatPresence(gatewayId: string): GatewayPresenceRecord {
+    if (!this.gatewaysById.has(gatewayId)) {
+      throw new Error('gateway not found');
+    }
+
+    const now = new Date().toISOString();
+    this.lastSeenAtByGatewayId.set(gatewayId, now);
+    return this.getPresence(gatewayId);
+  }
+
+  getPresence(gatewayId: string): GatewayPresenceRecord {
+    if (!this.gatewaysById.has(gatewayId)) {
+      throw new Error('gateway not found');
+    }
+
+    const lastSeenAt = this.lastSeenAtByGatewayId.get(gatewayId) ?? null;
+    return {
+      gatewayId,
+      status: this.derivePresenceStatus(lastSeenAt),
+      lastSeenAt,
+    };
   }
 
   searchGateways(input: SearchGatewaysInput): GatewayRecord[] {
@@ -305,6 +338,14 @@ export class InMemoryGatewayStore {
       .sort((a, b) => a.handle.localeCompare(b.handle));
   }
 
+  areFriends(gatewayAId: string, gatewayBId: string) {
+    return Array.from(this.friendshipsById.values()).some(
+      (friendship) =>
+        (friendship.gatewayAId === gatewayAId && friendship.gatewayBId === gatewayBId) ||
+        (friendship.gatewayAId === gatewayBId && friendship.gatewayBId === gatewayAId),
+    );
+  }
+
   findConversationById(conversationId: string): ConversationRecord | null {
     return this.conversationsById.get(conversationId) ?? null;
   }
@@ -389,12 +430,19 @@ export class InMemoryGatewayStore {
     return conversation;
   }
 
-  private areFriends(gatewayAId: string, gatewayBId: string) {
-    return Array.from(this.friendshipsById.values()).some(
-      (friendship) =>
-        (friendship.gatewayAId === gatewayAId && friendship.gatewayBId === gatewayBId) ||
-        (friendship.gatewayAId === gatewayBId && friendship.gatewayBId === gatewayAId),
-    );
+  private derivePresenceStatus(lastSeenAt: string | null): PresenceStatus {
+    if (!lastSeenAt) {
+      return 'offline';
+    }
+
+    const deltaMs = Date.now() - new Date(lastSeenAt).getTime();
+    if (deltaMs <= ONLINE_THRESHOLD_MS) {
+      return 'online';
+    }
+    if (deltaMs <= RECENTLY_ACTIVE_THRESHOLD_MS) {
+      return 'recently_active';
+    }
+    return 'offline';
   }
 
   reset() {
@@ -405,6 +453,7 @@ export class InMemoryGatewayStore {
     this.friendshipsById.clear();
     this.conversationsById.clear();
     this.messagesById.clear();
+    this.lastSeenAtByGatewayId.clear();
   }
 }
 

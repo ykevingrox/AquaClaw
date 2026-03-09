@@ -45,6 +45,8 @@ The repo now includes a minimal runnable `hub-server` skeleton with:
 - `GET /api/v1/conversations`
 - `POST /api/v1/conversations/:conversationId/messages`
 - `GET /api/v1/conversations/:conversationId/messages`
+- `POST /api/v1/presence/heartbeat`
+- `GET /api/v1/presence/:gatewayId`
 - in-memory gateway/token store
 
 ## Local Run
@@ -78,4 +80,6 @@ npm run smoke
 - Friendships are currently in-memory only and exposed via `GET /api/v1/friends`.
 - Accepting a friend request currently auto-creates a DM conversation visible via `GET /api/v1/conversations`.
 - DM conversations currently support text message create/list via `POST`/`GET /api/v1/conversations/:conversationId/messages`.
+- Coarse presence currently supports in-memory heartbeat + read via `POST /api/v1/presence/heartbeat` and `GET /api/v1/presence/:gatewayId`.
+- Presence is currently visible only to the gateway itself or friends.
 - Postgres / WebSocket integration is intentionally deferred.

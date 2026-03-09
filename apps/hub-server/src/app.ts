@@ -36,8 +36,17 @@ interface ConversationParams {
   conversationId: string;
 }
 
+interface PresenceParams {
+  gatewayId: string;
+}
+
 interface CreateMessageBody {
   body?: string;
+}
+
+interface PresenceHeartbeatBody {
+  sessionId?: string;
+  connectionType?: string;
 }
 
 function extractBearerToken(value: string | undefined) {
@@ -89,21 +98,36 @@ function toGatewaySummary(gateway: { id: string; handle: string; displayName: st
   };
 }
 
-function toSearchResult(gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
+function toSearchResult(store: InMemoryGatewayStore, gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
   return {
     ...toGatewaySummary(gateway),
-    status: 'offline' as const,
+    status: store.getPresence(gateway.id).status,
     tags: [] as string[],
   };
 }
 
-function toConversationSummary(item: { conversation: { id: string; type: 'dm'; createdAt: string; updatedAt: string }; peerGateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility } }) {
+function toConversationSummary(
+  store: InMemoryGatewayStore,
+  item: { conversation: { id: string; type: 'dm'; createdAt: string; updatedAt: string }; peerGateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility } },
+) {
   return {
     id: item.conversation.id,
     type: item.conversation.type,
-    peer: toGatewaySummary(item.peerGateway),
+    peer: {
+      ...toGatewaySummary(item.peerGateway),
+      status: store.getPresence(item.peerGateway.id).status,
+    },
     createdAt: item.conversation.createdAt,
     updatedAt: item.conversation.updatedAt,
+  };
+}
+
+function toFriendSummary(store: InMemoryGatewayStore, gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
+  const presence = store.getPresence(gateway.id);
+  return {
+    ...toGatewaySummary(gateway),
+    status: presence.status,
+    lastSeenAt: presence.lastSeenAt,
   };
 }
 
@@ -283,7 +307,7 @@ export function buildApp(options: BuildAppOptions = {}) {
         q: request.query.q,
         limit: parsedLimit,
       })
-      .map((gateway) => toSearchResult(gateway));
+      .map((gateway) => toSearchResult(store, gateway));
 
     return {
       ok: true,
@@ -445,7 +469,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       return reply.code(401).send({ ok: false, error: result.error });
     }
 
-    const items = store.listFriends(result.gateway.id).map((gateway) => toGatewaySummary(gateway));
+    const items = store.listFriends(result.gateway.id).map((gateway) => toFriendSummary(store, gateway));
     return {
       ok: true,
       data: {
@@ -460,7 +484,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       return reply.code(401).send({ ok: false, error: result.error });
     }
 
-    const items = store.listConversations(result.gateway.id).map((item) => toConversationSummary(item));
+    const items = store.listConversations(result.gateway.id).map((item) => toConversationSummary(store, item));
     return {
       ok: true,
       data: {
@@ -525,6 +549,84 @@ export function buildApp(options: BuildAppOptions = {}) {
         },
       });
     }
+  });
+
+  app.post<{ Body: PresenceHeartbeatBody }>('/api/v1/presence/heartbeat', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const sessionId = request.body?.sessionId?.trim();
+    const connectionType = request.body?.connectionType?.trim();
+    if (request.body?.sessionId !== undefined && !sessionId) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'sessionId must be a non-empty string when provided',
+        },
+      });
+    }
+    if (request.body?.connectionType !== undefined && !connectionType) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'connectionType must be a non-empty string when provided',
+        },
+      });
+    }
+
+    const presence = store.heartbeatPresence(result.gateway.id);
+    return {
+      ok: true,
+      data: {
+        sessionId: sessionId ?? null,
+        connectionType: connectionType ?? null,
+        status: presence.status,
+        lastSeenAt: presence.lastSeenAt,
+      },
+    };
+  });
+
+  app.get<{ Params: PresenceParams }>('/api/v1/presence/:gatewayId', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const target = store.findById(request.params.gatewayId);
+    if (!target) {
+      return reply.code(404).send({
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: 'gateway not found',
+        },
+      });
+    }
+
+    const isSelf = result.gateway.id === target.id;
+    const isFriend = store.areFriends(result.gateway.id, target.id);
+    if (!isSelf && !isFriend) {
+      return reply.code(403).send({
+        ok: false,
+        error: {
+          code: 'forbidden',
+          message: 'presence is only visible to the gateway itself or friends',
+        },
+      });
+    }
+
+    const presence = store.getPresence(target.id);
+    return {
+      ok: true,
+      data: {
+        status: presence.status,
+        lastSeenAt: presence.lastSeenAt,
+      },
+    };
   });
 
   return app;

@@ -19,6 +19,8 @@ Minimal runnable backend skeleton for Gateway Hub.
 - `GET /api/v1/conversations`
 - `POST /api/v1/conversations/:conversationId/messages`
 - `GET /api/v1/conversations/:conversationId/messages`
+- `POST /api/v1/presence/heartbeat`
+- `GET /api/v1/presence/:gatewayId`
 
 ## Run
 
@@ -55,4 +57,5 @@ npm run smoke
 - friendships are exposed via `GET /api/v1/friends`, also in memory
 - accepting a friend request auto-creates a DM conversation listed by `GET /api/v1/conversations`
 - DM conversations currently support text message create/list for conversation members only
+- coarse presence currently supports in-memory heartbeat + read for self/friends
 - no DB / WebSocket wiring yet
