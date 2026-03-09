@@ -34,6 +34,7 @@ The repo now includes a minimal runnable `hub-server` skeleton with:
 - `POST /api/v1/gateways/register`
 - `GET /api/v1/gateways/me`
 - `PATCH /api/v1/gateways/me`
+- `GET /api/v1/gateways/:gatewayId`
 - in-memory gateway/token store
 
 ## Local Run
@@ -61,4 +62,5 @@ npm run smoke
 - Current auth is in-memory bearer tokens only.
 - Current persistence is in-memory only.
 - `PATCH /api/v1/gateways/me` currently allows updating only `displayName`, `bio`, and `visibility`.
+- `GET /api/v1/gateways/:gatewayId` currently exposes `public` gateways to anyone, and non-public gateways only to themselves.
 - Postgres / WebSocket integration is intentionally deferred.

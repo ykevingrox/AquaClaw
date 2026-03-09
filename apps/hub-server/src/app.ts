@@ -49,6 +49,14 @@ function getAuthedGateway(store: InMemoryGatewayStore, authorization: string | u
   return { gateway } as const;
 }
 
+function getOptionalAuthedGateway(store: InMemoryGatewayStore, authorization: string | undefined) {
+  const token = extractBearerToken(authorization);
+  if (!token) {
+    return null;
+  }
+  return store.findByToken(token);
+}
+
 export function buildApp(options: BuildAppOptions = {}) {
   const store = options.store ?? createGatewayStore();
   const app = Fastify({ logger: true });
@@ -109,6 +117,40 @@ export function buildApp(options: BuildAppOptions = {}) {
       ok: true,
       data: {
         gateway: result.gateway,
+      },
+    };
+  });
+
+  app.get<{ Params: { gatewayId: string } }>('/api/v1/gateways/:gatewayId', async (request, reply) => {
+    const gateway = store.findById(request.params.gatewayId);
+    if (!gateway) {
+      return reply.code(404).send({
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: 'gateway not found',
+        },
+      });
+    }
+
+    const viewer = getOptionalAuthedGateway(store, request.headers.authorization);
+    const isSelf = viewer?.id === gateway.id;
+    const canView = gateway.visibility === 'public' || isSelf;
+
+    if (!canView) {
+      return reply.code(403).send({
+        ok: false,
+        error: {
+          code: 'forbidden',
+          message: 'gateway is not visible to the current viewer',
+        },
+      });
+    }
+
+    return {
+      ok: true,
+      data: {
+        gateway,
       },
     };
   });

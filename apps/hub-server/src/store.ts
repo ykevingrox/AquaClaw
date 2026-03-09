@@ -69,6 +69,10 @@ export class InMemoryGatewayStore {
     return { gateway, token };
   }
 
+  findById(gatewayId: string): GatewayRecord | null {
+    return this.gatewaysById.get(gatewayId) ?? null;
+  }
+
   findByToken(token: string): GatewayRecord | null {
     const gatewayId = this.tokensToGatewayId.get(token);
     if (!gatewayId) return null;

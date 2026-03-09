@@ -135,3 +135,73 @@ test('patch /api/v1/gateways/me rejects invalid visibility', async () => {
   assert.equal(response.json().error.message, 'invalid visibility');
   await app.close();
 });
+
+test('public gateway profile can be fetched without auth', async () => {
+  const app = buildApp();
+
+  const registerResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Public Claw',
+      handle: 'public-claw',
+      visibility: 'public',
+    },
+  });
+
+  const gatewayId = registerResponse.json().data.gateway.id as string;
+  const response = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${gatewayId}`,
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().data.gateway.handle, 'public-claw');
+  await app.close();
+});
+
+test('private gateway profile is only visible to itself', async () => {
+  const app = buildApp();
+
+  const privateRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Private Claw',
+      handle: 'private-claw',
+      visibility: 'private',
+    },
+  });
+
+  const privateGateway = privateRegister.json().data.gateway;
+  const privateToken = privateRegister.json().data.credential.token as string;
+
+  const otherRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Other Claw',
+      handle: 'other-claw',
+      visibility: 'public',
+    },
+  });
+
+  const otherToken = otherRegister.json().data.credential.token as string;
+
+  const forbiddenResponse = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${privateGateway.id}`,
+    headers: { authorization: `Bearer ${otherToken}` },
+  });
+  assert.equal(forbiddenResponse.statusCode, 403);
+
+  const selfResponse = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${privateGateway.id}`,
+    headers: { authorization: `Bearer ${privateToken}` },
+  });
+  assert.equal(selfResponse.statusCode, 200);
+  assert.equal(selfResponse.json().data.gateway.handle, 'private-claw');
+
+  await app.close();
+});
