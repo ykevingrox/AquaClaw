@@ -89,6 +89,16 @@ function toSearchResult(gateway: { id: string; handle: string; displayName: stri
   };
 }
 
+function toConversationSummary(item: { conversation: { id: string; type: 'dm'; createdAt: string; updatedAt: string }; peerGateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility } }) {
+  return {
+    id: item.conversation.id,
+    type: item.conversation.type,
+    peer: toGatewaySummary(item.peerGateway),
+    createdAt: item.conversation.createdAt,
+    updatedAt: item.conversation.updatedAt,
+  };
+}
+
 function friendRequestErrorToHttp(message: string) {
   if (message === 'pending request already exists') {
     return { statusCode: 409, code: 'pending_request_exists' };
@@ -367,6 +377,7 @@ export function buildApp(options: BuildAppOptions = {}) {
         data: {
           request: accepted.request,
           friendship: accepted.friendship,
+          conversation: accepted.conversation,
           peerGateway: peerGateway ? toGatewaySummary(peerGateway) : null,
         },
       };
@@ -417,6 +428,21 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
 
     const items = store.listFriends(result.gateway.id).map((gateway) => toGatewaySummary(gateway));
+    return {
+      ok: true,
+      data: {
+        items,
+      },
+    };
+  });
+
+  app.get('/api/v1/conversations', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const items = store.listConversations(result.gateway.id).map((item) => toConversationSummary(item));
     return {
       ok: true,
       data: {

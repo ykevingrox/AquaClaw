@@ -30,6 +30,14 @@ export interface FriendshipRecord {
   createdAt: string;
 }
 
+export interface ConversationRecord {
+  id: string;
+  type: 'dm';
+  memberGatewayIds: [string, string];
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface RegisterInput {
   displayName: string;
   handle: string;
@@ -63,6 +71,7 @@ export class InMemoryGatewayStore {
   private readonly tokensToGatewayId = new Map<string, string>();
   private readonly friendRequestsById = new Map<string, FriendRequestRecord>();
   private readonly friendshipsById = new Map<string, FriendshipRecord>();
+  private readonly conversationsById = new Map<string, ConversationRecord>();
 
   register(input: RegisterInput) {
     const normalizedHandle = input.handle.trim().toLowerCase();
@@ -227,7 +236,9 @@ export class InMemoryGatewayStore {
     };
     this.friendshipsById.set(friendship.id, friendship);
 
-    return { request: updatedRequest, friendship };
+    const conversation = this.ensureDmConversation(request.fromGatewayId, request.toGatewayId);
+
+    return { request: updatedRequest, friendship, conversation };
   }
 
   rejectFriendRequest(requestId: string, actingGatewayId: string) {
@@ -278,6 +289,39 @@ export class InMemoryGatewayStore {
       .sort((a, b) => a.handle.localeCompare(b.handle));
   }
 
+  listConversations(gatewayId: string): Array<{ conversation: ConversationRecord; peerGateway: GatewayRecord }> {
+    return Array.from(this.conversationsById.values())
+      .filter((conversation) => conversation.memberGatewayIds.includes(gatewayId))
+      .map((conversation) => {
+        const peerGatewayId = conversation.memberGatewayIds[0] === gatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
+        const peerGateway = this.gatewaysById.get(peerGatewayId);
+        return peerGateway ? { conversation, peerGateway } : null;
+      })
+      .filter((item): item is { conversation: ConversationRecord; peerGateway: GatewayRecord } => Boolean(item))
+      .sort((a, b) => a.peerGateway.handle.localeCompare(b.peerGateway.handle));
+  }
+
+  private ensureDmConversation(gatewayAId: string, gatewayBId: string): ConversationRecord {
+    const pair = [gatewayAId, gatewayBId].sort() as [string, string];
+    const existing = Array.from(this.conversationsById.values()).find(
+      (conversation) => conversation.type === 'dm' && conversation.memberGatewayIds[0] === pair[0] && conversation.memberGatewayIds[1] === pair[1],
+    );
+    if (existing) {
+      return existing;
+    }
+
+    const now = new Date().toISOString();
+    const conversation: ConversationRecord = {
+      id: randomUUID(),
+      type: 'dm',
+      memberGatewayIds: pair,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.conversationsById.set(conversation.id, conversation);
+    return conversation;
+  }
+
   private areFriends(gatewayAId: string, gatewayBId: string) {
     return Array.from(this.friendshipsById.values()).some(
       (friendship) =>
@@ -292,6 +336,7 @@ export class InMemoryGatewayStore {
     this.tokensToGatewayId.clear();
     this.friendRequestsById.clear();
     this.friendshipsById.clear();
+    this.conversationsById.clear();
   }
 }
 

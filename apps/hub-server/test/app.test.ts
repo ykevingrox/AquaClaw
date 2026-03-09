@@ -416,6 +416,7 @@ test('friend request can be accepted and creates friendship visible in friends l
   });
   assert.equal(acceptResponse.statusCode, 200);
   assert.equal(acceptResponse.json().data.request.status, 'accepted');
+  assert.equal(acceptResponse.json().data.conversation.type, 'dm');
 
   const alphaFriends = await app.inject({
     method: 'GET',
@@ -434,6 +435,24 @@ test('friend request can be accepted and creates friendship visible in friends l
   assert.equal(betaFriends.statusCode, 200);
   assert.equal(betaFriends.json().data.items.length, 1);
   assert.equal(betaFriends.json().data.items[0].handle, 'alpha-accept');
+
+  const alphaConversations = await app.inject({
+    method: 'GET',
+    url: '/api/v1/conversations',
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(alphaConversations.statusCode, 200);
+  assert.equal(alphaConversations.json().data.items.length, 1);
+  assert.equal(alphaConversations.json().data.items[0].peer.handle, 'beta-accept');
+
+  const betaConversations = await app.inject({
+    method: 'GET',
+    url: '/api/v1/conversations',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(betaConversations.statusCode, 200);
+  assert.equal(betaConversations.json().data.items.length, 1);
+  assert.equal(betaConversations.json().data.items[0].peer.handle, 'alpha-accept');
 
   const incomingAfterAccept = await app.inject({
     method: 'GET',

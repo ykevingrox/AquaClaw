@@ -16,6 +16,7 @@ Minimal runnable backend skeleton for Gateway Hub.
 - `POST /api/v1/friend-requests/:requestId/accept`
 - `POST /api/v1/friend-requests/:requestId/reject`
 - `GET /api/v1/friends`
+- `GET /api/v1/conversations`
 
 ## Run
 
@@ -50,4 +51,5 @@ npm run smoke
 - search currently returns public gateways plus the caller's own gateway
 - friend requests currently support create + incoming/outgoing list + accept/reject, all in memory
 - friendships are exposed via `GET /api/v1/friends`, also in memory
+- accepting a friend request auto-creates a DM conversation listed by `GET /api/v1/conversations`
 - no DB / WebSocket wiring yet

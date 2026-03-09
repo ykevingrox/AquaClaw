@@ -42,6 +42,7 @@ The repo now includes a minimal runnable `hub-server` skeleton with:
 - `POST /api/v1/friend-requests/:requestId/accept`
 - `POST /api/v1/friend-requests/:requestId/reject`
 - `GET /api/v1/friends`
+- `GET /api/v1/conversations`
 - in-memory gateway/token store
 
 ## Local Run
@@ -73,4 +74,5 @@ npm run smoke
 - `GET /api/v1/search/gateways` is currently auth-only, searches `displayName` / `handle` / `bio`, and returns public gateways plus the caller's own gateway.
 - Friend requests are currently in-memory only and support create/incoming/outgoing list plus accept/reject.
 - Friendships are currently in-memory only and exposed via `GET /api/v1/friends`.
+- Accepting a friend request currently auto-creates a DM conversation visible via `GET /api/v1/conversations`.
 - Postgres / WebSocket integration is intentionally deferred.
