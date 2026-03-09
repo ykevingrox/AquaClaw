@@ -16,10 +16,18 @@ export interface FriendRequestRecord {
   id: string;
   fromGatewayId: string;
   toGatewayId: string;
-  status: 'pending';
+  status: 'pending' | 'accepted' | 'rejected';
   message: string;
   createdAt: string;
   updatedAt: string;
+  respondedAt?: string;
+}
+
+export interface FriendshipRecord {
+  id: string;
+  gatewayAId: string;
+  gatewayBId: string;
+  createdAt: string;
 }
 
 interface RegisterInput {
@@ -48,6 +56,7 @@ export class InMemoryGatewayStore {
   private readonly gatewaysByHandle = new Map<string, GatewayRecord>();
   private readonly tokensToGatewayId = new Map<string, string>();
   private readonly friendRequestsById = new Map<string, FriendRequestRecord>();
+  private readonly friendshipsById = new Map<string, FriendshipRecord>();
 
   register(input: RegisterInput) {
     const normalizedHandle = input.handle.trim().toLowerCase();
@@ -135,6 +144,10 @@ export class InMemoryGatewayStore {
       throw new Error('gateway not found');
     }
 
+    if (this.areFriends(input.fromGatewayId, input.toGatewayId)) {
+      throw new Error('already friends');
+    }
+
     const duplicate = Array.from(this.friendRequestsById.values()).find(
       (request) =>
         request.status === 'pending' &&
@@ -160,16 +173,97 @@ export class InMemoryGatewayStore {
     return request;
   }
 
+  findFriendRequestById(requestId: string): FriendRequestRecord | null {
+    return this.friendRequestsById.get(requestId) ?? null;
+  }
+
+  acceptFriendRequest(requestId: string, actingGatewayId: string) {
+    const request = this.friendRequestsById.get(requestId);
+    if (!request) {
+      throw new Error('friend request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new Error('friend request is not pending');
+    }
+    if (request.toGatewayId !== actingGatewayId) {
+      throw new Error('only the recipient can accept this request');
+    }
+
+    const now = new Date().toISOString();
+    const updatedRequest: FriendRequestRecord = {
+      ...request,
+      status: 'accepted',
+      updatedAt: now,
+      respondedAt: now,
+    };
+    this.friendRequestsById.set(request.id, updatedRequest);
+
+    const pair = [request.fromGatewayId, request.toGatewayId].sort();
+    const friendship: FriendshipRecord = {
+      id: randomUUID(),
+      gatewayAId: pair[0]!,
+      gatewayBId: pair[1]!,
+      createdAt: now,
+    };
+    this.friendshipsById.set(friendship.id, friendship);
+
+    return { request: updatedRequest, friendship };
+  }
+
+  rejectFriendRequest(requestId: string, actingGatewayId: string) {
+    const request = this.friendRequestsById.get(requestId);
+    if (!request) {
+      throw new Error('friend request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new Error('friend request is not pending');
+    }
+    if (request.toGatewayId !== actingGatewayId) {
+      throw new Error('only the recipient can reject this request');
+    }
+
+    const now = new Date().toISOString();
+    const updatedRequest: FriendRequestRecord = {
+      ...request,
+      status: 'rejected',
+      updatedAt: now,
+      respondedAt: now,
+    };
+    this.friendRequestsById.set(request.id, updatedRequest);
+    return updatedRequest;
+  }
+
   listIncomingFriendRequests(gatewayId: string): FriendRequestRecord[] {
     return Array.from(this.friendRequestsById.values())
-      .filter((request) => request.toGatewayId === gatewayId)
+      .filter((request) => request.toGatewayId === gatewayId && request.status === 'pending')
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   listOutgoingFriendRequests(gatewayId: string): FriendRequestRecord[] {
     return Array.from(this.friendRequestsById.values())
-      .filter((request) => request.fromGatewayId === gatewayId)
+      .filter((request) => request.fromGatewayId === gatewayId && request.status === 'pending')
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  listFriends(gatewayId: string): GatewayRecord[] {
+    const friendIds = Array.from(this.friendshipsById.values()).flatMap((friendship) => {
+      if (friendship.gatewayAId === gatewayId) return [friendship.gatewayBId];
+      if (friendship.gatewayBId === gatewayId) return [friendship.gatewayAId];
+      return [];
+    });
+
+    return friendIds
+      .map((friendId) => this.gatewaysById.get(friendId))
+      .filter((gateway): gateway is GatewayRecord => Boolean(gateway))
+      .sort((a, b) => a.handle.localeCompare(b.handle));
+  }
+
+  private areFriends(gatewayAId: string, gatewayBId: string) {
+    return Array.from(this.friendshipsById.values()).some(
+      (friendship) =>
+        (friendship.gatewayAId === gatewayAId && friendship.gatewayBId === gatewayBId) ||
+        (friendship.gatewayAId === gatewayBId && friendship.gatewayBId === gatewayAId),
+    );
   }
 
   reset() {
@@ -177,6 +271,7 @@ export class InMemoryGatewayStore {
     this.gatewaysByHandle.clear();
     this.tokensToGatewayId.clear();
     this.friendRequestsById.clear();
+    this.friendshipsById.clear();
   }
 }
 

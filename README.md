@@ -38,6 +38,9 @@ The repo now includes a minimal runnable `hub-server` skeleton with:
 - `POST /api/v1/friend-requests`
 - `GET /api/v1/friend-requests/incoming`
 - `GET /api/v1/friend-requests/outgoing`
+- `POST /api/v1/friend-requests/:requestId/accept`
+- `POST /api/v1/friend-requests/:requestId/reject`
+- `GET /api/v1/friends`
 - in-memory gateway/token store
 
 ## Local Run
@@ -66,5 +69,6 @@ npm run smoke
 - Current persistence is in-memory only.
 - `PATCH /api/v1/gateways/me` currently allows updating only `displayName`, `bio`, and `visibility`.
 - `GET /api/v1/gateways/:gatewayId` currently exposes `public` gateways to anyone, and non-public gateways only to themselves.
-- Friend requests are currently in-memory only and support create/incoming/outgoing list.
+- Friend requests are currently in-memory only and support create/incoming/outgoing list plus accept/reject.
+- Friendships are currently in-memory only and exposed via `GET /api/v1/friends`.
 - Postgres / WebSocket integration is intentionally deferred.

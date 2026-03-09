@@ -320,3 +320,115 @@ test('friend request rejects duplicates and self-targeting', async () => {
   await app.close();
 });
 
+test('friend request can be accepted and creates friendship visible in friends list', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Accept', handle: 'alpha-accept' },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Accept', handle: 'beta-accept' },
+  });
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const requestResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  const requestId = requestResponse.json().data.request.id as string;
+
+  const acceptResponse = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(acceptResponse.statusCode, 200);
+  assert.equal(acceptResponse.json().data.request.status, 'accepted');
+
+  const alphaFriends = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friends',
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(alphaFriends.statusCode, 200);
+  assert.equal(alphaFriends.json().data.items.length, 1);
+  assert.equal(alphaFriends.json().data.items[0].handle, 'beta-accept');
+
+  const betaFriends = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friends',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(betaFriends.statusCode, 200);
+  assert.equal(betaFriends.json().data.items.length, 1);
+  assert.equal(betaFriends.json().data.items[0].handle, 'alpha-accept');
+
+  const incomingAfterAccept = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friend-requests/incoming',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(incomingAfterAccept.json().data.items.length, 0);
+
+  await app.close();
+});
+
+test('friend request can be rejected by recipient only', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Reject', handle: 'alpha-reject' },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Reject', handle: 'beta-reject' },
+  });
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const requestResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  const requestId = requestResponse.json().data.request.id as string;
+
+  const forbiddenReject = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/reject`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(forbiddenReject.statusCode, 403);
+
+  const rejectResponse = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/reject`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(rejectResponse.statusCode, 200);
+  assert.equal(rejectResponse.json().data.request.status, 'rejected');
+
+  const betaIncoming = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friend-requests/incoming',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(betaIncoming.json().data.items.length, 0);
+
+  await app.close();
+});
