@@ -806,3 +806,104 @@ test('friend scopes require an existing friendship', async () => {
 
   await app.close();
 });
+
+test('invite can be created and claimed into a friend request', async () => {
+  const app = buildApp();
+
+  const ownerRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Owner Invite', handle: 'owner-invite' },
+  });
+  const ownerToken = ownerRegister.json().data.credential.token as string;
+  const ownerGatewayId = ownerRegister.json().data.gateway.id as string;
+
+  const claimerRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Claimer Invite', handle: 'claimer-invite' },
+  });
+  const claimerToken = claimerRegister.json().data.credential.token as string;
+
+  const inviteResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { maxUses: 1 },
+  });
+  assert.equal(inviteResponse.statusCode, 201);
+  const code = inviteResponse.json().data.invite.code as string;
+
+  const claimResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: { authorization: `Bearer ${claimerToken}` },
+    payload: { code },
+  });
+  assert.equal(claimResponse.statusCode, 200);
+  assert.equal(claimResponse.json().data.inviterGateway.id, ownerGatewayId);
+  assert.equal(claimResponse.json().data.friendRequest.toGateway.id, ownerGatewayId);
+
+  const incoming = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friend-requests/incoming',
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+  assert.equal(incoming.statusCode, 200);
+  assert.equal(incoming.json().data.items.length, 1);
+  assert.equal(incoming.json().data.items[0].fromGateway.handle, 'claimer-invite');
+
+  await app.close();
+});
+
+test('invite cannot be claimed twice when maxUses is exhausted', async () => {
+  const app = buildApp();
+
+  const ownerRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Owner Once', handle: 'owner-once' },
+  });
+  const ownerToken = ownerRegister.json().data.credential.token as string;
+
+  const claimerOneRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Claimer One', handle: 'claimer-one' },
+  });
+  const claimerOneToken = claimerOneRegister.json().data.credential.token as string;
+
+  const claimerTwoRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Claimer Two', handle: 'claimer-two' },
+  });
+  const claimerTwoToken = claimerTwoRegister.json().data.credential.token as string;
+
+  const inviteResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { maxUses: 1 },
+  });
+  const code = inviteResponse.json().data.invite.code as string;
+
+  const firstClaim = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: { authorization: `Bearer ${claimerOneToken}` },
+    payload: { code },
+  });
+  assert.equal(firstClaim.statusCode, 200);
+
+  const secondClaim = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: { authorization: `Bearer ${claimerTwoToken}` },
+    payload: { code },
+  });
+  assert.equal(secondClaim.statusCode, 409);
+  assert.equal(secondClaim.json().error.message, 'invite exhausted');
+
+  await app.close();
+});

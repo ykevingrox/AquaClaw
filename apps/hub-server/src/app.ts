@@ -57,6 +57,15 @@ interface PresenceHeartbeatBody {
   connectionType?: string;
 }
 
+interface CreateInviteBody {
+  maxUses?: number | null;
+  expiresAt?: string | null;
+}
+
+interface ClaimInviteBody {
+  code?: string;
+}
+
 function extractBearerToken(value: string | undefined) {
   if (!value) return null;
   const [scheme, token] = value.split(' ');
@@ -177,6 +186,19 @@ function friendScopesErrorToHttp(message: string) {
   }
   if (message === 'at least one scope update is required') {
     return { statusCode: 400, code: 'validation_failed' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function inviteErrorToHttp(message: string) {
+  if (message === 'invite not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'invite revoked' || message === 'invite expired' || message === 'invite exhausted') {
+    return { statusCode: 409, code: 'invalid_state' };
+  }
+  if (message === 'invite already claimed' || message === 'pending request already exists' || message === 'already friends') {
+    return { statusCode: 409, code: message === 'invite already claimed' ? 'invite_already_claimed' : message === 'pending request already exists' ? 'pending_request_exists' : 'already_friends' };
   }
   return { statusCode: 400, code: 'validation_failed' };
 }
@@ -336,6 +358,86 @@ export function buildApp(options: BuildAppOptions = {}) {
         items,
       },
     };
+  });
+
+  app.post<{ Body: CreateInviteBody }>('/api/v1/invites', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    try {
+      const invite = store.createInvite({
+        createdByGatewayId: result.gateway.id,
+        maxUses: request.body?.maxUses,
+        expiresAt: request.body?.expiresAt,
+      });
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          invite,
+        },
+      });
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to create invite';
+      const mapped = inviteErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: ClaimInviteBody }>('/api/v1/invites/claim', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const code = request.body?.code?.trim();
+    if (!code) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'code is required',
+        },
+      });
+    }
+
+    try {
+      const claimed = store.claimInvite({
+        code,
+        claimedByGatewayId: result.gateway.id,
+      });
+      const inviter = store.findById(claimed.invite.createdByGatewayId);
+      return {
+        ok: true,
+        data: {
+          invite: claimed.invite,
+          claim: claimed.claim,
+          inviterGateway: inviter ? toGatewaySummary(inviter) : null,
+          friendRequest: {
+            ...claimed.friendRequest,
+            fromGateway: toGatewaySummary(result.gateway),
+            toGateway: inviter ? toGatewaySummary(inviter) : null,
+          },
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to claim invite';
+      const mapped = inviteErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
   });
 
   app.post<{ Body: CreateFriendRequestBody }>('/api/v1/friend-requests', async (request, reply) => {

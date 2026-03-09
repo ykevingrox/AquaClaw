@@ -30,6 +30,23 @@ export interface FriendScopeRecord {
   updatedAt: string;
 }
 
+export interface InviteRecord {
+  id: string;
+  code: string;
+  createdByGatewayId: string;
+  maxUses: number | null;
+  useCount: number;
+  expiresAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+export interface InviteClaimRecord {
+  inviteId: string;
+  claimedByGatewayId: string;
+  createdAt: string;
+}
+
 export interface FriendRequestRecord {
   id: string;
   fromGatewayId: string;
@@ -102,6 +119,17 @@ interface UpdateFriendScopesInput {
   updates: Array<{ scopeName: ScopeName; state: ScopeState }>;
 }
 
+interface CreateInviteInput {
+  createdByGatewayId: string;
+  maxUses?: number | null;
+  expiresAt?: string | null;
+}
+
+interface ClaimInviteInput {
+  code: string;
+  claimedByGatewayId: string;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 const ONLINE_THRESHOLD_MS = 90_000;
 const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
@@ -113,6 +141,9 @@ export class InMemoryGatewayStore {
   private readonly friendRequestsById = new Map<string, FriendRequestRecord>();
   private readonly friendshipsById = new Map<string, FriendshipRecord>();
   private readonly friendScopesByKey = new Map<string, FriendScopeRecord>();
+  private readonly invitesById = new Map<string, InviteRecord>();
+  private readonly invitesByCode = new Map<string, InviteRecord>();
+  private readonly inviteClaimsByKey = new Map<string, InviteClaimRecord>();
   private readonly conversationsById = new Map<string, ConversationRecord>();
   private readonly messagesById = new Map<string, MessageRecord>();
   private readonly lastSeenAtByGatewayId = new Map<string, string>();
@@ -227,6 +258,87 @@ export class InMemoryGatewayStore {
       })
       .sort((a, b) => a.handle.localeCompare(b.handle))
       .slice(0, limit);
+  }
+
+  createInvite(input: CreateInviteInput): InviteRecord {
+    if (!this.gatewaysById.has(input.createdByGatewayId)) {
+      throw new Error('gateway not found');
+    }
+    if (input.maxUses !== undefined && input.maxUses !== null && input.maxUses < 1) {
+      throw new Error('maxUses must be at least 1');
+    }
+    if (input.expiresAt) {
+      const expiresAt = new Date(input.expiresAt);
+      if (Number.isNaN(expiresAt.getTime())) {
+        throw new Error('invalid expiresAt');
+      }
+    }
+
+    const now = new Date().toISOString();
+    const code = randomBytes(4).toString('hex').toUpperCase();
+    const invite: InviteRecord = {
+      id: randomUUID(),
+      code,
+      createdByGatewayId: input.createdByGatewayId,
+      maxUses: input.maxUses ?? null,
+      useCount: 0,
+      expiresAt: input.expiresAt ?? null,
+      createdAt: now,
+      revokedAt: null,
+    };
+
+    this.invitesById.set(invite.id, invite);
+    this.invitesByCode.set(invite.code, invite);
+    return invite;
+  }
+
+  claimInvite(input: ClaimInviteInput) {
+    const invite = this.invitesByCode.get(input.code.trim().toUpperCase());
+    if (!invite) {
+      throw new Error('invite not found');
+    }
+    if (invite.revokedAt) {
+      throw new Error('invite revoked');
+    }
+    if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) {
+      throw new Error('invite expired');
+    }
+    if (invite.maxUses !== null && invite.useCount >= invite.maxUses) {
+      throw new Error('invite exhausted');
+    }
+    if (invite.createdByGatewayId === input.claimedByGatewayId) {
+      throw new Error('cannot claim your own invite');
+    }
+    if (!this.gatewaysById.has(input.claimedByGatewayId)) {
+      throw new Error('gateway not found');
+    }
+
+    const claimKey = `${invite.id}:${input.claimedByGatewayId}`;
+    if (this.inviteClaimsByKey.has(claimKey)) {
+      throw new Error('invite already claimed');
+    }
+
+    const claim: InviteClaimRecord = {
+      inviteId: invite.id,
+      claimedByGatewayId: input.claimedByGatewayId,
+      createdAt: new Date().toISOString(),
+    };
+    this.inviteClaimsByKey.set(claimKey, claim);
+
+    const updatedInvite: InviteRecord = {
+      ...invite,
+      useCount: invite.useCount + 1,
+    };
+    this.invitesById.set(updatedInvite.id, updatedInvite);
+    this.invitesByCode.set(updatedInvite.code, updatedInvite);
+
+    const friendRequest = this.createFriendRequest({
+      fromGatewayId: input.claimedByGatewayId,
+      toGatewayId: updatedInvite.createdByGatewayId,
+      message: `Claimed invite ${updatedInvite.code}`,
+    });
+
+    return { invite: updatedInvite, claim, friendRequest };
   }
 
   createFriendRequest(input: CreateFriendRequestInput): FriendRequestRecord {
@@ -532,6 +644,9 @@ export class InMemoryGatewayStore {
     this.friendRequestsById.clear();
     this.friendshipsById.clear();
     this.friendScopesByKey.clear();
+    this.invitesById.clear();
+    this.invitesByCode.clear();
+    this.inviteClaimsByKey.clear();
     this.conversationsById.clear();
     this.messagesById.clear();
     this.lastSeenAtByGatewayId.clear();

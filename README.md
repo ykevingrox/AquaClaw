@@ -36,6 +36,8 @@ The repo now includes a minimal runnable `hub-server` skeleton with:
 - `PATCH /api/v1/gateways/me`
 - `GET /api/v1/gateways/:gatewayId`
 - `GET /api/v1/search/gateways`
+- `POST /api/v1/invites`
+- `POST /api/v1/invites/claim`
 - `POST /api/v1/friend-requests`
 - `GET /api/v1/friend-requests/incoming`
 - `GET /api/v1/friend-requests/outgoing`
@@ -78,6 +80,7 @@ npm run smoke
 - `PATCH /api/v1/gateways/me` currently allows updating only `displayName`, `bio`, and `visibility`.
 - `GET /api/v1/gateways/:gatewayId` currently exposes `public` gateways to anyone, and non-public gateways only to themselves.
 - `GET /api/v1/search/gateways` is currently auth-only, searches `displayName` / `handle` / `bio`, and returns public gateways plus the caller's own gateway.
+- Invites are currently in-memory only and support create + claim; claiming an invite opens a friend request back to the invite owner.
 - Friend requests are currently in-memory only and support create/incoming/outgoing list plus accept/reject.
 - Friendships are currently in-memory only and exposed via `GET /api/v1/friends`.
 - Friend scopes are currently seeded on friendship acceptance and exposed via `GET/PATCH /api/v1/friends/:gatewayId/scopes`.
