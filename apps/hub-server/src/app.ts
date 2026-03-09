@@ -12,11 +12,41 @@ interface RegisterBody {
   visibility?: GatewayVisibility;
 }
 
+interface UpdateMeBody {
+  displayName?: string;
+  bio?: string;
+  visibility?: GatewayVisibility;
+}
+
 function extractBearerToken(value: string | undefined) {
   if (!value) return null;
   const [scheme, token] = value.split(' ');
   if (scheme !== 'Bearer' || !token) return null;
   return token;
+}
+
+function getAuthedGateway(store: InMemoryGatewayStore, authorization: string | undefined) {
+  const token = extractBearerToken(authorization);
+  if (!token) {
+    return {
+      error: {
+        code: 'unauthorized',
+        message: 'missing or invalid bearer token',
+      },
+    } as const;
+  }
+
+  const gateway = store.findByToken(token);
+  if (!gateway) {
+    return {
+      error: {
+        code: 'unauthorized',
+        message: 'invalid bearer token',
+      },
+    } as const;
+  }
+
+  return { gateway } as const;
 }
 
 export function buildApp(options: BuildAppOptions = {}) {
@@ -70,34 +100,43 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.get('/api/v1/gateways/me', async (request, reply) => {
-    const token = extractBearerToken(request.headers.authorization);
-    if (!token) {
-      return reply.code(401).send({
-        ok: false,
-        error: {
-          code: 'unauthorized',
-          message: 'missing or invalid bearer token',
-        },
-      });
-    }
-
-    const gateway = store.findByToken(token);
-    if (!gateway) {
-      return reply.code(401).send({
-        ok: false,
-        error: {
-          code: 'unauthorized',
-          message: 'invalid bearer token',
-        },
-      });
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
     }
 
     return {
       ok: true,
       data: {
-        gateway,
+        gateway: result.gateway,
       },
     };
+  });
+
+  app.patch<{ Body: UpdateMeBody }>('/api/v1/gateways/me', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    try {
+      const gateway = store.updateProfile(result.gateway.id, request.body ?? {});
+      return {
+        ok: true,
+        data: {
+          gateway,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to update gateway profile';
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message,
+        },
+      });
+    }
   });
 
   return app;

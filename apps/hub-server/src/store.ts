@@ -19,6 +19,12 @@ interface RegisterInput {
   visibility?: GatewayVisibility;
 }
 
+interface UpdateProfileInput {
+  displayName?: string;
+  bio?: string;
+  visibility?: GatewayVisibility;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 
 export class InMemoryGatewayStore {
@@ -67,6 +73,34 @@ export class InMemoryGatewayStore {
     const gatewayId = this.tokensToGatewayId.get(token);
     if (!gatewayId) return null;
     return this.gatewaysById.get(gatewayId) ?? null;
+  }
+
+  updateProfile(gatewayId: string, input: UpdateProfileInput): GatewayRecord {
+    const existing = this.gatewaysById.get(gatewayId);
+    if (!existing) {
+      throw new Error('gateway not found');
+    }
+
+    if (input.visibility && !VALID_VISIBILITIES.includes(input.visibility)) {
+      throw new Error('invalid visibility');
+    }
+
+    const nextDisplayName = input.displayName === undefined ? existing.displayName : input.displayName.trim();
+    if (!nextDisplayName) {
+      throw new Error('displayName is required');
+    }
+
+    const updated: GatewayRecord = {
+      ...existing,
+      displayName: nextDisplayName,
+      bio: input.bio === undefined ? existing.bio : input.bio.trim(),
+      visibility: input.visibility ?? existing.visibility,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.gatewaysById.set(updated.id, updated);
+    this.gatewaysByHandle.set(updated.handle, updated);
+    return updated;
   }
 
   reset() {
