@@ -8,8 +8,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "echo 'todo: start hub services'",
-    "lint": "echo 'todo: lint'",
-    "test": "echo 'todo: test'"
+    "dev": "npm run dev -w @gateway-hub/hub-server",
+    "build": "npm run build -w @gateway-hub/hub-server",
+    "test": "npm run test -w @gateway-hub/hub-server",
+    "smoke": "npm run smoke -w @gateway-hub/hub-server"
   }
 }

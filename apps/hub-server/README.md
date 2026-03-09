@@ -1,11 +1,38 @@
 # hub-server
 
-Placeholder for the Gateway Hub backend service.
+Minimal runnable backend skeleton for Gateway Hub.
 
-Expected responsibilities:
-- Gateway identity registration
-- friendship graph
-- DM relay and persistence
-- presence heartbeat
-- scope enforcement
-- audit logging
+## Current endpoints
+
+- `GET /health`
+- `POST /api/v1/gateways/register`
+- `GET /api/v1/gateways/me`
+
+## Run
+
+From repo root:
+
+```bash
+npm install
+npm run dev
+```
+
+Or directly:
+
+```bash
+npm run dev -w @gateway-hub/hub-server
+```
+
+## Test
+
+```bash
+npm test
+npm run smoke
+```
+
+## Implementation notes
+
+- Fastify + TypeScript
+- in-memory gateway store
+- bearer token issued on register
+- no DB / WebSocket wiring yet

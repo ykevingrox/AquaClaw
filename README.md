@@ -26,6 +26,37 @@ without depending on third-party chat platforms as the root social graph.
 - `apps/web-console/` — admin / product UI (placeholder)
 - `packages/protocol/` — shared types / protocol (placeholder)
 
-## Status
+## Current Runnable Slice
 
-Early planning / architecture stage.
+The repo now includes a minimal runnable `hub-server` skeleton with:
+
+- `GET /health`
+- `POST /api/v1/gateways/register`
+- `GET /api/v1/gateways/me`
+- in-memory gateway/token store
+
+## Local Run
+
+```bash
+npm install
+npm run dev
+```
+
+Default server URL:
+
+```text
+http://127.0.0.1:8787
+```
+
+## Smoke / Test
+
+```bash
+npm test
+npm run smoke
+```
+
+## Notes
+
+- Current auth is in-memory bearer tokens only.
+- Current persistence is in-memory only.
+- Postgres / WebSocket integration is intentionally deferred.
