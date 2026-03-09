@@ -38,6 +38,15 @@ export interface ConversationRecord {
   updatedAt: string;
 }
 
+export interface MessageRecord {
+  id: string;
+  conversationId: string;
+  senderGatewayId: string;
+  messageType: 'text';
+  body: string;
+  createdAt: string;
+}
+
 interface RegisterInput {
   displayName: string;
   handle: string;
@@ -63,6 +72,12 @@ interface SearchGatewaysInput {
   limit?: number;
 }
 
+interface CreateMessageInput {
+  conversationId: string;
+  senderGatewayId: string;
+  body: string;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 
 export class InMemoryGatewayStore {
@@ -72,6 +87,7 @@ export class InMemoryGatewayStore {
   private readonly friendRequestsById = new Map<string, FriendRequestRecord>();
   private readonly friendshipsById = new Map<string, FriendshipRecord>();
   private readonly conversationsById = new Map<string, ConversationRecord>();
+  private readonly messagesById = new Map<string, MessageRecord>();
 
   register(input: RegisterInput) {
     const normalizedHandle = input.handle.trim().toLowerCase();
@@ -289,6 +305,10 @@ export class InMemoryGatewayStore {
       .sort((a, b) => a.handle.localeCompare(b.handle));
   }
 
+  findConversationById(conversationId: string): ConversationRecord | null {
+    return this.conversationsById.get(conversationId) ?? null;
+  }
+
   listConversations(gatewayId: string): Array<{ conversation: ConversationRecord; peerGateway: GatewayRecord }> {
     return Array.from(this.conversationsById.values())
       .filter((conversation) => conversation.memberGatewayIds.includes(gatewayId))
@@ -299,6 +319,53 @@ export class InMemoryGatewayStore {
       })
       .filter((item): item is { conversation: ConversationRecord; peerGateway: GatewayRecord } => Boolean(item))
       .sort((a, b) => a.peerGateway.handle.localeCompare(b.peerGateway.handle));
+  }
+
+  createMessage(input: CreateMessageInput): MessageRecord {
+    const conversation = this.conversationsById.get(input.conversationId);
+    if (!conversation) {
+      throw new Error('conversation not found');
+    }
+    if (!conversation.memberGatewayIds.includes(input.senderGatewayId)) {
+      throw new Error('gateway is not a member of this conversation');
+    }
+
+    const body = input.body.trim();
+    if (!body) {
+      throw new Error('body is required');
+    }
+
+    const now = new Date().toISOString();
+    const message: MessageRecord = {
+      id: randomUUID(),
+      conversationId: conversation.id,
+      senderGatewayId: input.senderGatewayId,
+      messageType: 'text',
+      body,
+      createdAt: now,
+    };
+
+    this.messagesById.set(message.id, message);
+    this.conversationsById.set(conversation.id, {
+      ...conversation,
+      updatedAt: now,
+    });
+
+    return message;
+  }
+
+  listMessages(conversationId: string, viewerGatewayId: string): MessageRecord[] {
+    const conversation = this.conversationsById.get(conversationId);
+    if (!conversation) {
+      throw new Error('conversation not found');
+    }
+    if (!conversation.memberGatewayIds.includes(viewerGatewayId)) {
+      throw new Error('gateway is not a member of this conversation');
+    }
+
+    return Array.from(this.messagesById.values())
+      .filter((message) => message.conversationId === conversationId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
   private ensureDmConversation(gatewayAId: string, gatewayBId: string): ConversationRecord {
@@ -337,6 +404,7 @@ export class InMemoryGatewayStore {
     this.friendRequestsById.clear();
     this.friendshipsById.clear();
     this.conversationsById.clear();
+    this.messagesById.clear();
   }
 }
 

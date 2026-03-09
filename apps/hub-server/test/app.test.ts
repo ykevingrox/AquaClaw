@@ -514,3 +514,116 @@ test('friend request can be rejected by recipient only', async () => {
 
   await app.close();
 });
+
+test('conversation members can send and list dm messages', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Message', handle: 'alpha-message' },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Message', handle: 'beta-message' },
+  });
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accept = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  const conversationId = accept.json().data.conversation.id as string;
+
+  const send = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { body: 'hello beta' },
+  });
+  assert.equal(send.statusCode, 201);
+  assert.equal(send.json().data.message.body, 'hello beta');
+
+  const list = await app.inject({
+    method: 'GET',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(list.statusCode, 200);
+  assert.equal(list.json().data.items.length, 1);
+  assert.equal(list.json().data.items[0].body, 'hello beta');
+  assert.equal(list.json().data.items[0].messageType, 'text');
+
+  await app.close();
+});
+
+test('non-members cannot read or send conversation messages', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Guard', handle: 'alpha-guard' },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Guard', handle: 'beta-guard' },
+  });
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const gammaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Gamma Guard', handle: 'gamma-guard' },
+  });
+  const gammaToken = gammaRegister.json().data.credential.token as string;
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accept = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  const conversationId = accept.json().data.conversation.id as string;
+
+  const forbiddenRead = await app.inject({
+    method: 'GET',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${gammaToken}` },
+  });
+  assert.equal(forbiddenRead.statusCode, 403);
+
+  const forbiddenSend = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${gammaToken}` },
+    payload: { body: 'intrude' },
+  });
+  assert.equal(forbiddenSend.statusCode, 403);
+
+  await app.close();
+});

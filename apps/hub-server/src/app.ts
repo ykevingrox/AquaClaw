@@ -32,6 +32,14 @@ interface FriendRequestParams {
   requestId: string;
 }
 
+interface ConversationParams {
+  conversationId: string;
+}
+
+interface CreateMessageBody {
+  body?: string;
+}
+
 function extractBearerToken(value: string | undefined) {
   if (!value) return null;
   const [scheme, token] = value.split(' ');
@@ -114,6 +122,16 @@ function friendRequestErrorToHttp(message: string) {
   }
   if (message === 'friend request is not pending') {
     return { statusCode: 409, code: 'invalid_state' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function conversationErrorToHttp(message: string) {
+  if (message === 'conversation not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'gateway is not a member of this conversation') {
+    return { statusCode: 403, code: 'forbidden' };
   }
   return { statusCode: 400, code: 'validation_failed' };
 }
@@ -449,6 +467,64 @@ export function buildApp(options: BuildAppOptions = {}) {
         items,
       },
     };
+  });
+
+  app.get<{ Params: ConversationParams }>('/api/v1/conversations/:conversationId/messages', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    try {
+      const items = store.listMessages(request.params.conversationId, result.gateway.id);
+      return {
+        ok: true,
+        data: {
+          items,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list messages';
+      const mapped = conversationErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Params: ConversationParams; Body: CreateMessageBody }>('/api/v1/conversations/:conversationId/messages', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    try {
+      const message = store.createMessage({
+        conversationId: request.params.conversationId,
+        senderGatewayId: result.gateway.id,
+        body: request.body?.body ?? '',
+      });
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          message,
+        },
+      });
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to create message';
+      const mapped = conversationErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
   });
 
   return app;
