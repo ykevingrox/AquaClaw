@@ -19,6 +19,17 @@ export interface GatewayPresenceRecord {
   lastSeenAt: string | null;
 }
 
+export type ScopeName = 'profile.read' | 'presence.read' | 'chat.send' | 'chat.receive' | 'task.request';
+export type ScopeState = 'granted' | 'denied';
+
+export interface FriendScopeRecord {
+  fromGatewayId: string;
+  toGatewayId: string;
+  scopeName: ScopeName;
+  state: ScopeState;
+  updatedAt: string;
+}
+
 export interface FriendRequestRecord {
   id: string;
   fromGatewayId: string;
@@ -85,6 +96,12 @@ interface CreateMessageInput {
   body: string;
 }
 
+interface UpdateFriendScopesInput {
+  fromGatewayId: string;
+  toGatewayId: string;
+  updates: Array<{ scopeName: ScopeName; state: ScopeState }>;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 const ONLINE_THRESHOLD_MS = 90_000;
 const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
@@ -95,6 +112,7 @@ export class InMemoryGatewayStore {
   private readonly tokensToGatewayId = new Map<string, string>();
   private readonly friendRequestsById = new Map<string, FriendRequestRecord>();
   private readonly friendshipsById = new Map<string, FriendshipRecord>();
+  private readonly friendScopesByKey = new Map<string, FriendScopeRecord>();
   private readonly conversationsById = new Map<string, ConversationRecord>();
   private readonly messagesById = new Map<string, MessageRecord>();
   private readonly lastSeenAtByGatewayId = new Map<string, string>();
@@ -284,6 +302,8 @@ export class InMemoryGatewayStore {
       createdAt: now,
     };
     this.friendshipsById.set(friendship.id, friendship);
+    this.seedDefaultFriendScopes(request.fromGatewayId, request.toGatewayId);
+    this.seedDefaultFriendScopes(request.toGatewayId, request.fromGatewayId);
 
     const conversation = this.ensureDmConversation(request.fromGatewayId, request.toGatewayId);
 
@@ -344,6 +364,43 @@ export class InMemoryGatewayStore {
         (friendship.gatewayAId === gatewayAId && friendship.gatewayBId === gatewayBId) ||
         (friendship.gatewayAId === gatewayBId && friendship.gatewayBId === gatewayAId),
     );
+  }
+
+  listFriendScopes(fromGatewayId: string, toGatewayId: string): FriendScopeRecord[] {
+    if (!this.areFriends(fromGatewayId, toGatewayId)) {
+      throw new Error('friendship not found');
+    }
+
+    return this.defaultScopeNames()
+      .map((scopeName) => this.friendScopesByKey.get(this.scopeKey(fromGatewayId, toGatewayId, scopeName)))
+      .filter((record): record is FriendScopeRecord => Boolean(record));
+  }
+
+  updateFriendScopes(input: UpdateFriendScopesInput): FriendScopeRecord[] {
+    if (!this.areFriends(input.fromGatewayId, input.toGatewayId)) {
+      throw new Error('friendship not found');
+    }
+    if (input.updates.length === 0) {
+      throw new Error('at least one scope update is required');
+    }
+
+    const validScopeNames = this.defaultScopeNames();
+    const now = new Date().toISOString();
+    for (const update of input.updates) {
+      if (!validScopeNames.includes(update.scopeName)) {
+        throw new Error('invalid scope name');
+      }
+      const record: FriendScopeRecord = {
+        fromGatewayId: input.fromGatewayId,
+        toGatewayId: input.toGatewayId,
+        scopeName: update.scopeName,
+        state: update.state,
+        updatedAt: now,
+      };
+      this.friendScopesByKey.set(this.scopeKey(input.fromGatewayId, input.toGatewayId, update.scopeName), record);
+    }
+
+    return this.listFriendScopes(input.fromGatewayId, input.toGatewayId);
   }
 
   findConversationById(conversationId: string): ConversationRecord | null {
@@ -430,6 +487,29 @@ export class InMemoryGatewayStore {
     return conversation;
   }
 
+  private defaultScopeNames(): ScopeName[] {
+    return ['profile.read', 'presence.read', 'chat.send', 'chat.receive', 'task.request'];
+  }
+
+  private seedDefaultFriendScopes(fromGatewayId: string, toGatewayId: string) {
+    const now = new Date().toISOString();
+    for (const scopeName of this.defaultScopeNames()) {
+      const state: ScopeState = scopeName === 'task.request' ? 'denied' : 'granted';
+      const record: FriendScopeRecord = {
+        fromGatewayId,
+        toGatewayId,
+        scopeName,
+        state,
+        updatedAt: now,
+      };
+      this.friendScopesByKey.set(this.scopeKey(fromGatewayId, toGatewayId, scopeName), record);
+    }
+  }
+
+  private scopeKey(fromGatewayId: string, toGatewayId: string, scopeName: ScopeName) {
+    return `${fromGatewayId}:${toGatewayId}:${scopeName}`;
+  }
+
   private derivePresenceStatus(lastSeenAt: string | null): PresenceStatus {
     if (!lastSeenAt) {
       return 'offline';
@@ -451,6 +531,7 @@ export class InMemoryGatewayStore {
     this.tokensToGatewayId.clear();
     this.friendRequestsById.clear();
     this.friendshipsById.clear();
+    this.friendScopesByKey.clear();
     this.conversationsById.clear();
     this.messagesById.clear();
     this.lastSeenAtByGatewayId.clear();

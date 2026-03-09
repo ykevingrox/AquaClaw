@@ -42,6 +42,8 @@ The repo now includes a minimal runnable `hub-server` skeleton with:
 - `POST /api/v1/friend-requests/:requestId/accept`
 - `POST /api/v1/friend-requests/:requestId/reject`
 - `GET /api/v1/friends`
+- `GET /api/v1/friends/:gatewayId/scopes`
+- `PATCH /api/v1/friends/:gatewayId/scopes`
 - `GET /api/v1/conversations`
 - `POST /api/v1/conversations/:conversationId/messages`
 - `GET /api/v1/conversations/:conversationId/messages`
@@ -78,6 +80,7 @@ npm run smoke
 - `GET /api/v1/search/gateways` is currently auth-only, searches `displayName` / `handle` / `bio`, and returns public gateways plus the caller's own gateway.
 - Friend requests are currently in-memory only and support create/incoming/outgoing list plus accept/reject.
 - Friendships are currently in-memory only and exposed via `GET /api/v1/friends`.
+- Friend scopes are currently seeded on friendship acceptance and exposed via `GET/PATCH /api/v1/friends/:gatewayId/scopes`.
 - Accepting a friend request currently auto-creates a DM conversation visible via `GET /api/v1/conversations`.
 - DM conversations currently support text message create/list via `POST`/`GET /api/v1/conversations/:conversationId/messages`.
 - Coarse presence currently supports in-memory heartbeat + read via `POST /api/v1/presence/heartbeat` and `GET /api/v1/presence/:gatewayId`.

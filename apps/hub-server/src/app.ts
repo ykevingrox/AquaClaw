@@ -40,8 +40,16 @@ interface PresenceParams {
   gatewayId: string;
 }
 
+interface FriendScopesParams {
+  gatewayId: string;
+}
+
 interface CreateMessageBody {
   body?: string;
+}
+
+interface UpdateFriendScopesBody {
+  updates?: Array<{ scopeName?: string; state?: string }>;
 }
 
 interface PresenceHeartbeatBody {
@@ -156,6 +164,19 @@ function conversationErrorToHttp(message: string) {
   }
   if (message === 'gateway is not a member of this conversation') {
     return { statusCode: 403, code: 'forbidden' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function friendScopesErrorToHttp(message: string) {
+  if (message === 'friendship not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'invalid scope name') {
+    return { statusCode: 400, code: 'validation_failed' };
+  }
+  if (message === 'at least one scope update is required') {
+    return { statusCode: 400, code: 'validation_failed' };
   }
   return { statusCode: 400, code: 'validation_failed' };
 }
@@ -476,6 +497,99 @@ export function buildApp(options: BuildAppOptions = {}) {
         items,
       },
     };
+  });
+
+  app.get<{ Params: FriendScopesParams }>('/api/v1/friends/:gatewayId/scopes', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    try {
+      const outbound = store.listFriendScopes(result.gateway.id, request.params.gatewayId).map((scope) => ({
+        scope: scope.scopeName,
+        state: scope.state,
+        updatedAt: scope.updatedAt,
+      }));
+      return {
+        ok: true,
+        data: {
+          outbound,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list friend scopes';
+      const mapped = friendScopesErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.patch<{ Params: FriendScopesParams; Body: UpdateFriendScopesBody }>('/api/v1/friends/:gatewayId/scopes', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const rawUpdates = request.body?.updates ?? [];
+    if (rawUpdates.length === 0) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'at least one scope update is required',
+        },
+      });
+    }
+
+    if (rawUpdates.some((update) => !update.scopeName || (update.state !== 'granted' && update.state !== 'denied'))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'each scope update requires valid scopeName and state',
+        },
+      });
+    }
+
+    try {
+      const outbound = store
+        .updateFriendScopes({
+          fromGatewayId: result.gateway.id,
+          toGatewayId: request.params.gatewayId,
+          updates: rawUpdates.map((update) => ({
+            scopeName: update.scopeName as Parameters<typeof store.updateFriendScopes>[0]['updates'][number]['scopeName'],
+            state: update.state as Parameters<typeof store.updateFriendScopes>[0]['updates'][number]['state'],
+          })),
+        })
+        .map((scope) => ({
+          scope: scope.scopeName,
+          state: scope.state,
+          updatedAt: scope.updatedAt,
+        }));
+
+      return {
+        ok: true,
+        data: {
+          outbound,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to update friend scopes';
+      const mapped = friendScopesErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
   });
 
   app.get('/api/v1/conversations', async (request, reply) => {

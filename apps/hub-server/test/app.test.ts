@@ -721,3 +721,88 @@ test('presence heartbeat marks gateway online and friends can read it', async ()
 
   await app.close();
 });
+
+test('friend scopes are seeded on accept and can be updated', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Scope', handle: 'alpha-scope' },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Scope', handle: 'beta-scope' },
+  });
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accept = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(accept.statusCode, 200);
+
+  const initialScopes = await app.inject({
+    method: 'GET',
+    url: `/api/v1/friends/${betaGatewayId}/scopes`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(initialScopes.statusCode, 200);
+  assert.equal(initialScopes.json().data.outbound.length, 5);
+  const taskRequest = initialScopes.json().data.outbound.find((item: { scope: string; state: string }) => item.scope === 'task.request');
+  assert.equal(taskRequest?.state, 'denied');
+
+  const updatedScopes = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/friends/${betaGatewayId}/scopes`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: {
+      updates: [{ scopeName: 'task.request', state: 'granted' }],
+    },
+  });
+  assert.equal(updatedScopes.statusCode, 200);
+  const updatedTaskRequest = updatedScopes.json().data.outbound.find((item: { scope: string; state: string }) => item.scope === 'task.request');
+  assert.equal(updatedTaskRequest?.state, 'granted');
+
+  await app.close();
+});
+
+test('friend scopes require an existing friendship', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Lone', handle: 'alpha-lone' },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Lone', handle: 'beta-lone' },
+  });
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const response = await app.inject({
+    method: 'GET',
+    url: `/api/v1/friends/${betaGatewayId}/scopes`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(response.statusCode, 404);
+
+  await app.close();
+});

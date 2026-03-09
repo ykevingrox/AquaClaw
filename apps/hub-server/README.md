@@ -16,6 +16,8 @@ Minimal runnable backend skeleton for Gateway Hub.
 - `POST /api/v1/friend-requests/:requestId/accept`
 - `POST /api/v1/friend-requests/:requestId/reject`
 - `GET /api/v1/friends`
+- `GET /api/v1/friends/:gatewayId/scopes`
+- `PATCH /api/v1/friends/:gatewayId/scopes`
 - `GET /api/v1/conversations`
 - `POST /api/v1/conversations/:conversationId/messages`
 - `GET /api/v1/conversations/:conversationId/messages`
@@ -55,6 +57,7 @@ npm run smoke
 - search currently returns public gateways plus the caller's own gateway
 - friend requests currently support create + incoming/outgoing list + accept/reject, all in memory
 - friendships are exposed via `GET /api/v1/friends`, also in memory
+- friend scopes are seeded on friendship acceptance and exposed via `GET/PATCH /api/v1/friends/:gatewayId/scopes`
 - accepting a friend request auto-creates a DM conversation listed by `GET /api/v1/conversations`
 - DM conversations currently support text message create/list for conversation members only
 - coarse presence currently supports in-memory heartbeat + read for self/friends
