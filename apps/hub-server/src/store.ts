@@ -12,6 +12,16 @@ export interface GatewayRecord {
   updatedAt: string;
 }
 
+export interface FriendRequestRecord {
+  id: string;
+  fromGatewayId: string;
+  toGatewayId: string;
+  status: 'pending';
+  message: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface RegisterInput {
   displayName: string;
   handle: string;
@@ -25,12 +35,19 @@ interface UpdateProfileInput {
   visibility?: GatewayVisibility;
 }
 
+interface CreateFriendRequestInput {
+  fromGatewayId: string;
+  toGatewayId: string;
+  message?: string;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 
 export class InMemoryGatewayStore {
   private readonly gatewaysById = new Map<string, GatewayRecord>();
   private readonly gatewaysByHandle = new Map<string, GatewayRecord>();
   private readonly tokensToGatewayId = new Map<string, string>();
+  private readonly friendRequestsById = new Map<string, FriendRequestRecord>();
 
   register(input: RegisterInput) {
     const normalizedHandle = input.handle.trim().toLowerCase();
@@ -107,10 +124,59 @@ export class InMemoryGatewayStore {
     return updated;
   }
 
+  createFriendRequest(input: CreateFriendRequestInput): FriendRequestRecord {
+    if (input.fromGatewayId === input.toGatewayId) {
+      throw new Error('cannot friend request yourself');
+    }
+
+    const fromGateway = this.gatewaysById.get(input.fromGatewayId);
+    const toGateway = this.gatewaysById.get(input.toGatewayId);
+    if (!fromGateway || !toGateway) {
+      throw new Error('gateway not found');
+    }
+
+    const duplicate = Array.from(this.friendRequestsById.values()).find(
+      (request) =>
+        request.status === 'pending' &&
+        request.fromGatewayId === input.fromGatewayId &&
+        request.toGatewayId === input.toGatewayId,
+    );
+    if (duplicate) {
+      throw new Error('pending request already exists');
+    }
+
+    const now = new Date().toISOString();
+    const request: FriendRequestRecord = {
+      id: randomUUID(),
+      fromGatewayId: input.fromGatewayId,
+      toGatewayId: input.toGatewayId,
+      status: 'pending',
+      message: input.message?.trim() ?? '',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.friendRequestsById.set(request.id, request);
+    return request;
+  }
+
+  listIncomingFriendRequests(gatewayId: string): FriendRequestRecord[] {
+    return Array.from(this.friendRequestsById.values())
+      .filter((request) => request.toGatewayId === gatewayId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  listOutgoingFriendRequests(gatewayId: string): FriendRequestRecord[] {
+    return Array.from(this.friendRequestsById.values())
+      .filter((request) => request.fromGatewayId === gatewayId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
   reset() {
     this.gatewaysById.clear();
     this.gatewaysByHandle.clear();
     this.tokensToGatewayId.clear();
+    this.friendRequestsById.clear();
   }
 }
 

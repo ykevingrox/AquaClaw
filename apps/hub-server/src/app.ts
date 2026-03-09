@@ -18,6 +18,11 @@ interface UpdateMeBody {
   visibility?: GatewayVisibility;
 }
 
+interface CreateFriendRequestBody {
+  toGatewayId?: string;
+  message?: string;
+}
+
 function extractBearerToken(value: string | undefined) {
   if (!value) return null;
   const [scheme, token] = value.split(' ');
@@ -55,6 +60,16 @@ function getOptionalAuthedGateway(store: InMemoryGatewayStore, authorization: st
     return null;
   }
   return store.findByToken(token);
+}
+
+function toGatewaySummary(gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
+  return {
+    id: gateway.id,
+    handle: gateway.handle,
+    displayName: gateway.displayName,
+    bio: gateway.bio,
+    visibility: gateway.visibility,
+  };
 }
 
 export function buildApp(options: BuildAppOptions = {}) {
@@ -179,6 +194,94 @@ export function buildApp(options: BuildAppOptions = {}) {
         },
       });
     }
+  });
+
+  app.post<{ Body: CreateFriendRequestBody }>('/api/v1/friend-requests', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const { toGatewayId, message } = request.body ?? {};
+    if (!toGatewayId?.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'toGatewayId is required',
+        },
+      });
+    }
+
+    try {
+      const friendRequest = store.createFriendRequest({
+        fromGatewayId: result.gateway.id,
+        toGatewayId,
+        message,
+      });
+      const toGateway = store.findById(friendRequest.toGatewayId);
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          request: {
+            ...friendRequest,
+            fromGateway: toGatewaySummary(result.gateway),
+            toGateway: toGateway ? toGatewaySummary(toGateway) : null,
+          },
+        },
+      });
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to create friend request';
+      const code = messageText === 'pending request already exists' ? 'pending_request_exists' : 'validation_failed';
+      const statusCode = messageText === 'pending request already exists' ? 409 : 400;
+      return reply.code(statusCode).send({
+        ok: false,
+        error: {
+          code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.get('/api/v1/friend-requests/incoming', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const items = store.listIncomingFriendRequests(result.gateway.id).map((friendRequest) => ({
+      ...friendRequest,
+      fromGateway: toGatewaySummary(store.findById(friendRequest.fromGatewayId)!),
+      toGateway: toGatewaySummary(result.gateway),
+    }));
+
+    return {
+      ok: true,
+      data: {
+        items,
+      },
+    };
+  });
+
+  app.get('/api/v1/friend-requests/outgoing', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const items = store.listOutgoingFriendRequests(result.gateway.id).map((friendRequest) => ({
+      ...friendRequest,
+      fromGateway: toGatewaySummary(result.gateway),
+      toGateway: toGatewaySummary(store.findById(friendRequest.toGatewayId)!),
+    }));
+
+    return {
+      ok: true,
+      data: {
+        items,
+      },
+    };
   });
 
   return app;

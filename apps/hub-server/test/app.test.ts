@@ -205,3 +205,118 @@ test('private gateway profile is only visible to itself', async () => {
 
   await app.close();
 });
+
+test('friend request can be created and listed in outgoing/incoming views', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Alpha',
+      handle: 'alpha',
+      visibility: 'public',
+    },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Beta',
+      handle: 'beta',
+      visibility: 'public',
+    },
+  });
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+  const betaToken = betaRegister.json().data.credential.token as string;
+
+  const createResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: {
+      toGatewayId: betaGatewayId,
+      message: 'let our gateways connect',
+    },
+  });
+
+  assert.equal(createResponse.statusCode, 201);
+  assert.equal(createResponse.json().data.request.fromGateway.handle, 'alpha');
+  assert.equal(createResponse.json().data.request.toGateway.handle, 'beta');
+
+  const outgoingResponse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friend-requests/outgoing',
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(outgoingResponse.statusCode, 200);
+  assert.equal(outgoingResponse.json().data.items.length, 1);
+  assert.equal(outgoingResponse.json().data.items[0].toGateway.handle, 'beta');
+
+  const incomingResponse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friend-requests/incoming',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(incomingResponse.statusCode, 200);
+  assert.equal(incomingResponse.json().data.items.length, 1);
+  assert.equal(incomingResponse.json().data.items[0].fromGateway.handle, 'alpha');
+
+  await app.close();
+});
+
+test('friend request rejects duplicates and self-targeting', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Alpha',
+      handle: 'alpha-dup',
+    },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+  const alphaGatewayId = alphaRegister.json().data.gateway.id as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Beta',
+      handle: 'beta-dup',
+    },
+  });
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const firstResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  assert.equal(firstResponse.statusCode, 201);
+
+  const duplicateResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  assert.equal(duplicateResponse.statusCode, 409);
+  assert.equal(duplicateResponse.json().error.code, 'pending_request_exists');
+
+  const selfResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: alphaGatewayId },
+  });
+  assert.equal(selfResponse.statusCode, 400);
+  assert.equal(selfResponse.json().error.message, 'cannot friend request yourself');
+
+  await app.close();
+});
+
