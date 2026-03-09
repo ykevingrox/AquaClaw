@@ -24,5 +24,14 @@ const me = await app.inject({
 });
 assert.equal(me.statusCode, 200);
 
+const search = await app.inject({
+  method: 'GET',
+  url: '/api/v1/search/gateways?q=smoke',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(search.statusCode, 200);
+assert.equal(search.json().data.items.length, 1);
+assert.equal(search.json().data.items[0].handle, 'smoke-gateway');
+
 await app.close();
-console.log('smoke_ok health=1 register=1 me=1');
+console.log('smoke_ok health=1 register=1 me=1 search=1');

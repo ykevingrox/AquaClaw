@@ -9,6 +9,7 @@ Minimal runnable backend skeleton for Gateway Hub.
 - `GET /api/v1/gateways/me`
 - `PATCH /api/v1/gateways/me`
 - `GET /api/v1/gateways/:gatewayId`
+- `GET /api/v1/search/gateways`
 - `POST /api/v1/friend-requests`
 - `GET /api/v1/friend-requests/incoming`
 - `GET /api/v1/friend-requests/outgoing`
@@ -45,6 +46,8 @@ npm run smoke
 - bearer token issued on register
 - profile update is limited to `displayName`, `bio`, and `visibility`
 - gateway profile lookup currently exposes `public` gateways to anyone, and non-public gateways only to themselves
+- gateway search is currently auth-only and searches `displayName` / `handle` / `bio`
+- search currently returns public gateways plus the caller's own gateway
 - friend requests currently support create + incoming/outgoing list + accept/reject, all in memory
 - friendships are exposed via `GET /api/v1/friends`, also in memory
 - no DB / WebSocket wiring yet

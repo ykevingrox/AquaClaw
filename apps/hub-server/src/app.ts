@@ -23,6 +23,11 @@ interface CreateFriendRequestBody {
   message?: string;
 }
 
+interface SearchGatewaysQuerystring {
+  q?: string;
+  limit?: string;
+}
+
 interface FriendRequestParams {
   requestId: string;
 }
@@ -73,6 +78,14 @@ function toGatewaySummary(gateway: { id: string; handle: string; displayName: st
     displayName: gateway.displayName,
     bio: gateway.bio,
     visibility: gateway.visibility,
+  };
+}
+
+function toSearchResult(gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
+  return {
+    ...toGatewaySummary(gateway),
+    status: 'offline' as const,
+    tags: [] as string[],
   };
 }
 
@@ -217,6 +230,39 @@ export function buildApp(options: BuildAppOptions = {}) {
         },
       });
     }
+  });
+
+  app.get<{ Querystring: SearchGatewaysQuerystring }>('/api/v1/search/gateways', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const parsedLimit = request.query.limit === undefined ? undefined : Number.parseInt(request.query.limit, 10);
+    if (request.query.limit !== undefined && (!Number.isFinite(parsedLimit ?? Number.NaN) || (parsedLimit ?? 0) < 1)) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'limit must be a positive integer',
+        },
+      });
+    }
+
+    const items = store
+      .searchGateways({
+        viewerGatewayId: result.gateway.id,
+        q: request.query.q,
+        limit: parsedLimit,
+      })
+      .map((gateway) => toSearchResult(gateway));
+
+    return {
+      ok: true,
+      data: {
+        items,
+      },
+    };
   });
 
   app.post<{ Body: CreateFriendRequestBody }>('/api/v1/friend-requests', async (request, reply) => {

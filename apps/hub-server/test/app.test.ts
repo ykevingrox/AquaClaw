@@ -206,6 +206,69 @@ test('private gateway profile is only visible to itself', async () => {
   await app.close();
 });
 
+test('search returns public gateways and self only, with query filtering', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Alpha Search',
+      handle: 'alpha-search',
+      bio: 'likes coding and travel',
+      visibility: 'invite_only',
+    },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+
+  await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Beta Public',
+      handle: 'beta-public',
+      bio: 'public gateway',
+      visibility: 'public',
+    },
+  });
+
+  await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Gamma Private',
+      handle: 'gamma-private',
+      bio: 'hidden gateway',
+      visibility: 'private',
+    },
+  });
+
+  const searchResponse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=a',
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+
+  assert.equal(searchResponse.statusCode, 200);
+  assert.deepEqual(
+    searchResponse.json().data.items.map((item: { handle: string }) => item.handle),
+    ['alpha-search', 'beta-public'],
+  );
+  assert.equal(searchResponse.json().data.items[0].status, 'offline');
+  assert.deepEqual(searchResponse.json().data.items[0].tags, []);
+
+  const filteredResponse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=public&limit=1',
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(filteredResponse.statusCode, 200);
+  assert.equal(filteredResponse.json().data.items.length, 1);
+  assert.equal(filteredResponse.json().data.items[0].handle, 'beta-public');
+
+  await app.close();
+});
+
 test('friend request can be created and listed in outgoing/incoming views', async () => {
   const app = buildApp();
 

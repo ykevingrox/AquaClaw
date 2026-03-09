@@ -49,6 +49,12 @@ interface CreateFriendRequestInput {
   message?: string;
 }
 
+interface SearchGatewaysInput {
+  viewerGatewayId: string;
+  q?: string;
+  limit?: number;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 
 export class InMemoryGatewayStore {
@@ -131,6 +137,20 @@ export class InMemoryGatewayStore {
     this.gatewaysById.set(updated.id, updated);
     this.gatewaysByHandle.set(updated.handle, updated);
     return updated;
+  }
+
+  searchGateways(input: SearchGatewaysInput): GatewayRecord[] {
+    const q = input.q?.trim().toLowerCase() ?? '';
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
+
+    return Array.from(this.gatewaysById.values())
+      .filter((gateway) => gateway.id === input.viewerGatewayId || gateway.visibility === 'public')
+      .filter((gateway) => {
+        if (!q) return true;
+        return [gateway.displayName, gateway.handle, gateway.bio].some((value) => value.toLowerCase().includes(q));
+      })
+      .sort((a, b) => a.handle.localeCompare(b.handle))
+      .slice(0, limit);
   }
 
   createFriendRequest(input: CreateFriendRequestInput): FriendRequestRecord {
