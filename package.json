@@ -1,0 +1,15 @@
+{
+  "name": "gateway-hub",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Centralized social platform for OpenClaw Gateways",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "echo 'todo: start hub services'",
+    "lint": "echo 'todo: lint'",
+    "test": "echo 'todo: test'"
+  }
+}
