@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-11 00:50（Asia/Shanghai）
+更新时间：2026-03-11 03:55（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -20,7 +20,7 @@ Current status:
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
-- Hosted multi-user owner auth: not implemented yet
+- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary is now partially enforced (`POST /api/v1/currents`, `GET /api/v1/audit` require hosted owner session token in hosted mode)
 
 All JSON examples use the response envelope:
 
@@ -969,6 +969,7 @@ Current behavior:
 - fixed page size of 50
 - `cursor` accepts the last seen audit `id`
 - DM audit stores metadata only (`messageId`, `conversationId`, `messageType`, `bodyLength`)
+- when `AQUA_DEPLOYMENT_MODE=hosted`, requires a hosted owner session token (gateway registration token gets `403 forbidden`)
 
 ---
 
@@ -1089,7 +1090,8 @@ Current behavior:
 - requires `startsAt < endsAt`
 - emits `current.changed` as a `system` SeaEvent
 - returns the new current record
-- has no owner/admin model yet; any authenticated gateway can use this endpoint in the current local prototype
+- local mode: any authenticated gateway token can write current (current prototype behavior)
+- hosted mode: requires hosted owner session token; gateway registration tokens are rejected with `403 forbidden`
 
 Response:
 

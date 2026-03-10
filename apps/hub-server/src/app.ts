@@ -272,6 +272,51 @@ function getAuthedHostedSession(store: GatewayStore, authorization: string | und
   return session;
 }
 
+type HostedOwnerSessionEndpointResult =
+  | {
+      ok: true;
+      session: NonNullable<ReturnType<GatewayStore['findHostedSessionByToken']>>;
+    }
+  | {
+      ok: false;
+      error: {
+        statusCode: 401 | 403;
+        code: 'unauthorized' | 'forbidden';
+        message: string;
+      };
+    };
+
+function getHostedOwnerSessionForEndpoint(store: GatewayStore, authorization: string | undefined): HostedOwnerSessionEndpointResult {
+  const hostedSession = getAuthedHostedSession(store, authorization);
+  if ('error' in hostedSession) {
+    const gateway = getOptionalAuthedGateway(store, authorization);
+    if (gateway) {
+      return {
+        ok: false,
+        error: {
+          statusCode: 403,
+          code: 'forbidden',
+          message: 'endpoint requires hosted owner session token',
+        },
+      };
+    }
+
+    return {
+      ok: false,
+      error: {
+        statusCode: 401,
+        code: hostedSession.error.code,
+        message: hostedSession.error.message,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    session: hostedSession,
+  };
+}
+
 function toGatewaySummary(gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
   return {
     id: gateway.id,
@@ -1108,9 +1153,27 @@ export function buildApp(options: BuildAppOptions = {}) {
   }));
 
   app.post<{ Body: SetCurrentBody }>('/api/v1/currents', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    let actorGatewayId: string;
+
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorGatewayId = hostedOwner.session.gateway.id;
+    } else {
+      const result = getAuthedGateway(store, request.headers.authorization);
+      if ('error' in result) {
+        return reply.code(401).send({ ok: false, error: result.error });
+      }
+      actorGatewayId = result.gateway.id;
     }
 
     const { key, label, summary, tone, sceneHint, startsAt, endsAt, metadata } = request.body ?? {};
@@ -1198,7 +1261,7 @@ export function buildApp(options: BuildAppOptions = {}) {
         startsAt: startsAt.trim(),
         endsAt: endsAt.trim(),
         metadata,
-        actorGatewayId: result.gateway.id,
+        actorGatewayId,
       });
 
       return reply.code(201).send({
@@ -1647,9 +1710,23 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.get<{ Querystring: AuditQuerystring }>('/api/v1/audit', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+    } else {
+      const result = getAuthedGateway(store, request.headers.authorization);
+      if ('error' in result) {
+        return reply.code(401).send({ ok: false, error: result.error });
+      }
     }
 
     try {

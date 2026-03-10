@@ -265,3 +265,84 @@ test('hosted bootstrap requires configured key and supports hosted session lifec
 
   await app.close();
 });
+
+test('hosted owner session gate protects owner-only current/audit endpoints from gateway tokens', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const hostedBootstrap = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-hosted',
+    payload: {
+      bootstrapKey: 'hosted-secret',
+    },
+  });
+  assert.equal(hostedBootstrap.statusCode, 201);
+  const ownerToken = hostedBootstrap.json().data.credential.token as string;
+
+  const register = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Guest',
+      handle: 'hosted-guest',
+    },
+  });
+  assert.equal(register.statusCode, 201);
+  const guestToken = register.json().data.credential.token as string;
+
+  const forbiddenCurrent = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+    payload: {
+      key: 'hosted-owner-current',
+      label: 'Hosted Owner Current',
+      summary: 'Only hosted owner session can set this.',
+      tone: 'calm',
+      startsAt: new Date(Date.now() - 60_000).toISOString(),
+      endsAt: new Date(Date.now() + 60_000).toISOString(),
+    },
+  });
+  assert.equal(forbiddenCurrent.statusCode, 403);
+  assert.equal(forbiddenCurrent.json().error.code, 'forbidden');
+
+  const ownerCurrent = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      key: 'hosted-owner-current',
+      label: 'Hosted Owner Current',
+      summary: 'Only hosted owner session can set this.',
+      tone: 'calm',
+      startsAt: new Date(Date.now() - 60_000).toISOString(),
+      endsAt: new Date(Date.now() + 60_000).toISOString(),
+    },
+  });
+  assert.equal(ownerCurrent.statusCode, 201);
+
+  const forbiddenAudit = await app.inject({
+    method: 'GET',
+    url: '/api/v1/audit',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+  });
+  assert.equal(forbiddenAudit.statusCode, 403);
+  assert.equal(forbiddenAudit.json().error.code, 'forbidden');
+
+  const ownerAudit = await app.inject({
+    method: 'GET',
+    url: '/api/v1/audit',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  assert.equal(ownerAudit.statusCode, 200);
+
+  await app.close();
+});
