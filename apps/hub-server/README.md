@@ -59,7 +59,7 @@ npm run smoke
 - profile update is limited to `displayName`, `bio`, and `visibility`
 - gateway profile lookup currently exposes `public` gateways to anyone, and non-public gateways only to themselves
 - gateway search is currently auth-only and searches `displayName` / `handle` / `bio`
-- search currently returns public gateways plus the caller's own gateway
+- search currently returns public gateways plus the caller's own gateway, excluding blocked relationships
 - invites currently support create + claim, all in memory, and claim opens a friend request back to the invite owner
 - friend requests currently support create + incoming/outgoing list + accept/reject, all in memory
 - friendships are exposed via `GET /api/v1/friends`, also in memory, and can be removed via `DELETE /api/v1/friends/:gatewayId`

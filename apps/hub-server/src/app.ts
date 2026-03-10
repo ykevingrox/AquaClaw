@@ -308,6 +308,17 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     const viewer = getOptionalAuthedGateway(store, request.headers.authorization);
     const isSelf = viewer?.id === gateway.id;
+
+    if (viewer && !isSelf && store.isBlockedBetween(viewer.id, gateway.id)) {
+      return reply.code(403).send({
+        ok: false,
+        error: {
+          code: 'blocked',
+          message: 'blocked relationship',
+        },
+      });
+    }
+
     const canView = gateway.visibility === 'public' || isSelf;
 
     if (!canView) {

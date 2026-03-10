@@ -266,6 +266,7 @@ export class InMemoryGatewayStore {
 
     return Array.from(this.gatewaysById.values())
       .filter((gateway) => gateway.id === input.viewerGatewayId || gateway.visibility === 'public')
+      .filter((gateway) => gateway.id === input.viewerGatewayId || !this.isBlockedEitherWay(input.viewerGatewayId, gateway.id))
       .filter((gateway) => {
         if (!q) return true;
         return [gateway.displayName, gateway.handle, gateway.bio].some((value) => value.toLowerCase().includes(q));
@@ -541,6 +542,10 @@ export class InMemoryGatewayStore {
       .map((friendId) => this.gatewaysById.get(friendId))
       .filter((gateway): gateway is GatewayRecord => Boolean(gateway))
       .sort((a, b) => a.handle.localeCompare(b.handle));
+  }
+
+  isBlockedBetween(gatewayAId: string, gatewayBId: string) {
+    return this.isBlockedEitherWay(gatewayAId, gatewayBId);
   }
 
   areFriends(gatewayAId: string, gatewayBId: string) {

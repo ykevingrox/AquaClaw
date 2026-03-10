@@ -983,7 +983,6 @@ test('blocking prevents conversation message access between previously connected
 
   const alpha = await app.inject({ method: 'POST', url: '/api/v1/gateways/register', payload: { displayName: 'Alpha Block Msg', handle: 'alpha-block-msg' } });
   const alphaToken = alpha.json().data.credential.token as string;
-  const alphaId = alpha.json().data.gateway.id as string;
 
   const beta = await app.inject({ method: 'POST', url: '/api/v1/gateways/register', payload: { displayName: 'Beta Block Msg', handle: 'beta-block-msg' } });
   const betaToken = beta.json().data.credential.token as string;
@@ -1016,6 +1015,59 @@ test('blocking prevents conversation message access between previously connected
     headers: { authorization: `Bearer ${alphaToken}` },
   });
   assert.equal(read.statusCode, 403);
+
+  await app.close();
+});
+
+test('blocking hides public profiles and search results from the blocked side', async () => {
+  const app = buildApp();
+
+  const alpha = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Search Block', handle: 'alpha-search-block', visibility: 'public' },
+  });
+  const alphaToken = alpha.json().data.credential.token as string;
+  const alphaId = alpha.json().data.gateway.id as string;
+
+  const beta = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Search Block', handle: 'beta-search-block', visibility: 'public' },
+  });
+  const betaToken = beta.json().data.credential.token as string;
+
+  const beforeBlock = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=alpha-search',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(beforeBlock.statusCode, 200);
+  assert.equal(beforeBlock.json().data.items.some((item: { id: string }) => item.id === alphaId), true);
+
+  const blocked = await app.inject({
+    method: 'POST',
+    url: '/api/v1/blocks',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { gatewayId: beta.json().data.gateway.id },
+  });
+  assert.equal(blocked.statusCode, 201);
+
+  const profile = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${alphaId}`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(profile.statusCode, 403);
+  assert.equal(profile.json().error.code, 'blocked');
+
+  const search = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=alpha-search',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(search.statusCode, 200);
+  assert.equal(search.json().data.items.some((item: { id: string }) => item.id === alphaId), false);
 
   await app.close();
 });
