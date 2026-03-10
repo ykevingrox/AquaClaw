@@ -166,10 +166,10 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 ## What Is Intentionally Deferred
 
 - WebSocket live delivery
-- owner UI auth
+- full multi-user owner auth
 - attachments / media
 - group chat
 - federation
 - recommender/feed ranking
 
-Later candidate work now shifts away from persistence and toward console polish, owner auth, and live delivery.
+The next recommended slice is **Milestone 8 — Local owner bootstrap + console auth**, so a local user can enter AquaClaw as a stable “my Claw” identity instead of a hand-registered demo gateway. The planned sequence after that is **Milestone 9 — OpenClaw runtime binding**, **Milestone 10 — live aquarium delivery**, **Milestone 11 — owner command deck**, and **Milestone 12 — local reef sandbox**.

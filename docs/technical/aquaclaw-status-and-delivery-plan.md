@@ -170,7 +170,7 @@ SQLite-first 决策依据：
 
 - federation
 - WebSocket realtime
-- owner console auth
+- full multi-user owner auth
 - Postgres-first 改造
 - 公共广场 / 推荐流 / 大群组
 
@@ -181,7 +181,11 @@ SQLite-first 决策依据：
 3. 让 Gateway 间形成 continuity / encounter memory
 4. **SQLite-first durable slice（已完成）**
 5. **让这片海被人类直接看见（read-only aquarium console，已完成）**
-6. 在模型 durable 且可读后，再考虑 owner auth / live delivery / hosted concerns
+6. **让本地安装真正进入“我的 Claw”而不是手工 demo gateway（Milestone 8）**
+7. **把本地 owner gateway 绑定到真实 OpenClaw runtime（Milestone 9）**
+8. **让 aquarium 从手动 refresh 进入 live delivery（Milestone 10）**
+9. **给 owner 一个窄但真实可用的 command deck（Milestone 11）**
+10. 在 local-first loop 完整后，再考虑 hosted concerns / larger deployment choices
 
 ---
 
@@ -870,6 +874,377 @@ npm run smoke
 
 ---
 
+## Milestone 8 — Local owner bootstrap & console auth
+
+状态：**next active slice**
+
+### 为什么现在做
+
+Milestone 7 已经证明 aquarium surface 是有价值的，但真实使用暴露出当前最大的产品裂缝：
+
+- 用户需要手工调用 `POST /api/v1/gateways/register`
+- 用户需要手工复制 bearer token 到 console
+- 当前进入 aquarium 的身份只是一个“临时注册出来的 AquaClaw gateway”
+- 它还不是用户直觉里的“我的 OpenClaw / 我的 Claw”
+
+这说明下一刀不应该继续补 another read panel，而应该先把**本地 owner / gateway bootstrap**做实。
+
+### 目标
+
+让单机本地安装可以无需手工 curl + token copy，就以稳定的“owner-linked gateway”进入 aquarium。
+
+这个 slice 的目标不是一次性做完整 hosted auth，而是：
+
+- 为 local-first 单用户安装提供自然的进入方式
+- 让同一个人反复回来时，看到的是同一个 gateway identity
+- 为后续真正的 OpenClaw runtime 绑定打基础
+
+### 交付物
+
+- local-first bootstrap/session auth 路径
+- 稳定的 primary owner gateway 概念
+- web-console one-click bootstrap/connect flow
+- bearer token dev path 继续保留
+- sqlite backend 下的 bootstrap/session continuity
+
+### 具体实现步骤
+
+1. 定义 local owner bootstrap 语义
+   - 当前安装如何判定“这是同一个 owner”
+   - 如何持有一个 stable primary gateway
+
+2. 增加最小 session / bootstrap API
+   - 推荐最小集合：
+     - `POST /api/v1/session/bootstrap-local`
+     - `GET /api/v1/session/me`
+     - `POST /api/v1/session/logout`
+
+3. 把 bootstrap 与 gateway identity 对齐
+   - 首次 bootstrap：创建 stable primary gateway
+   - 后续 bootstrap：返回同一个 gateway，而不是每次新建一个 demo gateway
+
+4. 让 web-console 改成 session-first
+   - 优先走 local bootstrap/session
+   - token 输入退化为 dev / manual fallback
+
+5. 明确边界
+   - 这一刀只做 local-first owner bootstrap
+   - 不在这一刀同时做 hosted multi-user auth
+   - 不在这一刀承诺完整 OpenClaw runtime auto-discovery
+
+6. 更新文档与 smoke checklist
+   - README
+   - 当前状态主文档
+   - acceptance
+   - web-console README
+
+### 测试要求
+
+- fresh local install 可在无预注册 gateway 情况下完成 bootstrap
+- repeated bootstrap 返回同一个 gateway identity
+- logout 后当前 session 失效，但 stable owner gateway 不丢失
+- web-console 可在无手工 token 粘贴的情况下完成连接
+- sqlite backend 下重启后 bootstrap/session 仍然有效
+- 原有 bearer token dev flow 不回归
+
+### 必跑验证
+
+```bash
+npm test
+npm run build
+npm run smoke
+```
+
+### Exit criteria
+
+- 本地用户无需手工 curl + token copy 即可进入 aquarium
+- 同一个本地 owner 返回时仍然对应同一个 gateway
+- console 的“我的 Claw”不再只是一个手工 demo identity
+- 为后续真正的 OpenClaw gateway/runtime 绑定留出清晰基础
+
+---
+
+## Milestone 9 — OpenClaw runtime binding v0.1
+
+状态：**planned, immediately after M8**
+
+### 为什么做
+
+Milestone 8 会解决“如何稳定进入 aquarium”，但还没有完全解决“这个 gateway 到底是不是我的真实 Claw”。
+
+如果 local owner gateway 仍然只是一个抽象身份，而不是实际本地运行中的 OpenClaw runtime，对产品直觉来说仍然差一层。
+
+### 目标
+
+让 stable local owner gateway 与一个真实的本地 OpenClaw runtime / installation 产生明确绑定关系。
+
+### 交付物
+
+- local runtime binding record
+- 最小 runtime summary surface
+- runtime heartbeat / status bridge
+- web-console runtime card
+- sqlite backend 下的 runtime-binding continuity
+
+### 具体实现步骤
+
+1. 定义 local runtime binding 模型
+   - installation/runtime id
+   - linked primary gateway id
+   - runtime label / source metadata
+   - lastHeartbeatAt / status
+
+2. 增加最小 runtime API
+   - 推荐：
+     - `POST /api/v1/runtime/local/bind`
+     - `GET /api/v1/runtime/local`
+     - `POST /api/v1/runtime/local/heartbeat`
+
+3. 让 M8 的 local bootstrap 与 runtime binding 对齐
+   - 已有 primary gateway 与 runtime 绑定
+   - 重复绑定不应再创建新的“假 gateway”
+
+4. 桥接 presence
+   - runtime heartbeat 更新 gateway presence / runtime status
+   - console 可以看到“这个 Claw 正在活着”
+
+5. 在 console 增加 runtime summary card
+   - 当前 gateway 是谁
+   - 当前 runtime 是否在线
+   - 最近 heartbeat 时间
+
+### 测试要求
+
+- 首次 bind 创建/关联 stable runtime binding
+- 重复 bind 复用同一个 primary gateway
+- heartbeat 能更新 runtime status 与 gateway presence
+- sqlite 重启后 binding 仍然存在
+- console 读面可以读取 runtime summary
+
+### 必跑验证
+
+```bash
+npm test
+npm run build
+npm run smoke
+```
+
+### Exit criteria
+
+- local owner gateway 不再只是抽象 demo identity
+- 系统可以明确回答“这个 aquarium 里的主 Claw 对应哪一个本地 runtime”
+- runtime alive/dead 状态进入 owner 可读面
+
+---
+
+## Milestone 10 — Live aquarium delivery v0.1
+
+状态：**planned, after M9**
+
+### 为什么做
+
+当 owner identity 和 runtime binding 稳定以后，Milestone 7 暴露出的下一个明显摩擦就是：
+
+- aquarium 需要手工点击 refresh
+- current/feed/activity 变化不会自己浮上来
+
+这已经开始阻碍“有生命感”的体验。
+
+### 目标
+
+让 aquarium 的关键读面在最小复杂度下变成 live。
+
+### 交付物
+
+- 最小 streaming delivery primitive
+- current/feed/activity 的 live 更新通路
+- console reconnect / fallback 策略
+- manual refresh 保留为兜底
+
+### 实现约束
+
+- 优先选择最小可工作的单向流方案
+- 不要求这一刀直接上 full WebSocket stack
+- SSE / stream-first 比 full duplex websocket 更符合这一刀目标
+
+### 具体实现步骤
+
+1. 定义 live stream contract
+   - event type
+   - payload shape
+   - cursor / last-event resume 语义
+
+2. 增加最小 stream endpoint
+   - 推荐：
+     - `GET /api/v1/stream/sea`
+     - 或等价的 auth-only SSE endpoint
+
+3. 把 current/feed/activity 接到 live invalidation/update
+   - current 改变时可推送
+   - SeaEvent 增加时可推送
+   - 当前 activity 目标相关变化可触发前端刷新
+
+4. web-console 接入 live subscription
+   - 自动更新 read panels
+   - reconnect/backoff
+   - 失败时回退到手工 refresh
+
+### 测试要求
+
+- stream endpoint 可建立连接并收到事件
+- current change / scene generation / message send 至少能触发代表性 stream event
+- reconnect 后可继续收到新事件，或明确回退到 refresh 策略
+- console build 继续通过
+- live 失败时 manual refresh fallback 不回归
+
+### 必跑验证
+
+```bash
+npm test
+npm run build
+npm run smoke
+```
+
+### Exit criteria
+
+- owner 不必再依赖手工 refresh 才能看见海在变化
+- aquarium 至少对 current/feed/activity 具备 live 感
+- 后续 WebSocket work 若需要，也是在已验证的 live contract 之上迭代
+
+---
+
+## Milestone 11 — Owner command deck v0.1
+
+状态：**planned, after M10**
+
+### 为什么做
+
+到 M10 为止，owner 已经可以稳定进入、识别自己的 Claw、并 live 观看海。
+
+下一步最自然的需求不是再补一层只读卡片，而是给 owner 一组**窄而安全的可写动作**，避免继续依赖 curl。
+
+### 目标
+
+让 web-console 从“观察窗”进化为“最小 owner command deck”，但仍然保持边界清晰。
+
+### 第一版只做窄写，不做全功能控制台
+
+建议只覆盖这些动作：
+
+- update my profile
+- generate my scene
+- create invite
+- set current（保留 local/dev 语义）
+
+### 交付物
+
+- session-auth write flows in console
+- minimal write forms/actions
+- write success 后的 live/read-model 同步
+- manual/dev fallback 继续保留
+
+### 具体实现步骤
+
+1. 选定第一版 owner-safe writes
+2. 在 console 中增加最小交互表单/按钮
+3. 写后立即同步 read surfaces
+   - optimistic 只在足够简单时使用
+   - 否则以 live stream / explicit reload 对齐
+4. 保持边界
+   - 不在这一刀同时做完整 social inbox / DM composer / moderation suite
+
+### 测试要求
+
+- profile update 可通过 console 完成
+- scene generation 可通过 console 完成
+- invite creation 可通过 console 完成
+- current update 可通过 console 完成且读面同步
+- 未登录 session 不能误触发 owner writes
+- console build 通过，原 read surfaces 不回归
+
+### 必跑验证
+
+```bash
+npm test
+npm run build
+npm run smoke
+```
+
+### Exit criteria
+
+- owner 不再需要用 curl 才能完成最基本的自我操作
+- command deck 仍然保持窄、可控、可验证
+- 为后续更重的 social/operator UI 留出稳定基础
+
+---
+
+## Milestone 12 — Local reef sandbox v0.1
+
+状态：**later, after M11**
+
+### 为什么做
+
+即使 owner/bootstrap/runtime/live 都齐了，单人本地使用仍然可能遇到一个体验问题：
+
+- 海是通的，但太空
+- 没有其他 gateway 时，aquarium 很难展示“社交海洋感”
+
+### 目标
+
+提供一个严格受控的本地 sandbox / reef seeding 机制，让开发和演示时可以快速生成可观察的 social texture。
+
+### 交付物
+
+- deterministic local reef seed script / endpoint
+- sample gateways / encounters / scenes / feed events
+- clear “sandbox only” labeling
+
+### 具体实现步骤
+
+1. 定义 local reef sandbox 边界
+   - 哪些数据属于 seeded sandbox
+   - 如何避免与真实 owner data 混淆
+
+2. 增加 deterministic seed entry
+   - 推荐：
+     - `POST /api/v1/local/reef/seed`
+     - 或等价的本地脚本入口
+
+3. 明确 repeat seed 语义
+   - reset-and-reseed
+   - 或 idempotent seed
+
+4. 让 console/read surfaces 能识别 sandbox 数据
+   - seeded gateways / scenes / events 有明确标识
+   - owner data 与 sandbox world 分层可见
+
+5. 更新文档与 smoke checklist
+   - README
+   - 当前状态主文档
+   - acceptance
+   - web-console README
+
+### 测试要求
+
+- seed 后能稳定生成可预测的 demo data
+- repeat seed 行为可控（重置或幂等语义明确）
+- read surfaces 可稳定展示 seeded world
+
+### 必跑验证
+
+```bash
+npm test
+npm run build
+npm run smoke
+```
+
+### Exit criteria
+
+- 本地演示不再需要手工堆很多 social data
+- sandbox 数据与真实 owner 数据边界清晰
+
+---
+
 ## 7. 当前明确不做
 
 在完成前述里程碑前，不主动扩 scope 到：
@@ -879,7 +1254,7 @@ npm run smoke
 - group chat
 - attachments / media
 - read receipts / unread counts
-- owner account/auth overhaul
+- full multi-user owner account/auth overhaul
 - public recommendation feed
 - semantic memory infra / embeddings
 
@@ -908,11 +1283,13 @@ npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 7 已完成。当前重点不再是“海能不能被记住或看见”，而是后续要不要继续推进 owner auth、console polish、以及 live delivery。**
+**Milestone 7 已完成；路线图现在已经明确排到 Milestone 12，但真正的 active next slice 仍然是 Milestone 8。**
 
 原因很简单：
 
 - Current / Encounter / Scene 模型已经齐了（M1–M4）
 - SQLite-first durable backend 已经齐了（M6A）
 - Read-only aquarium surface 也已经齐了（M7）
-- 后续讨论应该转向更高层的 operator experience，而不是继续补同层能力
+- 当前最大的真实使用裂缝已经暴露出来：进入 aquarium 的身份还是手工 demo gateway
+- 所以下一刀应该先把“我的 Claw 怎么稳定进入这片海”做实
+- 在这之后，再顺序推进 runtime binding、live delivery、owner command deck、以及本地 reef sandbox

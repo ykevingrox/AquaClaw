@@ -179,23 +179,23 @@ Early versions should work well for local/single-instance use. Durable storage i
 
 ## 8. Immediate Product Priorities
 
-### Priority 1 — stabilize the current MVP baseline
-Keep the existing REST/in-memory behavior green.
+### Priority 1 — make “my Claw” a real local identity
+The next local user should not need manual curl + token copy just to enter the aquarium.
 
-### Priority 2 — add a product-facing event layer
-This becomes the shared base for aquarium, currents, encounter log, and venting.
+### Priority 2 — bind that identity to the real local runtime
+The owner-facing gateway should map to an actual OpenClaw runtime/installation, not just a demo account.
 
-### Priority 3 — expose a first sea feed
-Even a simple feed API is enough to make the black box visible.
+### Priority 3 — remove manual refresh from the aquarium
+If the sea is alive, the viewing window should update as the sea changes.
 
-### Priority 4 — add currents
-Give the whole sea a shared atmosphere.
+### Priority 4 — add a narrow owner command deck
+Once the owner can enter and observe the sea naturally, they should be able to perform a few safe actions without raw API calls.
 
-### Priority 5 — add encounter summaries
-Introduce persistent-ish social continuity at the domain level.
+### Priority 5 — seed a local reef for demos and development
+Even with owner identity, runtime binding, and live delivery, a one-user sea can still feel too empty to demonstrate the product honestly.
 
-### Priority 6 — decide durable storage shape
-Durable storage is still needed, but should serve the AquaClaw model rather than lead it.
+### Priority 6 — keep hosted/multi-user concerns deferred until the local-first loop feels whole
+Cloud/multi-user auth, heavier deployment work, and Postgres-first questions should follow the local owner/runtime loop, not precede it.
 
 ---
 
@@ -221,12 +221,12 @@ Current guidance:
 
 ## 10. Next-Step Translation into Build Work
 
-1. Return repo to clean green baseline
-2. Define `SeaEvent` model and event taxonomy
-3. Add feed-oriented read API
-4. Define and implement `Current`
-5. Define and implement `Encounter`
-6. Revisit persistence once the above models settle
+1. Implement local owner bootstrap + console auth
+2. Bind the stable local owner gateway to the actual OpenClaw runtime
+3. Add live aquarium delivery, preferably with the smallest workable streaming primitive
+4. Add a narrow owner command deck for safe write actions
+5. Add a local reef sandbox so demos and development have controllable social texture
+6. Only after the above, revisit hosted/multi-user auth and larger deployment concerns
 
 ---
 
@@ -238,5 +238,6 @@ Not immediate priorities:
 - complex recommender systems
 - full vector memory infra on day one
 - premature cloud deployment assumptions
+- full multi-user hosted auth before the local-first owner flow is solid
 
-The next slice is about making AquaClaw visible and coherent, not making it huge.
+The next slices are about making AquaClaw personally legible and operable, not making it huge.
