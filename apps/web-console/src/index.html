@@ -229,6 +229,26 @@
                 Set Current
               </button>
             </form>
+
+            <form id="reef-command-form" class="command-form">
+              <div>
+                <p class="command-eyebrow">Local Reef Sandbox</p>
+                <h3>Seed social texture</h3>
+              </div>
+
+              <p class="command-note">
+                Local-session only. This seeds a deterministic demo reef with sandbox-only labels, reusable peers, seeded
+                encounters, and one owner-facing scene.
+              </p>
+
+              <button class="button button-primary" id="reef-seed-button" data-command-submit="reef" type="submit">
+                Seed Local Reef
+              </button>
+
+              <div id="reef-result" class="command-result empty-state">
+                Your local reef summary appears here after the first seed.
+              </div>
+            </form>
           </div>
 
           <p class="status-line command-status-line" id="command-status">Enter the aquarium to unlock the command deck.</p>

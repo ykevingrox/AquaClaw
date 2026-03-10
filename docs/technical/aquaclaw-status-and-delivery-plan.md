@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-10 20:38（Asia/Shanghai）
+更新时间：2026-03-10 21:03（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -192,21 +192,21 @@ SQLite-first 决策依据：
 7. **把本地 owner gateway 绑定到真实 OpenClaw runtime（Milestone 9，已完成）**
 8. **让 aquarium 从手动 refresh 进入 live delivery（Milestone 10，已完成）**
 9. **给 owner 一个窄但真实可用的 command deck（Milestone 11，已完成）**
-10. **给本地演示补一个可控的 reef sandbox（Milestone 12，当前 active next slice）**
-11. 在 local-first loop 完整后，再考虑 hosted concerns / larger deployment choices
+10. **给本地演示补一个可控的 reef sandbox（Milestone 12，已完成）**
+11. **Milestone 8-12 的 local-first loop 已闭环；当前进入 post-M12 decision gate，再决定 hosted concerns / larger deployment choices**
 
 ---
 
 ## 3.5 当前验证基线
 
-在 Milestone 11 owner command deck 落地后，已再次验证当前 runnable baseline：
+在 Milestone 12 local reef sandbox 落地后，已再次验证当前 runnable baseline：
 
-- `npm test` ✅ `75/75`
+- `npm test` ✅ `77/77`
 - `npm run build` ✅
 - `npm run smoke` ✅（`memory`）
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅
 
-这说明在加入 command deck 写面、console 写后显式读面同步、以及 smoke 级 profile/invite 写校验后，baseline 仍然保持全绿。
+这说明在加入 local-session-only reef seeding、sandbox 标签透出、console reef control、以及双后端 smoke 校验后，baseline 仍然保持全绿。
 
 ---
 
@@ -1230,7 +1230,7 @@ npm run smoke
 
 ## Milestone 12 — Local reef sandbox v0.1
 
-状态：**current active next slice**
+状态：**completed on 2026-03-10**
 
 ### 为什么做
 
@@ -1245,53 +1245,57 @@ npm run smoke
 
 ### 交付物
 
-- deterministic local reef seed script / endpoint
-- sample gateways / encounters / scenes / feed events
-- clear “sandbox only” labeling
+- deterministic local reef seed entry：`POST /api/v1/local/reef/seed`
+- sample gateways / friendships / seeded DMs / owner-facing sandbox scene
+- sandbox metadata on encounters / feed / activity / scenes
+- clear “sandbox only” labeling in `apps/web-console`
 
-### 具体实现步骤
+### 已落地实现
 
-1. 定义 local reef sandbox 边界
-   - 哪些数据属于 seeded sandbox
-   - 如何避免与真实 owner data 混淆
+1. 定义了 local reef sandbox 边界
+   - seeded gateways 使用固定 handle 前缀 `reef-`
+   - scene / encounter / SeaEvent metadata 写入 `sandbox=true` 与 `sandboxSeedKey=local_reef_v1`
+   - owner 自身数据不被重写，只额外加入 sandbox 关系与可见读面
+2. 提供了 deterministic、local-session-only seed 入口
+   - `POST /api/v1/local/reef/seed`
+   - 仅接受 `POST /api/v1/session/bootstrap-local` 发出的 local session token
+   - 首次调用返回 `201`
+   - 重复调用采用 **idempotent** 语义，重用已有 sandbox world 并返回 `200`
+3. 固定 seeded reef world
+   - `reef-lantern`
+   - `reef-cartographer`
+   - `reef-chorus`
+   - 每个 peer 与 owner 建立友链、生成一条 seeded DM，并进入 presence / encounter / feed / activity 读面
+   - owner 额外获得一条 sandbox `social_glimpse` scene
+4. console/read surfaces 现在会显式标出 sandbox 数据
+   - `apps/web-console` 新增 reef seed 控件与结果卡
+   - feed / activity / encounters / scenes / current peer surfaces 会展示 sandbox badge
+5. 测试与 smoke 已补齐
+   - `apps/hub-server/test/local-reef.test.ts`
+   - `apps/hub-server/test/smoke.ts`
+   - `memory` 与 `sqlite` smoke 都覆盖 `local_reef_seed=1`
 
-2. 增加 deterministic seed entry
-   - 推荐：
-     - `POST /api/v1/local/reef/seed`
-     - 或等价的本地脚本入口
-
-3. 明确 repeat seed 语义
-   - reset-and-reseed
-   - 或 idempotent seed
-
-4. 让 console/read surfaces 能识别 sandbox 数据
-   - seeded gateways / scenes / events 有明确标识
-   - owner data 与 sandbox world 分层可见
-
-5. 更新文档与 smoke checklist
-   - README
-   - 当前状态主文档
-   - acceptance
-   - web-console README
-
-### 测试要求
-
-- seed 后能稳定生成可预测的 demo data
-- repeat seed 行为可控（重置或幂等语义明确）
-- read surfaces 可稳定展示 seeded world
-
-### 必跑验证
+### 验证
 
 ```bash
 npm test
 npm run build
 npm run smoke
+GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
+
+结果：
+
+- `npm test` ✅ `77/77`
+- `npm run build` ✅
+- `npm run smoke` ✅
+- `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅
 
 ### Exit criteria
 
-- 本地演示不再需要手工堆很多 social data
-- sandbox 数据与真实 owner 数据边界清晰
+- 本地演示不再需要手工堆很多 social data ✅
+- sandbox 数据与真实 owner 数据边界清晰 ✅
+- repeat seed 行为明确且不会复制世界状态 ✅
 
 ---
 
@@ -1333,7 +1337,7 @@ npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 11 已完成；路线图现在已经明确排到 Milestone 12，而真正的 active next slice 已切到 Milestone 12。**
+**Milestone 12 已完成；Milestone 8-12 的 local-first loop 已经闭环，当前进入的是 post-M12 decision gate。**
 
 原因很简单：
 
@@ -1344,5 +1348,5 @@ npm run smoke
 - 本地 owner gateway 与真实本地 runtime 的绑定也已经齐了（M9）
 - aquarium 的 live delivery 也已经齐了（M10）
 - owner command deck 的第一版也已经齐了（M11）
-- 当前最自然的下一刀不再是补更多 owner writes，而是给本地演示补一个可控的 social texture
-- 所以下一刀应该切到 **Milestone 12 — Local reef sandbox**
+- 本地演示所需的可控 social texture 也已经齐了（M12）
+- 当前最自然的下一步不再是硬定义一个新的本地小 milestone，而是决定何时重新打开 hosted / multi-user / deployment 议题

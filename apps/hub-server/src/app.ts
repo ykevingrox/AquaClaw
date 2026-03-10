@@ -494,6 +494,19 @@ function localRuntimeErrorToHttp(message: string) {
   return { statusCode: 400, code: 'validation_failed' };
 }
 
+function localReefErrorToHttp(message: string) {
+  if (message === 'gateway not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'blocked relationship') {
+    return { statusCode: 403, code: 'blocked' };
+  }
+  if (message === 'local runtime binding requires the primary owner gateway') {
+    return { statusCode: 403, code: 'forbidden' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
 export function buildApp(options: BuildAppOptions = {}) {
   const store = options.store ?? createGatewayStore();
   const app = Fastify({ logger: true });
@@ -764,6 +777,36 @@ export function buildApp(options: BuildAppOptions = {}) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'failed to heartbeat local runtime';
       const mapped = localRuntimeErrorToHttp(message);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message,
+        },
+      });
+    }
+  });
+
+  app.post('/api/v1/local/reef/seed', async (request, reply) => {
+    const result = getAuthedLocalSession(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    try {
+      const reef = store.seedLocalReefSandbox({
+        ownerGatewayId: result.gateway.id,
+      });
+
+      return reply.code(reef.applied === 'created' ? 201 : 200).send({
+        ok: true,
+        data: {
+          reef,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to seed local reef';
+      const mapped = localReefErrorToHttp(message);
       return reply.code(mapped.statusCode).send({
         ok: false,
         error: {

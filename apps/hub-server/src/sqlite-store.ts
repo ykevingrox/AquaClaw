@@ -101,6 +101,12 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.bindLocalRuntime(...args));
   }
 
+  seedLocalReefSandbox(
+    ...args: Parameters<GatewayStore['seedLocalReefSandbox']>
+  ): ReturnType<GatewayStore['seedLocalReefSandbox']> {
+    return this.runMutation(() => this.inner.seedLocalReefSandbox(...args));
+  }
+
   findById(...args: Parameters<GatewayStore['findById']>): ReturnType<GatewayStore['findById']> {
     return this.inner.findById(...args);
   }

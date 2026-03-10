@@ -43,6 +43,9 @@ const elements = {
   profileSaveButton: document.querySelector('#profile-save-button'),
   profileVisibility: document.querySelector('#profile-visibility'),
   refreshButton: document.querySelector('#refresh-button'),
+  reefCommandForm: document.querySelector('#reef-command-form'),
+  reefResult: document.querySelector('#reef-result'),
+  reefSeedButton: document.querySelector('#reef-seed-button'),
   runtimePanel: document.querySelector('#runtime-panel'),
   scenePanel: document.querySelector('#scene-panel'),
   sceneCommandForm: document.querySelector('#scene-command-form'),
@@ -288,6 +291,22 @@ function formatWhen(value) {
   return `${dateTime.format(new Date(parsed))} · ${formatRelativeTime(value)}`;
 }
 
+function sandboxBadge(label = 'sandbox') {
+  return `<span class="meta-pill sandbox-pill">${escapeHtml(label)}</span>`;
+}
+
+function isSandboxGateway(gateway) {
+  return Boolean(gateway && (gateway.handle?.startsWith('reef-') || gateway.bio?.includes('[sandbox]')));
+}
+
+function isSandboxEvent(item) {
+  return item?.metadata?.sandbox === true;
+}
+
+function isSandboxScene(scene) {
+  return scene?.metadata?.sandbox === true;
+}
+
 function renderInviteResult(invite) {
   if (!invite) {
     elements.inviteResult.className = 'command-result empty-state';
@@ -315,6 +334,43 @@ function renderInviteResult(invite) {
   `;
 }
 
+function renderReefResult(reef) {
+  if (!reef) {
+    elements.reefResult.className = 'command-result empty-state';
+    elements.reefResult.innerHTML = 'Your local reef summary appears here after the first seed.';
+    return;
+  }
+
+  const gateways = reef.gateways
+    .map(
+      (gateway) =>
+        `<span class="meta-pill">${escapeHtml(gateway.handle)} · ${escapeHtml(gateway.status)}${gateway.created ? ' · new' : ''}</span>`,
+    )
+    .join('');
+
+  elements.reefResult.className = 'command-result';
+  elements.reefResult.innerHTML = `
+    <div class="command-result-card">
+      <div class="item-row">
+        <div>
+          <p class="command-eyebrow">Latest Reef Seed</p>
+          <h4>${escapeHtml(reef.applied)}</h4>
+        </div>
+        ${sandboxBadge('sandbox reef')}
+      </div>
+      <p class="item-meta">Seeded ${escapeHtml(formatWhen(reef.seededAt))} · mode=${escapeHtml(reef.mode)}</p>
+      <div class="meta-pill-row">
+        <span class="meta-pill">gateways: ${escapeHtml(reef.counts.gatewaysCreated)}/3 new</span>
+        <span class="meta-pill">friendships: ${escapeHtml(reef.counts.friendshipsCreated)}</span>
+        <span class="meta-pill">messages: ${escapeHtml(reef.counts.messagesCreated)}</span>
+        <span class="meta-pill">scenes: ${escapeHtml(reef.counts.scenesCreated)}</span>
+      </div>
+      <div class="meta-pill-row">${gateways}</div>
+      <p>${escapeHtml(reef.ownerScene.summary)}</p>
+    </div>
+  `;
+}
+
 function resetCommandDeck() {
   commandState.busy = false;
   commandState.currentDirty = false;
@@ -334,6 +390,7 @@ function resetCommandDeck() {
   elements.currentSceneHint.value = '';
   elements.currentDurationMinutes.value = '360';
   renderInviteResult(null);
+  renderReefResult(null);
   setCommandStatus('Enter the aquarium to unlock the command deck.', 'neutral');
   syncCommandDeckInteractivity();
 }
@@ -407,7 +464,7 @@ function renderCurrent(current) {
     <div class="current-card tone-${escapeHtml(current.tone)}">
       <div class="current-head">
         <div>
-          <p class="current-label">${escapeHtml(current.label)}</p>
+          <p class="current-label">${escapeHtml(current.label)} ${current.metadata?.sandbox === true ? sandboxBadge() : ''}</p>
           <h3>${escapeHtml(current.summary)}</h3>
         </div>
         ${toneChip(current.tone)}
@@ -511,7 +568,10 @@ function renderFeed(items, scope) {
       (item) => `
         <article class="list-item">
           <div class="item-row">
-            <span class="type-pill">${escapeHtml(item.type)}</span>
+            <div class="meta-pill-row">
+              <span class="type-pill">${escapeHtml(item.type)}</span>
+              ${isSandboxEvent(item) ? sandboxBadge() : ''}
+            </div>
             ${toneChip(item.tone)}
           </div>
           <p class="item-summary">${escapeHtml(item.summary)}</p>
@@ -535,7 +595,10 @@ function renderActivity(items, gatewayId) {
       (item) => `
         <article class="list-item">
           <div class="item-row">
-            <span class="type-pill">${escapeHtml(item.type)}</span>
+            <div class="meta-pill-row">
+              <span class="type-pill">${escapeHtml(item.type)}</span>
+              ${isSandboxEvent(item) ? sandboxBadge() : ''}
+            </div>
             ${toneChip(item.tone)}
           </div>
           <p class="item-summary">${escapeHtml(item.summary)}</p>
@@ -562,7 +625,7 @@ function renderEncounters(items) {
         <article class="stack-card">
           <div class="item-row">
             <div>
-              <p class="stack-title">@${escapeHtml(encounter.peer?.handle ?? encounter.peerGatewayId)}</p>
+              <p class="stack-title">@${escapeHtml(encounter.peer?.handle ?? encounter.peerGatewayId)} ${isSandboxGateway(encounter.peer) ? sandboxBadge() : ''}</p>
               <p class="stack-subtitle">${escapeHtml(encounter.lastSummary)}</p>
             </div>
             <button class="inline-button" data-activity-gateway-id="${escapeHtml(encounter.peerGatewayId)}" type="button">
@@ -589,7 +652,10 @@ function renderScenes(items) {
       (scene) => `
         <article class="stack-card">
           <div class="item-row">
-            <span class="type-pill">${escapeHtml(scene.type)}</span>
+            <div class="meta-pill-row">
+              <span class="type-pill">${escapeHtml(scene.type)}</span>
+              ${isSandboxScene(scene) ? sandboxBadge() : ''}
+            </div>
             ${toneChip(scene.tone)}
           </div>
           <p class="stack-subtitle">${escapeHtml(scene.summary)}</p>
@@ -1253,6 +1319,27 @@ elements.currentCommandForm.addEventListener('submit', (event) => {
 
     return {
       successMessage: `Set current to ${payload.data.current.label}.`,
+    };
+  });
+});
+
+elements.reefCommandForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void runDeckCommand(elements.reefSeedButton, 'Seeding…', async ({ apiOrigin, token }) => {
+    if (authMode !== 'local_session') {
+      throw new Error('Local reef seeding requires a local owner session.');
+    }
+
+    const payload = await requestJson('/api/v1/local/reef/seed', {
+      apiOrigin,
+      token,
+      method: 'POST',
+    });
+
+    renderReefResult(payload.data.reef);
+
+    return {
+      successMessage: `Local reef ${payload.data.reef.applied}.`,
     };
   });
 });

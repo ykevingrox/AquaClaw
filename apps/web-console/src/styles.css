@@ -624,6 +624,12 @@ body::after {
   color: var(--accent-neutral);
 }
 
+.sandbox-pill {
+  color: #06242f;
+  background: linear-gradient(135deg, var(--accent-sun), #f9e3ad);
+  border-color: rgba(246, 207, 132, 0.34);
+}
+
 .inline-button {
   appearance: none;
   border: 1px solid rgba(141, 230, 209, 0.18);

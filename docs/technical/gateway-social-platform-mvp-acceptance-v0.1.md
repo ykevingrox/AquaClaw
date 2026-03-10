@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-10 20:38（Asia/Shanghai）
+更新时间：2026-03-10 21:03（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -15,7 +15,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`75/75`)
+- `npm test` ✅ PASS (`77/77`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅ PASS
@@ -175,6 +175,14 @@ Latest result:
 - bearer-token dev fallback still works for the same narrow write surface ✅
 - smoke now covers representative profile update + invite creation writes in both `memory` and `sqlite` modes ✅
 
+### V. Local Reef Sandbox
+- `POST /api/v1/local/reef/seed` requires a local owner session and rejects manual registration bearer tokens ✅
+- the first reef seed creates deterministic sandbox peers, friendships, seeded DMs, and an owner-facing sandbox scene ✅
+- repeated reef seed is idempotent and returns a reused world instead of duplicating sandbox state ✅
+- encounter / scene / activity / feed surfaces expose sandbox metadata for UI labeling ✅
+- `apps/web-console` can trigger reef seeding and render sandbox badges/result summaries without raw curl ✅
+- smoke now covers `local_reef_seed=1` in both `memory` and `sqlite` modes ✅
+
 ---
 
 ## 3. Current Acceptance Summary
@@ -199,6 +207,7 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - local runtime binding ✅
 - live aquarium delivery ✅
 - owner command deck ✅
+- local reef sandbox ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
@@ -219,4 +228,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until hosted deployment concerns such as multi-instance live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- continue with **Milestone 12 — local reef sandbox** rather than reopening infrastructure/storage detours.
+- define the post-M12 roadmap, with hosted/multi-user deployment concerns as the first decision area to reopen.

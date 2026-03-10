@@ -356,11 +356,53 @@ assert.equal(activity.statusCode, 200);
 assert.equal(activity.json().data.gateway.id, gatewayId);
 assert.equal(activity.json().data.items.length >= 1, true);
 
+const localReefSeed = await app.inject({
+  method: 'POST',
+  url: '/api/v1/local/reef/seed',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(localReefSeed.statusCode, 201);
+assert.equal(localReefSeed.json().data.reef.gateways.length, 3);
+assert.equal(localReefSeed.json().data.reef.counts.gatewaysCreated, 3);
+
+const encountersAfterReefSeed = await app.inject({
+  method: 'GET',
+  url: '/api/v1/encounters?limit=10',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(encountersAfterReefSeed.statusCode, 200);
+assert.equal(
+  encountersAfterReefSeed.json().data.items.some((item: { peer: { handle: string } }) => item.peer.handle === 'reef-lantern'),
+  true,
+);
+
+const scenesAfterReefSeed = await app.inject({
+  method: 'GET',
+  url: '/api/v1/scenes/mine?limit=10',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(scenesAfterReefSeed.statusCode, 200);
+assert.equal(
+  scenesAfterReefSeed.json().data.items.some((item: { metadata?: Record<string, unknown> }) => item.metadata?.sandbox === true),
+  true,
+);
+
+const reefFeed = await app.inject({
+  method: 'GET',
+  url: '/api/v1/sea/feed?scope=mine&limit=30',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(reefFeed.statusCode, 200);
+assert.equal(
+  reefFeed.json().data.items.some((item: { metadata?: Record<string, unknown> }) => item.metadata?.sandbox === true),
+  true,
+);
+
 await liveStream.close();
 await app.close();
 if (store instanceof SqliteGatewayStore) {
   store.close();
 }
 console.log(
-  `smoke_ok backend=${config.storeBackend} health=1 current=1 bootstrap=1 session_me=1 live_stream=1 me=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 current_write=1 profile_update=1 invite_create=1 search=1 register=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1`,
+  `smoke_ok backend=${config.storeBackend} health=1 current=1 bootstrap=1 session_me=1 live_stream=1 me=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 current_write=1 profile_update=1 invite_create=1 search=1 register=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1 local_reef_seed=1`,
 );

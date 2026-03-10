@@ -264,6 +264,7 @@ export interface GatewayStore {
     runtime: LocalRuntimeBindingState;
     created: boolean;
   };
+  seedLocalReefSandbox(input: SeedLocalReefInput): LocalReefSeedResult;
   findById(gatewayId: string): GatewayRecord | null;
   findByToken(token: string): GatewayRecord | null;
   findLocalSessionByToken(token: string): { gateway: GatewayRecord; session: LocalSessionRecord } | null;
@@ -457,6 +458,39 @@ export interface ListScenesInput {
   limit?: number;
 }
 
+export interface SeedLocalReefInput {
+  ownerGatewayId: string;
+}
+
+export interface LocalReefSeedGatewaySummary {
+  id: string;
+  handle: string;
+  displayName: string;
+  visibility: GatewayVisibility;
+  status: PresenceStatus;
+  created: boolean;
+}
+
+export interface LocalReefSeedResult {
+  mode: 'idempotent';
+  seedKey: string;
+  ownerGatewayId: string;
+  applied: 'created' | 'mixed' | 'reused';
+  seededAt: string;
+  gateways: LocalReefSeedGatewaySummary[];
+  counts: {
+    gatewaysCreated: number;
+    friendshipsCreated: number;
+    messagesCreated: number;
+    scenesCreated: number;
+  };
+  ownerScene: {
+    id: string;
+    summary: string;
+    created: boolean;
+  };
+}
+
 interface HeartbeatLocalRuntimeInput {
   gatewayId: string;
   metadata?: Record<string, unknown>;
@@ -477,6 +511,47 @@ const DEFAULT_LOCAL_INSTALLATION_ID = 'local-installation';
 const DEFAULT_LOCAL_RUNTIME_ID = 'openclaw-local-runtime';
 const DEFAULT_LOCAL_RUNTIME_LABEL = 'Local OpenClaw Runtime';
 const DEFAULT_LOCAL_RUNTIME_SOURCE = 'manual_local_bind';
+const LOCAL_REEF_SEED_KEY = 'local_reef_v1';
+const LOCAL_REEF_HANDLE_PREFIX = 'reef-';
+const LOCAL_REEF_OWNER_SCENE_SUMMARY =
+  'A sandbox reef shimmers nearby; three demo gateways circle close enough to leave a readable wake.';
+const LOCAL_REEF_GATEWAYS: Array<{
+  gatewayId: string;
+  token: string;
+  handle: string;
+  displayName: string;
+  bio: string;
+  visibility: GatewayVisibility;
+  seededMessage: string;
+}> = [
+  {
+    gatewayId: 'gw-reef-lantern',
+    token: 'reef-token-lantern',
+    handle: 'reef-lantern',
+    displayName: 'Reef Lantern',
+    bio: '[sandbox] Watches the glass edge for fresh currents and new arrivals.',
+    visibility: 'public',
+    seededMessage: '[reef-seed:v1] Lantern says the outer glass is calm tonight.',
+  },
+  {
+    gatewayId: 'gw-reef-cartographer',
+    token: 'reef-token-cartographer',
+    handle: 'reef-cartographer',
+    displayName: 'Reef Cartographer',
+    bio: '[sandbox] Maps recurring encounter paths and names the bright loops.',
+    visibility: 'public',
+    seededMessage: '[reef-seed:v1] Cartographer marked a looping route near your wake.',
+  },
+  {
+    gatewayId: 'gw-reef-chorus',
+    token: 'reef-token-chorus',
+    handle: 'reef-chorus',
+    displayName: 'Reef Chorus',
+    bio: '[sandbox] Collects small sea songs and repeats only the catchy ones.',
+    visibility: 'public',
+    seededMessage: '[reef-seed:v1] Chorus is humming about the current again.',
+  },
+];
 const CURRENT_WINDOWS: Array<{ key: string; label: string; summary: string; tone: SeaEventTone; sceneHint: string | null }> = [
   {
     key: 'glasswater',
@@ -742,6 +817,90 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return {
       runtime: this.getLocalRuntimeBinding()!,
       created: !existing,
+    };
+  }
+
+  seedLocalReefSandbox(input: SeedLocalReefInput): LocalReefSeedResult {
+    this.assertPrimaryOwnerGateway(input.ownerGatewayId);
+
+    const owner = this.gatewaysById.get(input.ownerGatewayId);
+    if (!owner) {
+      throw new Error('gateway not found');
+    }
+
+    const seededAt = new Date().toISOString();
+    let gatewaysCreated = 0;
+    let friendshipsCreated = 0;
+    let messagesCreated = 0;
+    let scenesCreated = 0;
+
+    const gateways = LOCAL_REEF_GATEWAYS.map((template) => {
+      let gateway = this.gatewaysByHandle.get(template.handle) ?? null;
+      let created = false;
+
+      if (!gateway) {
+        gateway = this.register(
+          {
+            displayName: template.displayName,
+            handle: template.handle,
+            bio: template.bio,
+            visibility: template.visibility,
+          },
+          {
+            gatewayId: template.gatewayId,
+            token: template.token,
+            createdAt: seededAt,
+            updatedAt: seededAt,
+          },
+        ).gateway;
+        created = true;
+        gatewaysCreated += 1;
+      }
+
+      if (this.ensureLocalReefFriendship(owner.id, gateway.id)) {
+        friendshipsCreated += 1;
+      }
+
+      messagesCreated += this.ensureLocalReefMessages(owner.id, gateway.id, [template.seededMessage]);
+      this.heartbeatPresence(gateway.id);
+
+      return {
+        id: gateway.id,
+        handle: gateway.handle,
+        displayName: gateway.displayName,
+        visibility: gateway.visibility,
+        status: this.getPresence(gateway.id).status,
+        created,
+      };
+    });
+
+    const ownerScene = this.ensureLocalReefOwnerScene(owner.id, gateways.map((gateway) => gateway.handle));
+    if (ownerScene.created) {
+      scenesCreated += 1;
+    }
+
+    const changedCount = gatewaysCreated + friendshipsCreated + messagesCreated + scenesCreated;
+    const applied =
+      changedCount === 0 ? 'reused' : gateways.every((gateway) => gateway.created) && scenesCreated > 0 ? 'created' : 'mixed';
+
+    return {
+      mode: 'idempotent',
+      seedKey: LOCAL_REEF_SEED_KEY,
+      ownerGatewayId: owner.id,
+      applied,
+      seededAt,
+      gateways,
+      counts: {
+        gatewaysCreated,
+        friendshipsCreated,
+        messagesCreated,
+        scenesCreated,
+      },
+      ownerScene: {
+        id: ownerScene.scene.id,
+        summary: ownerScene.scene.summary,
+        created: ownerScene.created,
+      },
     };
   }
 
@@ -1588,6 +1747,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       recentTopics: encounter.recentTopics,
       notes: encounter.notes,
       lastSummary: encounter.lastSummary,
+      ...this.sandboxMetadataForGatewayIds(encounter.gatewayAId, encounter.gatewayBId),
     };
 
     for (const subjectGatewayId of pair) {
@@ -1938,6 +2098,124 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return `${candidate}-${suffix}`;
   }
 
+  private isLocalReefSandboxHandle(handle: string | null | undefined) {
+    return Boolean(handle?.startsWith(LOCAL_REEF_HANDLE_PREFIX));
+  }
+
+  private isLocalReefSandboxGatewayId(gatewayId: string | null | undefined) {
+    if (!gatewayId) {
+      return false;
+    }
+    return this.isLocalReefSandboxHandle(this.gatewaysById.get(gatewayId)?.handle);
+  }
+
+  private sandboxMetadataForGatewayIds(...gatewayIds: Array<string | null | undefined>) {
+    const sandboxGatewayHandles = gatewayIds
+      .filter((gatewayId): gatewayId is string => this.isLocalReefSandboxGatewayId(gatewayId))
+      .map((gatewayId) => this.gatewaysById.get(gatewayId)?.handle ?? null)
+      .filter((handle): handle is string => handle !== null);
+
+    if (sandboxGatewayHandles.length === 0) {
+      return {};
+    }
+
+    return {
+      sandbox: true,
+      sandboxKind: 'local_reef',
+      sandboxSeedKey: LOCAL_REEF_SEED_KEY,
+      sandboxGatewayHandles: [...new Set(sandboxGatewayHandles)],
+    };
+  }
+
+  private findPendingFriendRequestBetween(gatewayAId: string, gatewayBId: string) {
+    return (
+      Array.from(this.friendRequestsById.values()).find(
+        (request) =>
+          request.status === 'pending' &&
+          ((request.fromGatewayId === gatewayAId && request.toGatewayId === gatewayBId) ||
+            (request.fromGatewayId === gatewayBId && request.toGatewayId === gatewayAId)),
+      ) ?? null
+    );
+  }
+
+  private ensureLocalReefFriendship(ownerGatewayId: string, peerGatewayId: string) {
+    if (this.areFriends(ownerGatewayId, peerGatewayId)) {
+      this.ensureDmConversation(ownerGatewayId, peerGatewayId);
+      return false;
+    }
+
+    const pending = this.findPendingFriendRequestBetween(ownerGatewayId, peerGatewayId);
+    if (pending) {
+      this.acceptFriendRequest(pending.id, pending.toGatewayId);
+      return true;
+    }
+
+    const request = this.createFriendRequest({
+      fromGatewayId: peerGatewayId,
+      toGatewayId: ownerGatewayId,
+      message: '[reef-seed:v1] drifting into your orbit',
+    });
+    this.acceptFriendRequest(request.id, ownerGatewayId);
+    return true;
+  }
+
+  private ensureLocalReefMessages(ownerGatewayId: string, peerGatewayId: string, bodies: string[]) {
+    const conversation = this.ensureDmConversation(ownerGatewayId, peerGatewayId);
+    const existingMessages = Array.from(this.messagesById.values()).filter((message) => message.conversationId === conversation.id);
+    let created = 0;
+
+    for (const body of bodies) {
+      if (existingMessages.some((message) => message.senderGatewayId === peerGatewayId && message.body === body)) {
+        continue;
+      }
+
+      const message = this.createMessage({
+        conversationId: conversation.id,
+        senderGatewayId: peerGatewayId,
+        body,
+      });
+      existingMessages.push(message);
+      created += 1;
+    }
+
+    return created;
+  }
+
+  private ensureLocalReefOwnerScene(ownerGatewayId: string, sandboxGatewayHandles: string[]) {
+    const existingIds = this.sceneIdsByGatewayId.get(ownerGatewayId) ?? [];
+    const existingScene =
+      existingIds
+        .map((sceneId) => this.scenesById.get(sceneId))
+        .filter((scene): scene is SceneRecord => Boolean(scene))
+        .find((scene) => scene.metadata.sandboxSeedKey === LOCAL_REEF_SEED_KEY && scene.metadata.sandbox === true) ?? null;
+
+    if (existingScene) {
+      return {
+        scene: existingScene,
+        created: false,
+      };
+    }
+
+    const scene = this.createScene({
+      gatewayId: ownerGatewayId,
+      type: 'social_glimpse',
+      summary: LOCAL_REEF_OWNER_SCENE_SUMMARY,
+      tone: 'playful',
+      metadata: {
+        sandbox: true,
+        sandboxKind: 'local_reef',
+        sandboxSeedKey: LOCAL_REEF_SEED_KEY,
+        sandboxGatewayHandles,
+      },
+      objectGatewayId: null,
+    });
+
+    return {
+      scene,
+      created: true,
+    };
+  }
+
   private getConversationPeerGatewayId(conversation: ConversationRecord, gatewayId: string) {
     return conversation.memberGatewayIds[0] === gatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
   }
@@ -2110,6 +2388,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       auditAction: record.action,
       auditRecordId: record.id,
       ...record.metadata,
+      ...this.sandboxMetadataForGatewayIds(record.actorGatewayId, record.targetGatewayId),
     };
 
     switch (record.action) {

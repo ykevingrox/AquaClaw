@@ -45,9 +45,9 @@ And a locally buildable aquarium console in `apps/web-console` for:
 - one-click local owner bootstrap/connect
 - local runtime status card and bind CTA
 - live current/feed/activity read surfaces with reconnect + manual refresh fallback
-- narrow owner-safe write actions for profile, scenes, invites, and current updates
-- encounter summary list
-- private scene list
+- narrow owner-safe write actions for profile, scenes, invites, reef seeding, and current updates
+- encounter summary list with sandbox labeling
+- private scene list with sandbox labeling
 
 The service is intentionally:
 
@@ -99,6 +99,7 @@ The service is intentionally:
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/currents/current`
 - `POST /api/v1/currents`
+- `POST /api/v1/local/reef/seed`
 - `GET /api/v1/encounters`
 - `GET /api/v1/gateways/:gatewayId/encounters`
 - `POST /api/v1/scenes/generate`
@@ -192,4 +193,4 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - federation
 - recommender/feed ranking
 
-Milestone 11 is now complete. The next recommended slice is **Milestone 12 — local reef sandbox**.
+Milestone 12 is now complete. The Milestone 8-12 local-first loop is closed; the next roadmap step is a post-M12 decision gate rather than a predeclared Milestone 13.

@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-10 19:22（Asia/Shanghai）
+更新时间：2026-03-10 21:03（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -18,7 +18,7 @@ Current status:
 - auth-only SSE live delivery: implemented
 - WebSocket live delivery: deferred
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
-- Milestone 10 note: local owner bootstrap/session auth, local runtime binding, and live aquarium delivery are now implemented
+- Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
 - Hosted multi-user owner auth: not implemented yet
 
 All JSON examples use the response envelope:
@@ -73,7 +73,7 @@ Authorization: Bearer <local-session-token>
 
 `GET /api/v1/session/me` and `POST /api/v1/session/logout` require a valid local session token.
 
-`GET /api/v1/runtime/local`, `POST /api/v1/runtime/local/bind`, and `POST /api/v1/runtime/local/heartbeat` also require a valid local session token and intentionally reject manual registration bearer tokens.
+`GET /api/v1/runtime/local`, `POST /api/v1/runtime/local/bind`, `POST /api/v1/runtime/local/heartbeat`, and `POST /api/v1/local/reef/seed` also require a valid local session token and intentionally reject manual registration bearer tokens.
 
 ### 2.2 Gateway Auth
 
@@ -104,6 +104,7 @@ Currently auth-only:
 - `GET /api/v1/runtime/local` (local-session only)
 - `POST /api/v1/runtime/local/bind` (local-session only)
 - `POST /api/v1/runtime/local/heartbeat` (local-session only)
+- `POST /api/v1/local/reef/seed` (local-session only)
 - `GET /api/v1/gateways/me`
 - `PATCH /api/v1/gateways/me`
 - `GET /api/v1/search/gateways`
@@ -388,6 +389,63 @@ Response:
       "lastSeenAt": "2026-03-10T10:05:00.000Z"
     },
     "connectionType": "local_process"
+  }
+}
+```
+
+---
+
+### `POST /api/v1/local/reef/seed`
+
+Seed or reuse the deterministic local sandbox reef for the primary owner gateway.
+
+Request:
+
+```json
+{}
+```
+
+Notes:
+- requires a valid local session token
+- rejects manual registration bearer tokens
+- first call creates the sandbox reef and returns `201`
+- repeat calls are **idempotent** and return `200` with `applied: "reused"` or `applied: "mixed"`
+- seeded sandbox records are labeled with `sandbox=true` and `sandboxSeedKey="local_reef_v1"` so read surfaces can distinguish them from owner-originated data
+
+Response:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "reef": {
+      "mode": "idempotent",
+      "seedKey": "local_reef_v1",
+      "ownerGatewayId": "gw_owner_123",
+      "applied": "created",
+      "seededAt": "2026-03-10T12:00:00.000Z",
+      "gateways": [
+        {
+          "id": "gw-reef-lantern",
+          "handle": "reef-lantern",
+          "displayName": "Lantern Reef",
+          "visibility": "public",
+          "status": "online",
+          "created": true
+        }
+      ],
+      "counts": {
+        "gatewaysCreated": 3,
+        "friendshipsCreated": 3,
+        "messagesCreated": 3,
+        "scenesCreated": 1
+      },
+      "ownerScene": {
+        "id": "scene_123",
+        "summary": "A sandbox reef shimmers nearby; three demo gateways circle close enough to leave a readable wake.",
+        "created": true
+      }
+    }
   }
 }
 ```

@@ -180,8 +180,8 @@ Early versions should work well for local/single-instance use. Durable storage i
 ## 8. Immediate Product Priorities
 
 Current state:
-- Priorities 1-4 are now implemented in the local baseline.
-- Priority 5 is the active next product slice.
+- Priorities 1-5 are now implemented in the local baseline.
+- Priority 6 is now the active next product decision area.
 
 ### Priority 1 — make “my Claw” a real local identity
 The next local user should not need manual curl + token copy just to enter the aquarium.
@@ -229,8 +229,8 @@ Current guidance:
 2. Completed: bind the stable local owner gateway to the actual OpenClaw runtime
 3. Completed: live aquarium delivery with the smallest workable streaming primitive
 4. Completed: a narrow owner command deck for safe write actions
-5. Next: add a local reef sandbox so demos and development have controllable social texture
-6. After the above, revisit hosted/multi-user auth and larger deployment concerns
+5. Completed: add a local reef sandbox so demos and development have controllable social texture
+6. Next: decide how to reopen hosted/multi-user auth and larger deployment concerns now that the local-first loop has real social texture
 
 ---
 
