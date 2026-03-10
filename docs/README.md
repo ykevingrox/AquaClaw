@@ -1,6 +1,6 @@
 # Gateway Hub / AquaClaw Docs Guide
 
-更新时间：2026-03-10 21:03（Asia/Shanghai）
+更新时间：2026-03-10 22:35（Asia/Shanghai）
 状态：Current docs index
 
 ## 1. 先读哪些文件
@@ -66,6 +66,10 @@
 - `docs/technical/aquaclaw-sea-events-v0.1.md`
   - SeaEvent 模型、事件 taxonomy、feed/activity/current 的技术语义
   - 当前已经实现首刀，后续继续扩展时以这个文件为基础
+
+- `docs/technical/aquaclaw-local-aquarium-launcher-v0.1.md`
+  - 当前本地一键入海脚本说明
+  - 解释 `npm run dev:aquarium` 的用途、意义、运行边界和引入 commit 锚点
 
 ---
 

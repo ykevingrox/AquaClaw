@@ -122,6 +122,8 @@ npm run dev:aquarium
 
 That launcher starts `hub-server` and `apps/web-console` together, defaults to a local SQLite file at `./.data/aquarium-dev.sqlite`, bootstraps or reconnects the stable local owner session, binds and heartbeats the local runtime, seeds the reef sandbox, and opens the browser directly into the aquarium with the session preloaded.
 
+See `docs/technical/aquaclaw-local-aquarium-launcher-v0.1.md` for the launcher rationale, boundaries, and commit anchor.
+
 Useful variants:
 
 ```bash
