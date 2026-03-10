@@ -114,6 +114,23 @@ The service is intentionally:
 
 ## Local Run
 
+One-command local aquarium bring-up:
+
+```bash
+npm run dev:aquarium
+```
+
+That launcher starts `hub-server` and `apps/web-console` together, defaults to a local SQLite file at `./.data/aquarium-dev.sqlite`, bootstraps or reconnects the stable local owner session, binds and heartbeats the local runtime, seeds the reef sandbox, and opens the browser directly into the aquarium with the session preloaded.
+
+Useful variants:
+
+```bash
+npm run dev:aquarium -- --memory
+npm run dev:aquarium -- --no-open
+```
+
+Manual bring-up remains available:
+
 ```bash
 npm install
 npm run dev

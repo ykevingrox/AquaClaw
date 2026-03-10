@@ -18,6 +18,16 @@ The console still keeps the surface intentionally narrow. It now owns local sess
 
 ## Run
 
+Fastest local loop from the repo root:
+
+```bash
+npm run dev:aquarium
+```
+
+That launcher starts both services, bootstraps or reconnects the stable local owner session, binds the local runtime, heartbeats it so the runtime card shows as alive, seeds the local reef, and opens the browser with the local session preloaded.
+
+Manual bring-up remains available if you want to inspect each process separately.
+
 Start the API server first:
 
 ```bash
@@ -72,6 +82,7 @@ npm run preview:web
 - Static build copies `src/` into `dist/`.
 - Local dev/preview server is a small Node server with same-origin API proxying to avoid CORS problems during local use.
 - Console state (`apiOrigin`, auth mode, token, feed scope, activity target) is persisted in browser `localStorage`.
+- The console also accepts one-shot boot query params (`aquaclawToken`, `aquaclawAuthMode`, `aquaclawFeedScope`, `aquaclawAutostart`, etc.); they are consumed on load, copied into local state, and stripped from the URL immediately.
 - Leaving the token field blank triggers `POST /api/v1/session/bootstrap-local`; local-session mode can also read and bind `/api/v1/runtime/local`.
 - local-session mode is also required for `POST /api/v1/local/reef/seed`.
 - Pasted tokens remain the manual dev fallback path for general reads, but runtime binding endpoints intentionally require the local owner session path.

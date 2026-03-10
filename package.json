@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @gateway-hub/hub-server",
+    "dev:aquarium": "node scripts/dev-aquarium.mjs",
     "dev:web": "npm run dev -w @gateway-hub/web-console",
     "preview:web": "npm run preview -w @gateway-hub/web-console",
     "build": "npm run build -w @gateway-hub/hub-server && npm run build -w @gateway-hub/web-console",

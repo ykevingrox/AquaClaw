@@ -6,6 +6,18 @@ const STORAGE_KEYS = {
   token: 'aquaclaw.console.token',
 };
 
+const QUERY_KEYS = {
+  activityGatewayId: 'aquaclawActivityGatewayId',
+  authMode: 'aquaclawAuthMode',
+  apiOrigin: 'aquaclawApiOrigin',
+  autostart: 'aquaclawAutostart',
+  feedScope: 'aquaclawFeedScope',
+  token: 'aquaclawToken',
+};
+
+const VALID_FEED_SCOPES = new Set(['mine', 'all', 'friends', 'system']);
+const TRUTHY_QUERY_VALUES = new Set(['1', 'true', 'yes', 'on']);
+
 const elements = {
   activityGatewayId: document.querySelector('#activity-gateway-id'),
   activityNote: document.querySelector('#activity-note'),
@@ -160,6 +172,70 @@ function loadSettings() {
   authMode = localStorage.getItem(STORAGE_KEYS.authMode) === 'local_session' ? 'local_session' : 'bearer';
   elements.feedScope.value = localStorage.getItem(STORAGE_KEYS.feedScope) || 'mine';
   elements.activityGatewayId.value = localStorage.getItem(STORAGE_KEYS.activityGatewayId) || '';
+}
+
+function consumeBootQueryParams() {
+  const url = new URL(window.location.href);
+  const params = url.searchParams;
+  let shouldStrip = false;
+  let autostart = false;
+
+  const apiOrigin = params.get(QUERY_KEYS.apiOrigin);
+  if (apiOrigin !== null) {
+    shouldStrip = true;
+    if (apiOrigin.trim()) {
+      elements.apiOrigin.value = normalizeOrigin(apiOrigin);
+    }
+  }
+
+  const token = params.get(QUERY_KEYS.token);
+  if (token !== null) {
+    shouldStrip = true;
+    elements.token.value = token.trim();
+  }
+
+  const authModeParam = params.get(QUERY_KEYS.authMode);
+  if (authModeParam !== null) {
+    shouldStrip = true;
+    if (authModeParam === 'local_session' || authModeParam === 'bearer') {
+      authMode = authModeParam;
+    }
+  }
+
+  const feedScope = params.get(QUERY_KEYS.feedScope);
+  if (feedScope !== null) {
+    shouldStrip = true;
+    if (VALID_FEED_SCOPES.has(feedScope)) {
+      elements.feedScope.value = feedScope;
+    }
+  }
+
+  const activityGatewayId = params.get(QUERY_KEYS.activityGatewayId);
+  if (activityGatewayId !== null) {
+    shouldStrip = true;
+    elements.activityGatewayId.value = activityGatewayId.trim();
+  }
+
+  const autostartParam = params.get(QUERY_KEYS.autostart);
+  if (autostartParam !== null) {
+    shouldStrip = true;
+    autostart = TRUTHY_QUERY_VALUES.has(autostartParam.trim().toLowerCase());
+  }
+
+  if (!shouldStrip) {
+    return { autostart: false };
+  }
+
+  for (const key of Object.values(QUERY_KEYS)) {
+    params.delete(key);
+  }
+
+  const nextSearch = params.toString();
+  const nextUrl = `${url.pathname}${nextSearch ? `?${nextSearch}` : ''}${url.hash}`;
+  window.history.replaceState({}, document.title, nextUrl);
+  saveSettings();
+
+  return { autostart };
 }
 
 async function describeFailedResponse(response) {
@@ -1423,7 +1499,8 @@ document.addEventListener('click', (event) => {
 });
 
 loadSettings();
+const bootQuery = consumeBootQueryParams();
 resetAquariumSurface();
-if (elements.token.value.trim()) {
+if (bootQuery.autostart || elements.token.value.trim()) {
   void loadAquarium();
 }

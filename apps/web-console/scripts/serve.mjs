@@ -79,6 +79,20 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
 
+    if (url.pathname === '/__console_meta') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+      res.end(
+        JSON.stringify({
+          ok: true,
+          data: {
+            proxyOrigin: backendOrigin,
+            staticDir: basename(staticDir),
+          },
+        }),
+      );
+      return;
+    }
+
     if (isProxyPath(url.pathname)) {
       const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await readRequestBody(req);
       const controller = new AbortController();
