@@ -1793,6 +1793,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
 
     let viewerGatewayId: string;
+    let includeSystemEvents = true;
     if (deploymentMode === 'hosted' && scope === 'system') {
       const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
       if (!hostedOwner.ok) {
@@ -1806,6 +1807,18 @@ export function buildApp(options: BuildAppOptions = {}) {
         });
       }
       viewerGatewayId = hostedOwner.session.gateway.id;
+    } else if (deploymentMode === 'hosted') {
+      const hostedSession = getAuthedHostedSession(store, request.headers.authorization);
+      if ('error' in hostedSession) {
+        const result = getAuthedGateway(store, request.headers.authorization);
+        if ('error' in result) {
+          return reply.code(401).send({ ok: false, error: result.error });
+        }
+        viewerGatewayId = result.gateway.id;
+        includeSystemEvents = false;
+      } else {
+        viewerGatewayId = hostedSession.gateway.id;
+      }
     } else {
       const result = getAuthedGateway(store, request.headers.authorization);
       if ('error' in result) {
@@ -1817,6 +1830,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     try {
       const feed = store.listSeaFeed({
         viewerGatewayId,
+        includeSystemEvents,
         scope: (scope as 'all' | 'mine' | 'friends' | 'system' | undefined) ?? undefined,
         cursor: request.query.cursor?.trim() || undefined,
         limit: parsedLimit.value,

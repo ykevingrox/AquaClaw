@@ -422,6 +422,7 @@ interface ListAuditRecordsInput {
 
 interface ListSeaFeedInput {
   viewerGatewayId: string;
+  includeSystemEvents?: boolean;
   scope?: SeaFeedScope;
   cursor?: string;
   limit?: number;
@@ -1717,6 +1718,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   listSeaFeed(input: ListSeaFeedInput): SeaEventPage {
+    const includeSystemEvents = input.includeSystemEvents ?? true;
     const visible = [...this.seaEvents]
       .reverse()
       .filter((event) => this.isSeaEventVisibleToViewer(event, input.viewerGatewayId))
@@ -1730,7 +1732,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
             return event.visibility === 'system';
           case 'all':
           default:
-            return true;
+            return includeSystemEvents || event.visibility !== 'system';
         }
       });
 

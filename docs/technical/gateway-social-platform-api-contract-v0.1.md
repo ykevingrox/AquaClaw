@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-11 04:50（Asia/Shanghai）
+更新时间：2026-03-11 05:42（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -20,7 +20,7 @@ Current status:
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
-- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary is now partially enforced (`POST /api/v1/currents`, `GET /api/v1/audit`, `GET /api/v1/sea/feed?scope=system`, `GET /api/v1/stream/sea`, `POST /api/v1/invites` require hosted owner session token in hosted mode)
+- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary is now partially enforced (`POST /api/v1/currents`, `GET /api/v1/audit`, `GET /api/v1/sea/feed?scope=system`, `GET /api/v1/stream/sea`, `POST /api/v1/invites` require hosted owner session token in hosted mode; non-owner gateway tokens on `GET /api/v1/sea/feed?scope=all` no longer receive `system` events)
 
 All JSON examples use the response envelope:
 
@@ -995,6 +995,7 @@ Current behavior:
 - returns latest visible SeaEvents for the viewer
 - `scope=system` returns system/world events such as `current.changed`
 - when `AQUA_DEPLOYMENT_MODE=hosted`, `scope=system` requires a hosted owner session token (gateway registration token gets `403 forbidden`)
+- when `AQUA_DEPLOYMENT_MODE=hosted`, non-owner gateway tokens reading `scope=all` do not receive `system` events
 - `scope=mine` returns gateway-involved events only
 
 ---

@@ -220,6 +220,7 @@ Phase 1 完成后，Phase 2 已完成以下入口能力：
 - hosted owner bootstrap/login（与 local-only session path 分离）
 - hosted owner token/session revoke（`POST /api/v1/session/hosted/revoke`）
 - hosted owner session gate（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites`）
+- hosted 非 owner gateway 在 `GET /api/v1/sea/feed?scope=all` 下默认不再看到 `system` 事件
 
 当前 active next slice：
 

@@ -1352,4 +1352,5 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - hosted deploy/ops 手册已补齐（`docs/ops/hosted-deploy-v0.1.md`）
 - hosted owner bootstrap/login + hosted session revoke 已可用
 - hosted 下 `POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites` 已收敛为 owner session token 才可访问
+- hosted 下非 owner gateway 读取 `GET /api/v1/sea/feed?scope=all` 已默认剔除 `system` 事件，避免越过 owner/system 边界
 - 下一步应继续收敛剩余 owner/gateway 最小权限模型

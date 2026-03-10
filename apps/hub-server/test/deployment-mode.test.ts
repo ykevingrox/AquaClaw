@@ -393,6 +393,16 @@ test('hosted owner session gate protects owner-only hosted-session/current/audit
   });
   assert.equal(ownerSystemFeed.statusCode, 200);
 
+  const ownerAllFeed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sea/feed?scope=all',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  assert.equal(ownerAllFeed.statusCode, 200);
+  assert.equal(ownerAllFeed.json().data.items.some((item: { visibility: string }) => item.visibility === 'system'), true);
+
   const guestAllFeed = await app.inject({
     method: 'GET',
     url: '/api/v1/sea/feed?scope=all',
@@ -401,6 +411,7 @@ test('hosted owner session gate protects owner-only hosted-session/current/audit
     },
   });
   assert.equal(guestAllFeed.statusCode, 200);
+  assert.equal(guestAllFeed.json().data.items.some((item: { visibility: string }) => item.visibility === 'system'), false);
 
   const forbiddenStream = await app.inject({
     method: 'GET',
