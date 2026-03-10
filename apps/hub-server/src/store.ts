@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { createPostgresGatewayStore } from './postgres-store.js';
 
 export type GatewayVisibility = 'private' | 'invite_only' | 'friends_only' | 'public';
 export type PresenceStatus = 'online' | 'recently_active' | 'offline';
@@ -222,7 +223,15 @@ export class InMemoryGatewayStore implements GatewayStore {
   private readonly lastSeenAtByGatewayId = new Map<string, string>();
   private readonly auditLog: AuditRecord[] = [];
 
-  register(input: RegisterInput) {
+  register(
+    input: RegisterInput,
+    seed?: {
+      gatewayId?: string;
+      token?: string;
+      createdAt?: string;
+      updatedAt?: string;
+    },
+  ) {
     const normalizedHandle = input.handle.trim().toLowerCase();
     if (!normalizedHandle) {
       throw new Error('handle is required');
@@ -236,22 +245,22 @@ export class InMemoryGatewayStore implements GatewayStore {
       throw new Error('invalid visibility');
     }
 
-    const now = new Date().toISOString();
+    const now = seed?.createdAt ?? new Date().toISOString();
     const gateway: GatewayRecord = {
-      id: randomUUID(),
+      id: seed?.gatewayId ?? randomUUID(),
       handle: normalizedHandle,
       displayName: input.displayName.trim(),
       bio: input.bio?.trim() ?? '',
       visibility,
       createdAt: now,
-      updatedAt: now,
+      updatedAt: seed?.updatedAt ?? now,
     };
 
     if (!gateway.displayName) {
       throw new Error('displayName is required');
     }
 
-    const token = randomBytes(24).toString('hex');
+    const token = seed?.token ?? randomBytes(24).toString('hex');
     this.gatewaysById.set(gateway.id, gateway);
     this.gatewaysByHandle.set(gateway.handle, gateway);
     this.tokensToGatewayId.set(token, gateway.id);
@@ -271,6 +280,22 @@ export class InMemoryGatewayStore implements GatewayStore {
 
   findById(gatewayId: string): GatewayRecord | null {
     return this.gatewaysById.get(gatewayId) ?? null;
+  }
+
+  hydrateGateway(gateway: GatewayRecord, options: { token?: string; lastSeenAt?: string | null } = {}) {
+    this.gatewaysById.set(gateway.id, gateway);
+    this.gatewaysByHandle.set(gateway.handle, gateway);
+    if (options.token) {
+      this.tokensToGatewayId.set(options.token, gateway.id);
+    }
+    if (typeof options.lastSeenAt !== 'undefined') {
+      if (options.lastSeenAt) {
+        this.lastSeenAtByGatewayId.set(gateway.id, options.lastSeenAt);
+      } else {
+        this.lastSeenAtByGatewayId.delete(gateway.id);
+      }
+    }
+    return gateway;
   }
 
   findByToken(token: string): GatewayRecord | null {
@@ -1074,12 +1099,16 @@ export class InMemoryGatewayStore implements GatewayStore {
 
 interface CreateGatewayStoreOptions {
   backend?: StoreBackend;
+  databaseUrl?: string | null;
 }
 
 export function createGatewayStore(options: CreateGatewayStoreOptions = {}): GatewayStore {
   const backend = options.backend ?? 'memory';
   if (backend === 'postgres') {
-    throw new Error('postgres store backend is not implemented yet');
+    if (!options.databaseUrl) {
+      throw new Error('databaseUrl is required for postgres store backend');
+    }
+    return createPostgresGatewayStore({ databaseUrl: options.databaseUrl });
   }
   return new InMemoryGatewayStore();
 }

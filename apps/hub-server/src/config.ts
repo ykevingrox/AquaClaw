@@ -4,6 +4,7 @@ export interface RuntimeConfig {
   host: string;
   port: number;
   storeBackend: StoreBackend;
+  databaseUrl: string | null;
 }
 
 export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -18,9 +19,15 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     throw new Error('GATEWAY_STORE_BACKEND must be one of: memory, postgres');
   }
 
+  const databaseUrl = env.DATABASE_URL?.trim() ? env.DATABASE_URL.trim() : null;
+  if (rawBackend === 'postgres' && !databaseUrl) {
+    throw new Error('DATABASE_URL is required when GATEWAY_STORE_BACKEND=postgres');
+  }
+
   return {
     host,
     port,
     storeBackend: rawBackend,
+    databaseUrl,
   };
 }

@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-10 12:05（Asia/Shanghai）
+更新时间：2026-03-10 12:36（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -14,7 +14,7 @@ npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`33/33`)
+- `npm test` ✅ PASS (`40/40`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 

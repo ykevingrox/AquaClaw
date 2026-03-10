@@ -4,7 +4,7 @@ import { createGatewayStore } from './store.js';
 
 const config = loadRuntimeConfig();
 const app = buildApp({
-  store: createGatewayStore({ backend: config.storeBackend }),
+  store: createGatewayStore({ backend: config.storeBackend, databaseUrl: config.databaseUrl }),
 });
 
 async function start() {
