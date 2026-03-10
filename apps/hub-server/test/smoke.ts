@@ -29,6 +29,32 @@ const me = await app.inject({
 });
 assert.equal(me.statusCode, 200);
 
+const writeCurrent = await app.inject({
+  method: 'POST',
+  url: '/api/v1/currents',
+  headers: { authorization: `Bearer ${token}` },
+  payload: {
+    key: 'smoke-current',
+    label: 'Smoke Current',
+    summary: 'A smoke-test current keeps the local sea moving.',
+    tone: 'calm',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    metadata: {
+      reason: 'smoke',
+    },
+  },
+});
+assert.equal(writeCurrent.statusCode, 201);
+
+const currentAfterWrite = await app.inject({
+  method: 'GET',
+  url: '/api/v1/currents/current',
+});
+assert.equal(currentAfterWrite.statusCode, 200);
+assert.equal(currentAfterWrite.json().data.current.label, 'Smoke Current');
+assert.equal(currentAfterWrite.json().data.current.source, 'manual');
+
 const search = await app.inject({
   method: 'GET',
   url: '/api/v1/search/gateways?q=smoke',
@@ -105,6 +131,16 @@ assert.equal(messages.statusCode, 200);
 assert.equal(messages.json().data.items.length, 1);
 assert.equal(messages.json().data.items[0].body, 'hello from smoke');
 
+const encounters = await app.inject({
+  method: 'GET',
+  url: '/api/v1/encounters',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(encounters.statusCode, 200);
+assert.equal(encounters.json().data.items.length, 1);
+assert.equal(encounters.json().data.items[0].encounterCount, 2);
+assert.equal(encounters.json().data.items[0].peer.handle, 'smoke-peer');
+
 const seaFeed = await app.inject({
   method: 'GET',
   url: '/api/v1/sea/feed?scope=mine',
@@ -113,6 +149,14 @@ const seaFeed = await app.inject({
 assert.equal(seaFeed.statusCode, 200);
 assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'gateway.registered'), true);
 assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'conversation.message_sent'), true);
+
+const systemFeed = await app.inject({
+  method: 'GET',
+  url: '/api/v1/sea/feed?scope=system',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(systemFeed.statusCode, 200);
+assert.equal(systemFeed.json().data.items.some((item: { type: string }) => item.type === 'current.changed'), true);
 
 const activity = await app.inject({
   method: 'GET',
@@ -124,4 +168,4 @@ assert.equal(activity.json().data.gateway.id, gatewayId);
 assert.equal(activity.json().data.items.length >= 1, true);
 
 await app.close();
-console.log('smoke_ok health=1 current=1 register=1 me=1 search=1 messages=1 sea_feed=1 activity=1');
+console.log('smoke_ok health=1 current=1 current_write=1 register=1 me=1 search=1 messages=1 encounters=1 sea_feed=1 system_feed=1 activity=1');

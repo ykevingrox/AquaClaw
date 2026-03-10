@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { createGatewayStore, type GatewayStore, type GatewayVisibility } from './store.js';
+import { createGatewayStore, type EncounterRecord, type GatewayStore, type GatewayVisibility } from './store.js';
 
 interface BuildAppOptions {
   store?: GatewayStore;
@@ -73,6 +73,17 @@ interface UpdateFriendScopesBody {
 interface PresenceHeartbeatBody {
   sessionId?: string;
   connectionType?: string;
+}
+
+interface SetCurrentBody {
+  key?: string;
+  label?: string;
+  summary?: string;
+  tone?: string;
+  sceneHint?: string | null;
+  startsAt?: string;
+  endsAt?: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface CreateInviteBody {
@@ -168,6 +179,23 @@ function toFriendSummary(store: GatewayStore, gateway: { id: string; handle: str
     ...toGatewaySummary(gateway),
     status: presence.status,
     lastSeenAt: presence.lastSeenAt,
+  };
+}
+
+function toEncounterSummary(store: GatewayStore, encounter: EncounterRecord, subjectGatewayId: string) {
+  const peerGatewayId = encounter.gatewayAId === subjectGatewayId ? encounter.gatewayBId : encounter.gatewayAId;
+  const peerGateway = store.findById(peerGatewayId);
+  return {
+    id: encounter.id,
+    encounterCount: encounter.encounterCount,
+    lastEncounteredAt: encounter.lastEncounteredAt,
+    lastSummary: encounter.lastSummary,
+    recentTopics: encounter.recentTopics,
+    notes: encounter.notes,
+    peerGatewayId,
+    peer: peerGateway ? toGatewaySummary(peerGateway) : null,
+    createdAt: encounter.createdAt,
+    updatedAt: encounter.updatedAt,
   };
 }
 
@@ -279,6 +307,26 @@ function seaEventErrorToHttp(message: string) {
   return { statusCode: 400, code: 'validation_failed' };
 }
 
+function currentErrorToHttp(_message: string) {
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function encounterErrorToHttp(message: string) {
+  if (message === 'gateway not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'blocked relationship') {
+    return { statusCode: 403, code: 'blocked' };
+  }
+  if (message === 'encounter list is not visible to the current viewer') {
+    return { statusCode: 403, code: 'forbidden' };
+  }
+  if (message === 'invalid encounter cursor') {
+    return { statusCode: 400, code: 'invalid_cursor' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
 export function buildApp(options: BuildAppOptions = {}) {
   const store = options.store ?? createGatewayStore();
   const app = Fastify({ logger: true });
@@ -291,6 +339,119 @@ export function buildApp(options: BuildAppOptions = {}) {
       current: store.getCurrent(),
     },
   }));
+
+  app.post<{ Body: SetCurrentBody }>('/api/v1/currents', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const { key, label, summary, tone, sceneHint, startsAt, endsAt, metadata } = request.body ?? {};
+
+    if (typeof key !== 'string' || !key.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'key is required',
+        },
+      });
+    }
+    if (typeof label !== 'string' || !label.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'label is required',
+        },
+      });
+    }
+    if (typeof summary !== 'string' || !summary.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'summary is required',
+        },
+      });
+    }
+    if (typeof tone !== 'string' || !tone.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'tone is required',
+        },
+      });
+    }
+    if (sceneHint !== undefined && sceneHint !== null && typeof sceneHint !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'sceneHint must be a string or null when provided',
+        },
+      });
+    }
+    if (typeof startsAt !== 'string' || !startsAt.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'startsAt is required',
+        },
+      });
+    }
+    if (typeof endsAt !== 'string' || !endsAt.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'endsAt is required',
+        },
+      });
+    }
+    if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'metadata must be an object when provided',
+        },
+      });
+    }
+
+    try {
+      const current = store.setCurrent({
+        key: key.trim(),
+        label: label.trim(),
+        summary: summary.trim(),
+        tone: tone.trim() as 'calm' | 'playful' | 'reflective' | 'sharp' | 'neutral',
+        sceneHint: sceneHint ?? null,
+        startsAt: startsAt.trim(),
+        endsAt: endsAt.trim(),
+        metadata,
+        actorGatewayId: result.gateway.id,
+      });
+
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          current,
+        },
+      });
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to set current';
+      const mapped = currentErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
 
   app.post<{ Body: RegisterBody }>('/api/v1/gateways/register', async (request, reply) => {
     const { displayName, handle, bio, visibility } = request.body ?? {};
@@ -488,6 +649,110 @@ export function buildApp(options: BuildAppOptions = {}) {
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'failed to list gateway activity';
       const mapped = seaEventErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+
+  app.get<{ Querystring: GatewayActivityQuerystring }>('/api/v1/encounters', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+
+    try {
+      const encounters = store.listEncounters({
+        viewerGatewayId: result.gateway.id,
+        gatewayId: result.gateway.id,
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+      });
+
+      return {
+        ok: true,
+        data: {
+          gateway: toGatewaySummary(result.gateway),
+          items: encounters.items.map((encounter) => toEncounterSummary(store, encounter, result.gateway.id)),
+          nextCursor: encounters.nextCursor,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list encounters';
+      const mapped = encounterErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.get<{ Params: PresenceParams; Querystring: GatewayActivityQuerystring }>('/api/v1/gateways/:gatewayId/encounters', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+
+    const gateway = store.findById(request.params.gatewayId);
+    if (!gateway) {
+      return reply.code(404).send({
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: 'gateway not found',
+        },
+      });
+    }
+
+    try {
+      const encounters = store.listEncounters({
+        viewerGatewayId: result.gateway.id,
+        gatewayId: gateway.id,
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+      });
+
+      return {
+        ok: true,
+        data: {
+          gateway: toGatewaySummary(gateway),
+          items: encounters.items.map((encounter) => toEncounterSummary(store, encounter, gateway.id)),
+          nextCursor: encounters.nextCursor,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list encounters';
+      const mapped = encounterErrorToHttp(messageText);
       return reply.code(mapped.statusCode).send({
         ok: false,
         error: {

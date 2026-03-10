@@ -107,6 +107,7 @@ export interface AuditRecordPage {
 export type SeaEventVisibility = 'private' | 'friends' | 'public' | 'system';
 export type SeaEventTone = 'calm' | 'playful' | 'reflective' | 'sharp' | 'neutral';
 export type SeaFeedScope = 'all' | 'mine' | 'friends' | 'system';
+export type CurrentSource = 'seeded' | 'manual';
 
 export interface SeaEvent {
   id: string;
@@ -136,8 +137,26 @@ export interface CurrentRecord {
   sceneHint: string | null;
   startsAt: string;
   endsAt: string;
-  source: 'seeded';
+  source: CurrentSource;
   metadata: Record<string, unknown>;
+}
+
+export interface EncounterRecord {
+  id: string;
+  gatewayAId: string;
+  gatewayBId: string;
+  encounterCount: number;
+  lastEncounteredAt: string;
+  lastSummary: string;
+  recentTopics: string[];
+  notes: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EncounterPage {
+  items: EncounterRecord[];
+  nextCursor: string | null;
 }
 
 export type StoreBackend = 'memory' | 'postgres';
@@ -177,6 +196,8 @@ export interface GatewayStore {
   listSeaFeed(input: ListSeaFeedInput): SeaEventPage;
   listGatewayActivity(input: ListGatewayActivityInput): SeaEventPage;
   getCurrent(): CurrentRecord;
+  setCurrent(input: SetCurrentInput): CurrentRecord;
+  listEncounters(input: ListEncountersInput): EncounterPage;
 }
 
 interface RegisterInput {
@@ -255,7 +276,27 @@ interface ListGatewayActivityInput {
   limit?: number;
 }
 
+interface ListEncountersInput {
+  viewerGatewayId: string;
+  gatewayId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+interface SetCurrentInput {
+  key: string;
+  label: string;
+  summary: string;
+  tone: SeaEventTone;
+  sceneHint?: string | null;
+  startsAt: string;
+  endsAt: string;
+  metadata?: Record<string, unknown>;
+  actorGatewayId?: string | null;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
+const VALID_SEA_EVENT_TONES: SeaEventTone[] = ['calm', 'playful', 'reflective', 'sharp', 'neutral'];
 const ONLINE_THRESHOLD_MS = 90_000;
 const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
 const DEFAULT_AUDIT_PAGE_SIZE = 50;
@@ -318,6 +359,20 @@ function buildSeededCurrent(now = new Date()): CurrentRecord {
   };
 }
 
+function parseCurrentTimestamp(value: string, fieldName: 'startsAt' | 'endsAt') {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new Error(`current ${fieldName} is required`);
+  }
+
+  const parsed = Date.parse(normalized);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`current ${fieldName} must be a valid datetime`);
+  }
+
+  return new Date(parsed).toISOString();
+}
+
 export class InMemoryGatewayStore implements GatewayStore {
   private readonly gatewaysById = new Map<string, GatewayRecord>();
   private readonly gatewaysByHandle = new Map<string, GatewayRecord>();
@@ -334,7 +389,8 @@ export class InMemoryGatewayStore implements GatewayStore {
   private readonly lastSeenAtByGatewayId = new Map<string, string>();
   private readonly auditLog: AuditRecord[] = [];
   private readonly seaEvents: SeaEvent[] = [];
-  private current: CurrentRecord = buildSeededCurrent();
+  private readonly encountersByPairKey = new Map<string, EncounterRecord>();
+  private currentOverride: CurrentRecord | null = null;
 
   register(
     input: RegisterInput,
@@ -736,6 +792,15 @@ export class InMemoryGatewayStore implements GatewayStore {
       },
       createdAt: now,
     });
+    this.recordEncounter({
+      gatewayAId: request.fromGatewayId,
+      gatewayBId: request.toGatewayId,
+      actorGatewayId: actingGatewayId,
+      trigger: 'friend_request.accepted',
+      summary: `${this.gatewayLabel(request.fromGatewayId)} and ${this.gatewayLabel(request.toGatewayId)} formed a first encounter memory`,
+      topics: ['friendship'],
+      createdAt: now,
+    });
 
     return { request: updatedRequest, friendship, conversation };
   }
@@ -991,7 +1056,138 @@ export class InMemoryGatewayStore implements GatewayStore {
   }
 
   getCurrent(): CurrentRecord {
-    return this.current;
+    const override = this.currentOverride;
+    if (override) {
+      const now = Date.now();
+      const startsAt = Date.parse(override.startsAt);
+      const endsAt = Date.parse(override.endsAt);
+
+      if (Number.isFinite(startsAt) && Number.isFinite(endsAt)) {
+        if (now >= startsAt && now < endsAt) {
+          return override;
+        }
+        if (now >= endsAt) {
+          this.currentOverride = null;
+        }
+      }
+    }
+
+    return buildSeededCurrent();
+  }
+
+  setCurrent(input: SetCurrentInput): CurrentRecord {
+    const key = input.key.trim();
+    const label = input.label.trim();
+    const summary = input.summary.trim();
+    const sceneHint =
+      input.sceneHint === undefined || input.sceneHint === null ? null : input.sceneHint.trim() || null;
+
+    if (!key) {
+      throw new Error('current key is required');
+    }
+    if (!label) {
+      throw new Error('current label is required');
+    }
+    if (!summary) {
+      throw new Error('current summary is required');
+    }
+    if (!VALID_SEA_EVENT_TONES.includes(input.tone)) {
+      throw new Error('invalid current tone');
+    }
+
+    const startsAt = parseCurrentTimestamp(input.startsAt, 'startsAt');
+    const endsAt = parseCurrentTimestamp(input.endsAt, 'endsAt');
+    if (Date.parse(startsAt) >= Date.parse(endsAt)) {
+      throw new Error('current startsAt must be before endsAt');
+    }
+
+    const previousCurrent = this.getCurrent();
+    const current: CurrentRecord = {
+      id: `current-${randomUUID()}`,
+      key,
+      label,
+      summary,
+      tone: input.tone,
+      sceneHint,
+      startsAt,
+      endsAt,
+      source: 'manual',
+      metadata: input.metadata ?? {},
+    };
+
+    this.currentOverride = current;
+
+    const changedByGateway = input.actorGatewayId ? this.gatewaysById.get(input.actorGatewayId) ?? null : null;
+    this.appendSeaEvent({
+      type: 'current.changed',
+      actorGatewayId: null,
+      subjectGatewayId: null,
+      objectGatewayId: null,
+      visibility: 'system',
+      summary: `A new current took shape: ${current.label}`,
+      tone: current.tone,
+      sceneHint: current.sceneHint,
+      metadata: {
+        currentId: current.id,
+        currentKey: current.key,
+        currentLabel: current.label,
+        currentSummary: current.summary,
+        currentTone: current.tone,
+        currentSceneHint: current.sceneHint,
+        startsAt: current.startsAt,
+        endsAt: current.endsAt,
+        source: current.source,
+        currentMetadata: current.metadata,
+        changedByGatewayId: changedByGateway?.id ?? null,
+        changedByHandle: changedByGateway?.handle ?? null,
+        previousCurrentId: previousCurrent.id,
+        previousCurrentKey: previousCurrent.key,
+        previousCurrentSource: previousCurrent.source,
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    return current;
+  }
+
+  listEncounters(input: ListEncountersInput): EncounterPage {
+    if (!this.gatewaysById.has(input.gatewayId)) {
+      throw new Error('gateway not found');
+    }
+
+    const isSelf = input.viewerGatewayId === input.gatewayId;
+    if (!isSelf) {
+      if (this.isBlockedEitherWay(input.viewerGatewayId, input.gatewayId)) {
+        throw new Error('blocked relationship');
+      }
+      if (!this.areFriends(input.viewerGatewayId, input.gatewayId) || !this.hasGrantedFriendScope(input.gatewayId, input.viewerGatewayId, 'profile.read')) {
+        throw new Error('encounter list is not visible to the current viewer');
+      }
+    }
+
+    const visible = Array.from(this.encountersByPairKey.values())
+      .filter((encounter) => encounter.gatewayAId === input.gatewayId || encounter.gatewayBId === input.gatewayId)
+      .filter((encounter) => {
+        if (this.isBlockedEitherWay(encounter.gatewayAId, encounter.gatewayBId)) {
+          return false;
+        }
+        if (isSelf) {
+          return true;
+        }
+        return encounter.gatewayAId === input.viewerGatewayId || encounter.gatewayBId === input.viewerGatewayId;
+      })
+      .sort((a, b) => b.lastEncounteredAt.localeCompare(a.lastEncounteredAt));
+
+    const normalizedCursor = input.cursor?.trim();
+    const startIndex = normalizedCursor ? visible.findIndex((encounter) => encounter.id === normalizedCursor) + 1 : 0;
+    if (normalizedCursor && startIndex === 0) {
+      throw new Error('invalid encounter cursor');
+    }
+
+    const pageSize = Math.min(Math.max(input.limit ?? DEFAULT_SEA_PAGE_SIZE, 1), DEFAULT_SEA_PAGE_SIZE);
+    const items = visible.slice(startIndex, startIndex + pageSize);
+    const nextCursor = startIndex + items.length < visible.length && items.length > 0 ? items[items.length - 1]!.id : null;
+    return { items, nextCursor };
   }
 
   findConversationById(conversationId: string): ConversationRecord | null {
@@ -1062,6 +1258,15 @@ export class InMemoryGatewayStore implements GatewayStore {
       },
       createdAt: now,
     });
+    this.recordEncounter({
+      gatewayAId: input.senderGatewayId,
+      gatewayBId: peerGatewayId,
+      actorGatewayId: input.senderGatewayId,
+      trigger: 'message.sent',
+      summary: `${this.gatewayLabel(input.senderGatewayId)} and ${this.gatewayLabel(peerGatewayId)} exchanged a direct message`,
+      topics: this.extractEncounterTopics(message.body),
+      createdAt: now,
+    });
 
     return message;
   }
@@ -1116,6 +1321,108 @@ export class InMemoryGatewayStore implements GatewayStore {
     return conversation.memberGatewayIds[0] === gatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
   }
 
+  private recordEncounter(input: {
+    gatewayAId: string;
+    gatewayBId: string;
+    actorGatewayId?: string | null;
+    trigger: 'friend_request.accepted' | 'message.sent';
+    summary: string;
+    topics?: string[];
+    createdAt?: string;
+  }) {
+    const pair = this.normalizeEncounterPair(input.gatewayAId, input.gatewayBId);
+    const pairKey = this.encounterPairKey(pair[0], pair[1]);
+    const now = input.createdAt ?? new Date().toISOString();
+    const existing = this.encountersByPairKey.get(pairKey) ?? null;
+    const nextTopics = this.mergeEncounterTopics(input.topics ?? [], existing?.recentTopics ?? []);
+    const nextNotes = this.mergeEncounterNotes(input.summary, existing?.notes ?? []);
+
+    const encounter: EncounterRecord = existing
+      ? {
+          ...existing,
+          encounterCount: existing.encounterCount + 1,
+          lastEncounteredAt: now,
+          lastSummary: input.summary,
+          recentTopics: nextTopics,
+          notes: nextNotes,
+          updatedAt: now,
+        }
+      : {
+          id: `encounter-${randomUUID()}`,
+          gatewayAId: pair[0],
+          gatewayBId: pair[1],
+          encounterCount: 1,
+          lastEncounteredAt: now,
+          lastSummary: input.summary,
+          recentTopics: nextTopics,
+          notes: nextNotes,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+    this.encountersByPairKey.set(pairKey, encounter);
+
+    const type = existing ? 'encounter.updated' : 'encounter.recorded';
+    const tone: SeaEventTone = existing ? 'reflective' : 'playful';
+    const metadata = {
+      encounterId: encounter.id,
+      encounterCount: encounter.encounterCount,
+      gatewayAId: encounter.gatewayAId,
+      gatewayBId: encounter.gatewayBId,
+      pairKey,
+      trigger: input.trigger,
+      recentTopics: encounter.recentTopics,
+      notes: encounter.notes,
+      lastSummary: encounter.lastSummary,
+    };
+
+    for (const subjectGatewayId of pair) {
+      const objectGatewayId = subjectGatewayId === pair[0] ? pair[1] : pair[0];
+      this.appendSeaEvent({
+        type,
+        actorGatewayId: input.actorGatewayId ?? null,
+        subjectGatewayId,
+        objectGatewayId,
+        visibility: 'private',
+        summary: encounter.lastSummary,
+        tone,
+        sceneHint: 'encounter',
+        metadata,
+        createdAt: now,
+      });
+    }
+
+    return encounter;
+  }
+
+  private normalizeEncounterPair(gatewayAId: string, gatewayBId: string): [string, string] {
+    return [gatewayAId, gatewayBId].sort() as [string, string];
+  }
+
+  private encounterPairKey(gatewayAId: string, gatewayBId: string) {
+    const pair = this.normalizeEncounterPair(gatewayAId, gatewayBId);
+    return `${pair[0]}:${pair[1]}`;
+  }
+
+  private mergeEncounterTopics(nextTopics: string[], existingTopics: string[]) {
+    const merged = [...nextTopics, ...existingTopics]
+      .map((topic) => topic.trim().toLowerCase())
+      .filter((topic) => topic.length >= 2);
+    return [...new Set(merged)].slice(0, 5);
+  }
+
+  private mergeEncounterNotes(summary: string, existingNotes: string[]) {
+    const merged = [summary.trim(), ...existingNotes].filter((note) => note.length > 0);
+    return [...new Set(merged)].slice(0, 5);
+  }
+
+  private extractEncounterTopics(body: string) {
+    return body
+      .split(/[^\p{L}\p{N}]+/u)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3)
+      .slice(0, 3);
+  }
 
   private paginateSeaEvents(events: SeaEvent[], cursor?: string, limit?: number): SeaEventPage {
     const normalizedCursor = cursor?.trim();
@@ -1196,6 +1503,12 @@ export class InMemoryGatewayStore implements GatewayStore {
       id: randomUUID(),
       ...input,
     };
+  }
+
+  private appendSeaEvent(input: Omit<SeaEvent, 'id'>) {
+    const event = this.createSeaEvent(input);
+    this.seaEvents.push(event);
+    return event;
   }
 
   private mapAuditRecordToSeaEvents(record: AuditRecord): SeaEvent[] {
@@ -1596,7 +1909,8 @@ export class InMemoryGatewayStore implements GatewayStore {
     this.lastSeenAtByGatewayId.clear();
     this.auditLog.length = 0;
     this.seaEvents.length = 0;
-    this.current = buildSeededCurrent();
+    this.encountersByPairKey.clear();
+    this.currentOverride = null;
   }
 }
 

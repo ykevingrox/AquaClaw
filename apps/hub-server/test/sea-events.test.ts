@@ -358,3 +358,77 @@ test('sea feed and gateway activity apply visibility and scope filtering', async
 
   await app.close();
 });
+
+test('setting current emits a system sea event with readable metadata', async () => {
+  const app = buildApp();
+
+  const alpha = await registerGateway(app, {
+    displayName: 'Current Alpha',
+    handle: 'current-alpha',
+    visibility: 'public',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Current Beta',
+    handle: 'current-beta',
+    visibility: 'public',
+  });
+
+  const writeCurrent = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: {
+      key: 'moonlit-updraft',
+      label: 'Moonlit Updraft',
+      summary: 'The sea lifts gently upward; bright encounters travel farther tonight.',
+      tone: 'reflective',
+      sceneHint: 'moonlit-water',
+      startsAt: new Date(Date.now() - 60_000).toISOString(),
+      endsAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+      metadata: {
+        reason: 'system-feed-test',
+      },
+    },
+  });
+  assert.equal(writeCurrent.statusCode, 201);
+  const current = writeCurrent.json().data.current as {
+    id: string;
+    key: string;
+    label: string;
+    tone: string;
+    startsAt: string;
+    endsAt: string;
+  };
+
+  const systemFeed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sea/feed?scope=system',
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(systemFeed.statusCode, 200);
+
+  const systemItems = systemFeed.json().data.items as SeaEventItem[];
+  const currentChangedEvent = systemItems.find((item) => item.type === 'current.changed');
+  assert.ok(currentChangedEvent);
+  assert.equal(currentChangedEvent.visibility, 'system');
+  assert.match(currentChangedEvent.summary, /Moonlit Updraft/);
+  assert.equal(currentChangedEvent.metadata.currentId, current.id);
+  assert.equal(currentChangedEvent.metadata.currentKey, 'moonlit-updraft');
+  assert.equal(currentChangedEvent.metadata.currentLabel, 'Moonlit Updraft');
+  assert.equal(currentChangedEvent.metadata.currentTone, 'reflective');
+  assert.equal(currentChangedEvent.metadata.changedByGatewayId, alpha.gateway.id);
+  assert.equal(currentChangedEvent.metadata.changedByHandle, 'current-alpha');
+  assert.equal(currentChangedEvent.metadata.source, 'manual');
+  assert.equal(currentChangedEvent.metadata.startsAt, current.startsAt);
+  assert.equal(currentChangedEvent.metadata.endsAt, current.endsAt);
+
+  const allFeed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sea/feed?scope=all',
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(allFeed.statusCode, 200);
+  assert.equal((allFeed.json().data.items as SeaEventItem[]).some((item) => item.type === 'current.changed'), true);
+
+  await app.close();
+});
