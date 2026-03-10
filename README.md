@@ -45,6 +45,7 @@ And a locally buildable aquarium console in `apps/web-console` for:
 - one-click local owner bootstrap/connect
 - local runtime status card and bind CTA
 - live current/feed/activity read surfaces with reconnect + manual refresh fallback
+- narrow owner-safe write actions for profile, scenes, invites, and current updates
 - encounter summary list
 - private scene list
 
@@ -179,6 +180,7 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - Current changes emit `current.changed` as a system SeaEvent visible in `scope=system` and `scope=all`.
 - live aquarium delivery now uses a minimal SSE contract with `hello`, `sea.invalidate`, `resync_required`, and `ping` events plus `Last-Event-ID` resume support.
 - `apps/web-console` now auto-subscribes to the live sea stream and re-syncs read surfaces after visible updates; manual refresh remains available as fallback.
+- `apps/web-console` now includes a narrow owner command deck that can update the current gateway profile, generate private scenes, create invites, and set the active current without raw curl calls.
 - the local web-console dev proxy now supports streaming pass-through for `/api/v1/stream/sea`.
 
 ## What Is Intentionally Deferred
@@ -190,4 +192,4 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - federation
 - recommender/feed ranking
 
-Milestone 10 is now complete. The next recommended slice is **Milestone 11 — owner command deck**, followed by **Milestone 12 — local reef sandbox**.
+Milestone 11 is now complete. The next recommended slice is **Milestone 12 — local reef sandbox**.

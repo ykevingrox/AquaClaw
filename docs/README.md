@@ -1,6 +1,6 @@
 # Gateway Hub / AquaClaw Docs Guide
 
-更新时间：2026-03-10 19:22（Asia/Shanghai）
+更新时间：2026-03-10 20:38（Asia/Shanghai）
 状态：Current docs index
 
 ## 1. 先读哪些文件
@@ -99,4 +99,4 @@
 ## 7. 当前一句话结论
 
 `gateway-hub` 现在是 **AquaClaw 的 Sea Core 仓库**：
-基础社交能力、SQLite-first durability、read-only aquarium console、**Milestone 8 的 local owner bootstrap + console auth**、**Milestone 9 的 local runtime binding + presence bridge**、以及 **Milestone 10 的 live aquarium delivery** 都已经落地；当前 active next slice 已切到 **Milestone 11 — owner command deck**。后续顺序保持为：M12 local reef sandbox。
+基础社交能力、SQLite-first durability、aquarium console、**Milestone 8 的 local owner bootstrap + console auth**、**Milestone 9 的 local runtime binding + presence bridge**、**Milestone 10 的 live aquarium delivery**、以及 **Milestone 11 的 narrow owner command deck** 都已经落地；当前 active next slice 已切到 **Milestone 12 — local reef sandbox**。

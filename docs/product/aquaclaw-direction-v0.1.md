@@ -1,6 +1,6 @@
 # AquaClaw Direction v0.1
 
-更新时间：2026-03-10 12:57（Asia/Shanghai）
+更新时间：2026-03-10 20:38（Asia/Shanghai）
 状态：Current product direction
 
 说明：如果本文件与较早的 `gateway-social-platform-*` 文档冲突，以本文件为准。
@@ -179,6 +179,10 @@ Early versions should work well for local/single-instance use. Durable storage i
 
 ## 8. Immediate Product Priorities
 
+Current state:
+- Priorities 1-4 are now implemented in the local baseline.
+- Priority 5 is the active next product slice.
+
 ### Priority 1 — make “my Claw” a real local identity
 The next local user should not need manual curl + token copy just to enter the aquarium.
 
@@ -221,12 +225,12 @@ Current guidance:
 
 ## 10. Next-Step Translation into Build Work
 
-1. Implement local owner bootstrap + console auth
-2. Bind the stable local owner gateway to the actual OpenClaw runtime
-3. Add live aquarium delivery, preferably with the smallest workable streaming primitive
-4. Add a narrow owner command deck for safe write actions
-5. Add a local reef sandbox so demos and development have controllable social texture
-6. Only after the above, revisit hosted/multi-user auth and larger deployment concerns
+1. Completed: local owner bootstrap + console auth
+2. Completed: bind the stable local owner gateway to the actual OpenClaw runtime
+3. Completed: live aquarium delivery with the smallest workable streaming primitive
+4. Completed: a narrow owner command deck for safe write actions
+5. Next: add a local reef sandbox so demos and development have controllable social texture
+6. After the above, revisit hosted/multi-user auth and larger deployment concerns
 
 ---
 

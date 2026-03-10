@@ -13,9 +13,17 @@ const elements = {
   apiOrigin: document.querySelector('#api-origin'),
   clearButton: document.querySelector('#clear-button'),
   connectButton: document.querySelector('#connect-button'),
+  commandStatus: document.querySelector('#command-status'),
   consoleForm: document.querySelector('#console-form'),
   consoleStatus: document.querySelector('#console-status'),
+  currentDurationMinutes: document.querySelector('#current-duration-minutes'),
+  currentKey: document.querySelector('#current-key'),
+  currentLabel: document.querySelector('#current-label'),
   currentPanel: document.querySelector('#current-panel'),
+  currentSceneHint: document.querySelector('#current-scene-hint'),
+  currentSetButton: document.querySelector('#current-set-button'),
+  currentSummary: document.querySelector('#current-summary'),
+  currentTone: document.querySelector('#current-tone'),
   encounterPanel: document.querySelector('#encounter-panel'),
   feedNote: document.querySelector('#feed-note'),
   feedPanel: document.querySelector('#feed-panel'),
@@ -23,10 +31,24 @@ const elements = {
   heroCurrent: document.querySelector('#hero-current'),
   heroHandle: document.querySelector('#hero-handle'),
   heroSync: document.querySelector('#hero-sync'),
+  inviteCreateButton: document.querySelector('#invite-create-button'),
+  inviteExpiresHours: document.querySelector('#invite-expires-hours'),
+  inviteMaxUses: document.querySelector('#invite-max-uses'),
+  inviteResult: document.querySelector('#invite-result'),
+  inviteCommandForm: document.querySelector('#invite-command-form'),
   profilePanel: document.querySelector('#profile-panel'),
+  profileBio: document.querySelector('#profile-bio'),
+  profileCommandForm: document.querySelector('#profile-command-form'),
+  profileDisplayName: document.querySelector('#profile-display-name'),
+  profileSaveButton: document.querySelector('#profile-save-button'),
+  profileVisibility: document.querySelector('#profile-visibility'),
   refreshButton: document.querySelector('#refresh-button'),
   runtimePanel: document.querySelector('#runtime-panel'),
   scenePanel: document.querySelector('#scene-panel'),
+  sceneCommandForm: document.querySelector('#scene-command-form'),
+  sceneGenerateButton: document.querySelector('#scene-generate-button'),
+  sceneType: document.querySelector('#scene-type'),
+  currentCommandForm: document.querySelector('#current-command-form'),
   token: document.querySelector('#bearer-token'),
 };
 
@@ -44,6 +66,17 @@ const liveState = {
   reconnectAttempts: 0,
   reconnectTimer: null,
   shouldReconnect: false,
+};
+
+const commandControls = Array.from(document.querySelectorAll('.command-form input, .command-form textarea, .command-form select, .command-form button'));
+
+const commandState = {
+  busy: false,
+  currentDirty: false,
+  currentId: null,
+  enabled: false,
+  gatewayId: null,
+  profileDirty: false,
 };
 
 let isLoading = false;
@@ -79,12 +112,35 @@ function setStatus(message, tone = 'neutral') {
   elements.consoleStatus.dataset.tone = tone;
 }
 
+function setCommandStatus(message, tone = 'neutral') {
+  elements.commandStatus.textContent = message;
+  elements.commandStatus.dataset.tone = tone;
+}
+
+function setDeckAndConsoleStatus(message, tone = 'neutral') {
+  setStatus(message, tone);
+  setCommandStatus(message, tone);
+}
+
+function syncCommandDeckInteractivity() {
+  const disabled = !commandState.enabled || commandState.busy || isLoading;
+  for (const control of commandControls) {
+    control.disabled = disabled;
+  }
+}
+
+function setCommandDeckEnabled(enabled) {
+  commandState.enabled = enabled;
+  syncCommandDeckInteractivity();
+}
+
 function setLoadingState(loading) {
   isLoading = loading;
   elements.connectButton.disabled = loading;
   elements.refreshButton.disabled = loading;
   elements.clearButton.disabled = loading;
   elements.connectButton.textContent = loading ? 'Reading…' : 'Enter Aquarium';
+  syncCommandDeckInteractivity();
 }
 
 function saveSettings() {
@@ -230,6 +286,105 @@ function formatWhen(value) {
     return 'Unknown time';
   }
   return `${dateTime.format(new Date(parsed))} · ${formatRelativeTime(value)}`;
+}
+
+function renderInviteResult(invite) {
+  if (!invite) {
+    elements.inviteResult.className = 'command-result empty-state';
+    elements.inviteResult.innerHTML = 'Your latest invite code appears here after creation.';
+    return;
+  }
+
+  const maxUsesLabel = invite.maxUses === null ? 'unlimited' : `${invite.useCount}/${invite.maxUses}`;
+  elements.inviteResult.className = 'command-result';
+  elements.inviteResult.innerHTML = `
+    <div class="command-result-card">
+      <div class="item-row">
+        <div>
+          <p class="command-eyebrow">Latest Invite</p>
+          <h4>${escapeHtml(invite.code)}</h4>
+        </div>
+        <span class="type-pill">invite</span>
+      </div>
+      <p class="item-meta">Created ${escapeHtml(formatWhen(invite.createdAt))}</p>
+      <div class="meta-pill-row">
+        <span class="meta-pill">uses: ${escapeHtml(maxUsesLabel)}</span>
+        <span class="meta-pill">expires: ${escapeHtml(invite.expiresAt ? formatWhen(invite.expiresAt) : 'never')}</span>
+      </div>
+    </div>
+  `;
+}
+
+function resetCommandDeck() {
+  commandState.busy = false;
+  commandState.currentDirty = false;
+  commandState.currentId = null;
+  commandState.gatewayId = null;
+  commandState.profileDirty = false;
+  elements.profileDisplayName.value = '';
+  elements.profileBio.value = '';
+  elements.profileVisibility.value = 'invite_only';
+  elements.sceneType.value = 'vent';
+  elements.inviteMaxUses.value = '';
+  elements.inviteExpiresHours.value = '';
+  elements.currentKey.value = '';
+  elements.currentLabel.value = '';
+  elements.currentSummary.value = '';
+  elements.currentTone.value = 'calm';
+  elements.currentSceneHint.value = '';
+  elements.currentDurationMinutes.value = '360';
+  renderInviteResult(null);
+  setCommandStatus('Enter the aquarium to unlock the command deck.', 'neutral');
+  syncCommandDeckInteractivity();
+}
+
+function hydrateProfileForm(gateway, { force = false } = {}) {
+  const gatewayChanged = commandState.gatewayId !== gateway.id;
+  if (gatewayChanged) {
+    commandState.gatewayId = gateway.id;
+    commandState.profileDirty = false;
+    renderInviteResult(null);
+  }
+
+  if (!force && commandState.profileDirty) {
+    return;
+  }
+
+  elements.profileDisplayName.value = gateway.displayName;
+  elements.profileBio.value = gateway.bio ?? '';
+  elements.profileVisibility.value = gateway.visibility;
+  commandState.profileDirty = false;
+}
+
+function currentDurationMinutes(current) {
+  const startsAt = Date.parse(current.startsAt);
+  const endsAt = Date.parse(current.endsAt);
+  if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt) || endsAt <= startsAt) {
+    return 360;
+  }
+
+  const minutes = Math.round((endsAt - startsAt) / 60_000);
+  return String(Math.min(Math.max(minutes, 15), 1_440));
+}
+
+function hydrateCurrentForm(current, { force = false } = {}) {
+  const currentChanged = commandState.currentId !== current.id;
+  if (currentChanged) {
+    commandState.currentId = current.id;
+    commandState.currentDirty = false;
+  }
+
+  if (!force && commandState.currentDirty) {
+    return;
+  }
+
+  elements.currentKey.value = current.key;
+  elements.currentLabel.value = current.label;
+  elements.currentSummary.value = current.summary;
+  elements.currentTone.value = current.tone;
+  elements.currentSceneHint.value = current.sceneHint ?? '';
+  elements.currentDurationMinutes.value = currentDurationMinutes(current);
+  commandState.currentDirty = false;
 }
 
 function renderEmpty(element, message) {
@@ -474,6 +629,8 @@ function stopLiveStream({ preserveCursor = true } = {}) {
 }
 
 function resetAquariumSurface() {
+  setCommandDeckEnabled(false);
+  resetCommandDeck();
   renderEmpty(elements.profilePanel, 'Your gateway summary appears here after local session or token auth succeeds.');
   renderEmpty(elements.currentPanel, 'The current card will appear here after the first sync.');
   renderEmpty(elements.runtimePanel, 'Your local runtime summary will appear here after the first successful sync.');
@@ -529,9 +686,11 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
   const syncedAt = new Date().toISOString();
   aquariumState.lastSyncedAt = syncedAt;
   renderProfile(gateway, syncedAt);
+  hydrateProfileForm(gateway);
 
   if (currentResult.status === 'fulfilled') {
     renderCurrent(currentResult.value.data.current);
+    hydrateCurrentForm(currentResult.value.data.current);
   } else {
     renderError(elements.currentPanel, currentResult.reason.message);
   }
@@ -575,6 +734,8 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     } else {
       renderRuntimeUnavailable('Local runtime summary is available only when connected through the local owner session path.');
     }
+  } else if (authMode !== 'local_session') {
+    renderRuntimeUnavailable('Local runtime summary is available only when connected through the local owner session path.');
   }
 }
 
@@ -776,6 +937,57 @@ function startLiveStream() {
   void connectLiveStream();
 }
 
+function getActiveCommandContext() {
+  const token = aquariumState.token || elements.token.value.trim();
+  const gateway = aquariumState.gateway;
+  const apiOrigin = aquariumState.apiOrigin || normalizeOrigin(elements.apiOrigin.value);
+
+  if (!token || !gateway) {
+    throw new Error('Enter Aquarium before using the command deck.');
+  }
+
+  return {
+    apiOrigin,
+    gateway,
+    token,
+  };
+}
+
+async function runDeckCommand(button, pendingLabel, execute) {
+  if (commandState.busy) {
+    return null;
+  }
+
+  const originalLabel = button.textContent;
+  commandState.busy = true;
+  button.textContent = pendingLabel;
+  syncCommandDeckInteractivity();
+
+  try {
+    const result = await execute(getActiveCommandContext());
+
+    try {
+      await refreshReadSurfaces({
+        includeRuntime: authMode === 'local_session',
+      });
+      setDeckAndConsoleStatus(result.successMessage, 'success');
+    } catch (refreshError) {
+      const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Failed to refresh read surfaces.';
+      setDeckAndConsoleStatus(`${result.successMessage} Read surfaces need a manual refresh: ${refreshMessage}`, 'warning');
+    }
+
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Command failed.';
+    setDeckAndConsoleStatus(message, 'error');
+    return null;
+  } finally {
+    button.textContent = originalLabel;
+    commandState.busy = false;
+    syncCommandDeckInteractivity();
+  }
+}
+
 async function loadAquarium() {
   if (isLoading) {
     return;
@@ -804,15 +1016,16 @@ async function loadAquarium() {
       includeRuntime: authMode === 'local_session',
     });
 
+    setCommandDeckEnabled(true);
     startLiveStream();
 
     if (auth.bootstrapped) {
-      setStatus(
+      setDeckAndConsoleStatus(
         auth.createdOwner ? `Bootstrapped @${identity.gateway.handle} and opened the aquarium.` : `Reconnected @${identity.gateway.handle} to the aquarium.`,
         'success',
       );
     } else {
-      setStatus(
+      setDeckAndConsoleStatus(
         authMode === 'local_session'
           ? `Aquarium synced for @${identity.gateway.handle} via local session.`
           : `Aquarium synced for @${identity.gateway.handle} via bearer token.`,
@@ -879,6 +1092,169 @@ elements.consoleForm.addEventListener('submit', (event) => {
 
 elements.refreshButton.addEventListener('click', () => {
   void loadAquarium();
+});
+
+elements.profileDisplayName.addEventListener('input', () => {
+  commandState.profileDirty = true;
+});
+
+elements.profileBio.addEventListener('input', () => {
+  commandState.profileDirty = true;
+});
+
+elements.profileVisibility.addEventListener('change', () => {
+  commandState.profileDirty = true;
+});
+
+elements.currentKey.addEventListener('input', () => {
+  commandState.currentDirty = true;
+});
+
+elements.currentLabel.addEventListener('input', () => {
+  commandState.currentDirty = true;
+});
+
+elements.currentSummary.addEventListener('input', () => {
+  commandState.currentDirty = true;
+});
+
+elements.currentTone.addEventListener('change', () => {
+  commandState.currentDirty = true;
+});
+
+elements.currentSceneHint.addEventListener('input', () => {
+  commandState.currentDirty = true;
+});
+
+elements.currentDurationMinutes.addEventListener('input', () => {
+  commandState.currentDirty = true;
+});
+
+elements.profileCommandForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void runDeckCommand(elements.profileSaveButton, 'Saving…', async ({ apiOrigin, token }) => {
+    const displayName = elements.profileDisplayName.value.trim();
+    if (!displayName) {
+      throw new Error('Display name is required.');
+    }
+
+    const payload = await requestJson('/api/v1/gateways/me', {
+      apiOrigin,
+      token,
+      method: 'PATCH',
+      payload: {
+        displayName,
+        bio: elements.profileBio.value.trim(),
+        visibility: elements.profileVisibility.value,
+      },
+    });
+
+    aquariumState.gateway = payload.data.gateway;
+    hydrateProfileForm(payload.data.gateway, { force: true });
+
+    return {
+      successMessage: `Updated @${payload.data.gateway.handle}'s profile.`,
+    };
+  });
+});
+
+elements.sceneCommandForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void runDeckCommand(elements.sceneGenerateButton, 'Generating…', async ({ apiOrigin, token }) => {
+    const payload = await requestJson('/api/v1/scenes/generate', {
+      apiOrigin,
+      token,
+      method: 'POST',
+      payload: {
+        type: elements.sceneType.value,
+      },
+    });
+
+    return {
+      successMessage: `Generated a ${payload.data.scene.type.replaceAll('_', ' ')} scene.`,
+    };
+  });
+});
+
+elements.inviteCommandForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void runDeckCommand(elements.inviteCreateButton, 'Minting…', async ({ apiOrigin, token }) => {
+    const maxUsesValue = elements.inviteMaxUses.value.trim();
+    const expiresHoursValue = elements.inviteExpiresHours.value.trim();
+    const maxUses =
+      maxUsesValue === ''
+        ? null
+        : Number.isInteger(Number(maxUsesValue)) && Number(maxUsesValue) > 0
+          ? Number(maxUsesValue)
+          : (() => {
+              throw new Error('Max uses must be a positive integer.');
+            })();
+    const expiresAt = expiresHoursValue ? new Date(Date.now() + Number(expiresHoursValue) * 60 * 60 * 1000).toISOString() : null;
+
+    const payload = await requestJson('/api/v1/invites', {
+      apiOrigin,
+      token,
+      method: 'POST',
+      payload: {
+        maxUses,
+        expiresAt,
+      },
+    });
+
+    renderInviteResult(payload.data.invite);
+    elements.inviteMaxUses.value = '';
+    elements.inviteExpiresHours.value = '';
+
+    return {
+      successMessage: `Created invite ${payload.data.invite.code}.`,
+    };
+  });
+});
+
+elements.currentCommandForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void runDeckCommand(elements.currentSetButton, 'Shifting…', async ({ apiOrigin, token }) => {
+    const key = elements.currentKey.value.trim();
+    const label = elements.currentLabel.value.trim();
+    const summary = elements.currentSummary.value.trim();
+    const durationMinutes = Number.parseInt(elements.currentDurationMinutes.value.trim(), 10);
+
+    if (!key) {
+      throw new Error('Current key is required.');
+    }
+    if (!label) {
+      throw new Error('Current label is required.');
+    }
+    if (!summary) {
+      throw new Error('Current summary is required.');
+    }
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 15 || durationMinutes > 1_440) {
+      throw new Error('Duration must be between 15 and 1440 minutes.');
+    }
+
+    const startsAt = new Date().toISOString();
+    const endsAt = new Date(Date.now() + durationMinutes * 60_000).toISOString();
+    const payload = await requestJson('/api/v1/currents', {
+      apiOrigin,
+      token,
+      method: 'POST',
+      payload: {
+        key,
+        label,
+        summary,
+        tone: elements.currentTone.value,
+        sceneHint: elements.currentSceneHint.value.trim() || null,
+        startsAt,
+        endsAt,
+      },
+    });
+
+    hydrateCurrentForm(payload.data.current, { force: true });
+
+    return {
+      successMessage: `Set current to ${payload.data.current.label}.`,
+    };
+  });
 });
 
 elements.feedScope.addEventListener('change', () => {

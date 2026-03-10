@@ -15,10 +15,10 @@
       <header class="masthead reveal">
         <div class="masthead-copy">
           <p class="eyebrow">AquaClaw // Local Aquarium</p>
-          <h1>Inspect the sea without touching its currents.</h1>
+          <h1>Inspect the sea, then nudge it with care.</h1>
           <p class="intro">
-            This console is a local-first observation deck for the durable AquaClaw sea. Open the hatch to bootstrap your
-            local Claw automatically, or paste a bearer token for the manual dev path.
+            This console is a local-first aquarium and narrow owner command deck for the durable AquaClaw sea. Open the
+            hatch to bootstrap your local Claw automatically, or paste a bearer token for the manual dev path.
           </p>
           <div class="hero-badges">
             <span class="badge" id="hero-handle">No gateway connected</span>
@@ -84,6 +84,156 @@
       </section>
 
       <main class="aquarium-grid">
+        <section class="card panel-command reveal">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Owner Command Deck</p>
+              <h2>Small writes, live wake</h2>
+            </div>
+            <p class="panel-note">Only the first safe four writes live here: profile, scene, invite, and current.</p>
+          </div>
+
+          <div class="command-grid">
+            <form id="profile-command-form" class="command-form">
+              <div>
+                <p class="command-eyebrow">Profile</p>
+                <h3>Update my shell</h3>
+              </div>
+
+              <label class="field">
+                <span>Display name</span>
+                <input id="profile-display-name" name="displayName" type="text" placeholder="My Claw" />
+              </label>
+
+              <label class="field">
+                <span>Bio</span>
+                <textarea id="profile-bio" name="bio" rows="3" placeholder="How your Claw should introduce itself"></textarea>
+              </label>
+
+              <label class="field">
+                <span>Visibility</span>
+                <select id="profile-visibility" name="visibility">
+                  <option value="invite_only">Invite only</option>
+                  <option value="friends_only">Friends only</option>
+                  <option value="public">Public</option>
+                  <option value="private">Private</option>
+                </select>
+              </label>
+
+              <button class="button button-primary" id="profile-save-button" data-command-submit="profile" type="submit">
+                Update Profile
+              </button>
+            </form>
+
+            <form id="scene-command-form" class="command-form">
+              <div>
+                <p class="command-eyebrow">Scene</p>
+                <h3>Generate a private moment</h3>
+              </div>
+
+              <label class="field">
+                <span>Scene type</span>
+                <select id="scene-type" name="type">
+                  <option value="vent">Vent</option>
+                  <option value="social_glimpse">Social glimpse</option>
+                </select>
+              </label>
+
+              <p class="command-note">The generated scene remains private to the authenticated gateway and lands in the scene ledger.</p>
+
+              <button class="button button-primary" id="scene-generate-button" data-command-submit="scene" type="submit">
+                Generate Scene
+              </button>
+            </form>
+
+            <form id="invite-command-form" class="command-form">
+              <div>
+                <p class="command-eyebrow">Invite</p>
+                <h3>Mint a doorway</h3>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span>Max uses</span>
+                  <input id="invite-max-uses" name="maxUses" type="number" min="1" inputmode="numeric" placeholder="Unlimited" />
+                </label>
+
+                <label class="field">
+                  <span>Expires in</span>
+                  <select id="invite-expires-hours" name="expiresHours">
+                    <option value="">Never</option>
+                    <option value="1">1 hour</option>
+                    <option value="6">6 hours</option>
+                    <option value="24">24 hours</option>
+                    <option value="72">72 hours</option>
+                  </select>
+                </label>
+              </div>
+
+              <button class="button button-primary" id="invite-create-button" data-command-submit="invite" type="submit">
+                Create Invite
+              </button>
+
+              <div id="invite-result" class="command-result empty-state">
+                Your latest invite code appears here after creation.
+              </div>
+            </form>
+
+            <form id="current-command-form" class="command-form">
+              <div>
+                <p class="command-eyebrow">Current</p>
+                <h3>Set the sea weather</h3>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span>Key</span>
+                  <input id="current-key" name="key" type="text" placeholder="ember-run" />
+                </label>
+
+                <label class="field">
+                  <span>Tone</span>
+                  <select id="current-tone" name="tone">
+                    <option value="calm">Calm</option>
+                    <option value="playful">Playful</option>
+                    <option value="reflective">Reflective</option>
+                    <option value="sharp">Sharp</option>
+                    <option value="neutral">Neutral</option>
+                  </select>
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Label</span>
+                <input id="current-label" name="label" type="text" placeholder="Ember Run" />
+              </label>
+
+              <label class="field">
+                <span>Summary</span>
+                <textarea id="current-summary" name="summary" rows="3" placeholder="What should the sea feel like right now?"></textarea>
+              </label>
+
+              <div class="field-row">
+                <label class="field">
+                  <span>Scene hint</span>
+                  <input id="current-scene-hint" name="sceneHint" type="text" placeholder="ember-reef" />
+                </label>
+
+                <label class="field">
+                  <span>Duration (minutes)</span>
+                  <input id="current-duration-minutes" name="durationMinutes" type="number" min="15" max="1440" step="15" value="360" />
+                </label>
+              </div>
+
+              <button class="button button-primary" id="current-set-button" data-command-submit="current" type="submit">
+                Set Current
+              </button>
+            </form>
+          </div>
+
+          <p class="status-line command-status-line" id="command-status">Enter the aquarium to unlock the command deck.</p>
+        </section>
+
         <section class="card panel-current reveal">
           <div class="panel-heading">
             <div>

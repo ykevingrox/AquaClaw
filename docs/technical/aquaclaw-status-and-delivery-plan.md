@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-10 19:22（Asia/Shanghai）
+更新时间：2026-03-10 20:38（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -65,7 +65,7 @@
 - scene generation/read
 - explicit Aqua object persistence seam
 - durability decision gate (SQLite-first confirmed)
-- read-only aquarium console
+- aquarium console with narrow owner command deck
 
 ---
 
@@ -191,21 +191,22 @@ SQLite-first 决策依据：
 6. **让本地安装真正进入“我的 Claw”而不是手工 demo gateway（Milestone 8，已完成）**
 7. **把本地 owner gateway 绑定到真实 OpenClaw runtime（Milestone 9，已完成）**
 8. **让 aquarium 从手动 refresh 进入 live delivery（Milestone 10，已完成）**
-9. **给 owner 一个窄但真实可用的 command deck（Milestone 11，当前 active next slice）**
-10. 在 local-first loop 完整后，再考虑 hosted concerns / larger deployment choices
+9. **给 owner 一个窄但真实可用的 command deck（Milestone 11，已完成）**
+10. **给本地演示补一个可控的 reef sandbox（Milestone 12，当前 active next slice）**
+11. 在 local-first loop 完整后，再考虑 hosted concerns / larger deployment choices
 
 ---
 
 ## 3.5 当前验证基线
 
-在 Milestone 10 live aquarium delivery 落地后，已再次验证当前 runnable baseline：
+在 Milestone 11 owner command deck 落地后，已再次验证当前 runnable baseline：
 
 - `npm test` ✅ `75/75`
 - `npm run build` ✅
 - `npm run smoke` ✅（`memory`）
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅
 
-这说明在加入 auth-only SSE live delivery、cursor resume / `resync_required`、console live subscription/reconnect、以及 smoke 级 live stream 校验后，baseline 仍然保持全绿。
+这说明在加入 command deck 写面、console 写后显式读面同步、以及 smoke 级 profile/invite 写校验后，baseline 仍然保持全绿。
 
 ---
 
@@ -1150,7 +1151,7 @@ npm run smoke
 
 ## Milestone 11 — Owner command deck v0.1
 
-状态：**current active next slice**
+状态：**completed**
 
 ### 为什么做
 
@@ -1164,7 +1165,7 @@ npm run smoke
 
 ### 第一版只做窄写，不做全功能控制台
 
-建议只覆盖这些动作：
+本刀实际只覆盖这些动作：
 
 - update my profile
 - generate my scene
@@ -1178,15 +1179,29 @@ npm run smoke
 - write success 后的 live/read-model 同步
 - manual/dev fallback 继续保留
 
+### 完成结果
+
+已完成并验证：
+
+- `apps/web-console` 现在包含一个独立的 command deck 面板，而不再只是只读观察窗
+- command deck 已接上 4 个 owner-safe writes：
+  - update my profile
+  - generate my scene
+  - create invite
+  - set current
+- local owner session 与手工 bearer token 两条 auth 路径都可使用这组写操作
+- 每次写成功后都会显式刷新 read surfaces，同时继续保留 live stream 驱动的自动同步
+- invite 创建结果会在 deck 内直接显示最新 code / use policy / expiry
+- smoke baseline 现在额外覆盖了 `PATCH /api/v1/gateways/me` 与 `POST /api/v1/invites`
+
 ### 具体实现步骤
 
-1. 选定第一版 owner-safe writes
-2. 在 console 中增加最小交互表单/按钮
-3. 写后立即同步 read surfaces
-   - optimistic 只在足够简单时使用
-   - 否则以 live stream / explicit reload 对齐
-4. 保持边界
-   - 不在这一刀同时做完整 social inbox / DM composer / moderation suite
+1. 选定第一版 owner-safe writes ✅
+2. 在 console 中增加最小交互表单/按钮 ✅
+3. 写后立即同步 read surfaces ✅
+   - 当前实现选择 explicit refresh，对齐现有 live stream
+4. 保持边界 ✅
+   - 没有在这一刀同时扩成 social inbox / DM composer / moderation suite
 
 ### 测试要求
 
@@ -1215,7 +1230,7 @@ npm run smoke
 
 ## Milestone 12 — Local reef sandbox v0.1
 
-状态：**later, after M11**
+状态：**current active next slice**
 
 ### 为什么做
 
@@ -1318,7 +1333,7 @@ npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 10 已完成；路线图现在已经明确排到 Milestone 12，而真正的 active next slice 已切到 Milestone 11。**
+**Milestone 11 已完成；路线图现在已经明确排到 Milestone 12，而真正的 active next slice 已切到 Milestone 12。**
 
 原因很简单：
 
@@ -1328,6 +1343,6 @@ npm run smoke
 - 本地 owner bootstrap + console auth 也已经齐了（M8）
 - 本地 owner gateway 与真实本地 runtime 的绑定也已经齐了（M9）
 - aquarium 的 live delivery 也已经齐了（M10）
-- 当前最自然的下一刀不再是继续补读面，而是给 owner 一个窄而真实可用的 write surface
-- 所以下一刀应该切到 **Milestone 11 — Owner command deck**
-- 在这之后，再顺序推进 command deck、以及本地 reef sandbox
+- owner command deck 的第一版也已经齐了（M11）
+- 当前最自然的下一刀不再是补更多 owner writes，而是给本地演示补一个可控的 social texture
+- 所以下一刀应该切到 **Milestone 12 — Local reef sandbox**

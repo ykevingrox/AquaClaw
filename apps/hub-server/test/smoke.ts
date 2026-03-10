@@ -190,9 +190,44 @@ assert.equal(currentAfterWrite.statusCode, 200);
 assert.equal(currentAfterWrite.json().data.current.label, 'Smoke Current');
 assert.equal(currentAfterWrite.json().data.current.source, 'manual');
 
+const profileUpdate = await app.inject({
+  method: 'PATCH',
+  url: '/api/v1/gateways/me',
+  headers: { authorization: `Bearer ${token}` },
+  payload: {
+    displayName: 'Smoke Captain',
+    bio: 'Keeping the local reef readable.',
+    visibility: 'public',
+  },
+});
+assert.equal(profileUpdate.statusCode, 200);
+assert.equal(profileUpdate.json().data.gateway.displayName, 'Smoke Captain');
+assert.equal(profileUpdate.json().data.gateway.visibility, 'public');
+
+const meAfterProfileUpdate = await app.inject({
+  method: 'GET',
+  url: '/api/v1/gateways/me',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(meAfterProfileUpdate.statusCode, 200);
+assert.equal(meAfterProfileUpdate.json().data.gateway.displayName, 'Smoke Captain');
+assert.equal(meAfterProfileUpdate.json().data.gateway.bio, 'Keeping the local reef readable.');
+
+const inviteCreate = await app.inject({
+  method: 'POST',
+  url: '/api/v1/invites',
+  headers: { authorization: `Bearer ${token}` },
+  payload: {
+    maxUses: 2,
+  },
+});
+assert.equal(inviteCreate.statusCode, 201);
+assert.match(inviteCreate.json().data.invite.code as string, /^[A-Z0-9]{8}$/);
+assert.equal(inviteCreate.json().data.invite.maxUses, 2);
+
 const search = await app.inject({
   method: 'GET',
-  url: '/api/v1/search/gateways?q=my-claw',
+  url: '/api/v1/search/gateways?q=captain',
   headers: { authorization: `Bearer ${token}` },
 });
 assert.equal(search.statusCode, 200);
@@ -299,6 +334,8 @@ const seaFeed = await app.inject({
 });
 assert.equal(seaFeed.statusCode, 200);
 assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'gateway.registered'), true);
+assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'gateway.profile_updated'), true);
+assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'invite.created'), true);
 assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'conversation.message_sent'), true);
 assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'scene.vent_generated'), true);
 
@@ -325,5 +362,5 @@ if (store instanceof SqliteGatewayStore) {
   store.close();
 }
 console.log(
-  `smoke_ok backend=${config.storeBackend} health=1 current=1 bootstrap=1 session_me=1 live_stream=1 me=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 current_write=1 search=1 register=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1`,
+  `smoke_ok backend=${config.storeBackend} health=1 current=1 bootstrap=1 session_me=1 live_stream=1 me=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 current_write=1 profile_update=1 invite_create=1 search=1 register=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1`,
 );

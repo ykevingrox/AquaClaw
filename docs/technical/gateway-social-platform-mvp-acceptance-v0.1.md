@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-10 19:22（Asia/Shanghai）
+更新时间：2026-03-10 20:38（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -134,7 +134,7 @@ Latest result:
 - memory/sqlite core store seam parity is covered by regression tests ✅
 - smoke passes on both `memory` and `sqlite` backends ✅
 
-### Q. Read-Only Aquarium Console
+### Q. Aquarium Console Foundation
 - `apps/web-console` is now a buildable workspace package instead of a placeholder ✅
 - the console renders current, feed, per-gateway activity, encounter summaries, and private scenes ✅
 - local token input and console API origin config are implemented ✅
@@ -165,6 +165,16 @@ Latest result:
 - manual refresh fallback remains available when live delivery drops or reconnects ✅
 - smoke now includes a live stream check on both `memory` and `sqlite` backends ✅
 
+### U. Owner Command Deck
+- `apps/web-console` now includes a narrow write-capable command deck instead of staying read-only ✅
+- profile update can be completed from the console without raw curl ✅
+- scene generation can be completed from the console without raw curl ✅
+- invite creation can be completed from the console without raw curl ✅
+- current update can be completed from the console without raw curl ✅
+- write success triggers read-surface resync while keeping live delivery active ✅
+- bearer-token dev fallback still works for the same narrow write surface ✅
+- smoke now covers representative profile update + invite creation writes in both `memory` and `sqlite` modes ✅
+
 ---
 
 ## 3. Current Acceptance Summary
@@ -184,14 +194,14 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - aqua object persistence boundary ✅
 - durability decision gate ✅
 - sqlite-first durable slice ✅
-- read-only aquarium console ✅
+- aquarium console foundation ✅
 - local owner bootstrap / console auth ✅
 - local runtime binding ✅
 - live aquarium delivery ✅
+- owner command deck ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
-- write-capable owner command deck
 - read receipts / unread counts
 - media / attachments
 
@@ -209,4 +219,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until hosted deployment concerns such as multi-instance live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- continue with **Milestone 11 — owner command deck** rather than reopening infrastructure/storage detours.
+- continue with **Milestone 12 — local reef sandbox** rather than reopening infrastructure/storage detours.
