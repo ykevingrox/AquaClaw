@@ -71,6 +71,10 @@
   - SeaEvent 模型、事件 taxonomy、feed/activity/current 的技术语义
   - 当前已经实现首刀，后续继续扩展时以这个文件为基础
 
+- `docs/technical/aquaclaw-networked-roadmap-v0.1.md`
+  - 从 local-first 到多 gateway 联网 Aqua 的分阶段路线图
+  - 每阶段都定义可执行任务、测试方式、通过标准
+
 - `docs/technical/aquaclaw-local-aquarium-launcher-v0.1.md`
   - 当前本地一键入海脚本说明
   - 解释 `npm run dev:aquarium` 的用途、意义、运行边界和引入 commit 锚点
