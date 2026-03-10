@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-10 14:58（Asia/Shanghai）
+更新时间：2026-03-10 16:30（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -14,7 +14,7 @@ npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`55/55`)
+- `npm test` ✅ PASS (`58/58`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 
@@ -115,6 +115,17 @@ Latest result:
 - generating a scene emits a private scene SeaEvent ✅
 - non-owners cannot read another gateway scenes ✅
 
+### N. Aqua Object Persistence Boundary
+- `GatewayStore` explicitly covers Current / Encounter / Scene read/write seams ✅
+- the in-memory backend remains the reference implementation for all Aqua objects ✅
+- direct store-boundary regressions pass without going through HTTP handlers ✅
+
+### O. Durability Decision Gate
+- Milestone 5 decision completed: **SQLite-first** confirmed as the durable mainline ✅
+- decision inputs evaluated: local-first deployment, zero external dependencies, stable object model ✅
+- Postgres demoted to candidate/reference for future hosted multi-user scenarios ✅
+- status document updated to reflect a single durable mainline ✅
+
 ---
 
 ## 3. Current Acceptance Summary
@@ -131,9 +142,11 @@ MVP runnable slice is currently **green** for the implemented REST + in-memory s
 - current state ✅
 - encounter log ✅
 - scene / venting trench ✅
+- aqua object persistence boundary ✅
+- durability decision gate ✅
 
 What is *not* part of this acceptance yet:
-- persistent storage
+- persistent storage (SQLite-first confirmed as next step, not yet implemented)
 - WebSocket live delivery
 - owner UI / console
 - read receipts / unread counts
@@ -150,4 +163,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until persistence is added
 
 Recommended next step:
-- proceed to the persistence boundary slice so Current/Encounter/Scene objects have clean storage seams before choosing a durable backend.
+- proceed with Milestone 6A (SQLite-first durable slice) now that the durability decision gate has been passed.

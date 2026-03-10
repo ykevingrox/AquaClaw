@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-10 14:58（Asia/Shanghai）
+更新时间：2026-03-10 16:30（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -61,6 +61,10 @@
 - audit
 - SeaEvent feed/activity
 - Current lifecycle read/write
+- encounter continuity read/write
+- scene generation/read
+- explicit Aqua object persistence seam
+- durability decision gate (SQLite-first confirmed)
 
 ---
 
@@ -108,6 +112,10 @@
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/currents/current`
 - `POST /api/v1/currents`
+- `GET /api/v1/encounters`
+- `GET /api/v1/gateways/:gatewayId/encounters`
+- `POST /api/v1/scenes/generate`
+- `GET /api/v1/scenes/mine`
 
 ---
 
@@ -120,14 +128,31 @@
 - 运行入口：`apps/hub-server`
 - backend seam：`GATEWAY_STORE_BACKEND`
 - 当前可用 backend：`memory`
-- 当前保留但未实现 backend：`postgres`
+- 已决策的 durable 主路线：`sqlite`（Milestone 5 决策，Milestone 6A 实施）
+- 当前保留但降级为候选的 backend：`postgres`
 
-当前 `postgres` 状态必须明确理解为：
+在 Milestone 4 后，AquaClaw 新对象的 store 边界也已经明确：
 
-- config seam 已经存在
-- 启动校验已经存在
+- `GatewayStore` 显式覆盖 Current / Encounter / Scene 的 read/write seam
+- `InMemoryGatewayStore` 是当前 reference implementation
+- app handler 继续只依赖 store contract，而不是 memory-only internals
+
+在 Milestone 5 决策后，durable storage 主路线已确认为 **SQLite-first**。
+
+SQLite-first 决策依据：
+
+- 产品方向文档（`aquaclaw-direction-v0.1.md` §7.5 / §9）明确"Local-First Friendly"、"SQLite is acceptable for a local-first first durable slice"
+- 当前部署目标仍然是 local / single-instance / 个人或小圈子
+- AquaClaw 的 continuity 需求（encounter history、current timeline、feed retention、scene memory）用 SQLite 完全可以满足
+- 零外部依赖、零运维开销、一个文件即是数据库，与 local-first 哲学一致
+- 现有 `GatewayStore` 接口完整，接 SQLite backend 不需要改业务规则
+
+当前 `postgres` 状态：
+
+- config seam 仍然存在（`GATEWAY_STORE_BACKEND=postgres`）
 - `apps/hub-server/src/postgres-store.ts` 仍是 placeholder
-- **Postgres 不是当前已完成能力**
+- Postgres 降级为 **候选 / 参考方案**，适用于未来 hosted multi-user 场景
+- **Postgres 不是当前 durable 主路线**
 
 ---
 
@@ -146,19 +171,20 @@
 1. 把海里的事情变得可见
 2. 给 AquaClaw 加入真正的 world-state
 3. 让 Gateway 间形成 continuity / encounter memory
-4. 在模型稳定后，再做 durability
+4. **SQLite-first durable slice（已决策）**
+5. 在模型 durable 后，再考虑 hosted / multi-user deployment
 
 ---
 
 ## 3.5 当前验证基线
 
-在 Current lifecycle write path 落地后，已再次验证当前 runnable baseline：
+在 Milestone 5 持久化决策后，已再次验证当前 runnable baseline：
 
-- `npm test` ✅ `55/55`
+- `npm test` ✅ `58/58`
 - `npm run build` ✅
 - `npm run smoke` ✅
 
-这说明在补完 Current 手动写入、system SeaEvent 和 fallback 行为后，当前 baseline 仍然保持全绿。
+Milestone 5 没有代码变更，仅确认决策并更新文档；baseline 保持全绿。
 
 ---
 
@@ -561,7 +587,22 @@ npm run smoke
 
 ## Milestone 4 — Aqua object persistence boundary
 
-状态：**next active slice**
+状态：**completed**
+
+### 完成结果（已落地并验证）
+
+- `GatewayStore` 现在显式暴露并导出 Aqua 对象相关 seam：
+  - `setCurrent(...)`
+  - `recordEncounter(...)`
+  - `createScene(...)`
+  - 对应 Current / Encounter / Scene read/write input types
+- `InMemoryGatewayStore` 现在作为完整 reference implementation 持有：
+  - active current record
+  - encounter pair records
+  - scene records
+- friendship / DM / scene generation flow 已统一复用新的显式 seam，而不是继续依赖私有 memory-only helper
+- 新增 store-boundary regression tests，直接验证 Current / Encounter / Scene seam
+- 已通过全量验证（见 3.5）
 
 ### 目标
 
@@ -606,7 +647,7 @@ npm run smoke
 
 ## Milestone 5 — Durability decision gate
 
-状态：**planned**
+状态：**completed**
 
 ### 目标
 
@@ -614,34 +655,49 @@ npm run smoke
 
 ### 决策输入
 
-- 是否仍以 local-first / single-instance 为主
-- 是否需要多用户长期部署
-- 是否需要更强查询 / retention / index 能力
-- 现有代码是否已经足够稳定，值得固化 schema
+- 是否仍以 local-first / single-instance 为主 → **是**
+- 是否需要多用户长期部署 → **当前不需要**
+- 是否需要更强查询 / retention / index 能力 → **SQLite 能力范围内足够**
+- 现有代码是否已经足够稳定，值得固化 schema → **是，Milestone 4 已对齐**
+
+### 决策结论
+
+**A 方案：SQLite-first** ✅ 已选定
+
+决策理由：
+
+1. **产品方向一致**：`aquaclaw-direction-v0.1.md` 明确 "Local-First Friendly"、"SQLite is acceptable for a local-first first durable slice"
+2. **部署模型匹配**：当前仍然以 local / single-instance / 个人或小圈子使用为主，不需要远程数据库
+3. **零外部依赖**：SQLite 嵌入在进程内，一个文件即是数据库，无需额外运维
+4. **模型已稳定**：Current / Encounter / Scene 的 store seam 已通过 Milestone 4 对齐，schema 可以安全固化
+5. **查询能力够用**：AquaClaw 当前的查询模式（feed pagination、encounter pair lookup、scene listing）完全在 SQLite 能力范围内
+
+B 方案（Postgres-first）降级为 **候选 / 参考方案**：
+- 保留 config seam 和 placeholder store
+- 适用于未来 hosted multi-user / remote service 场景
+- 不作为当前 durable 实施主线
 
 ### 输出要求
 
 需要产出一个明确结论：
 
-- **A 方案：SQLite-first**
-- **B 方案：Postgres-first**
-
-不能继续保持“文档里同时两边都像主线”的状态。
+- **A 方案：SQLite-first** ✅
+- ~~B 方案：Postgres-first~~ → 降级为候选
 
 ### 验收
 
-- 当前状态主文档更新为单一 durable 主路线
-- 非主路线的持久化方案降级为“参考 / 候选”
+- 当前状态主文档更新为单一 durable 主路线 ✅
+- 非主路线的持久化方案降级为“参考 / 候选” ✅
 
 ---
 
 ## Milestone 6A — SQLite-first durable slice
 
-状态：**conditional**
+状态：**next active slice**
 
 ### 何时选择
 
-如果 AquaClaw 仍以 local-first、单机、个人/小圈子使用为主，优先走这条路。
+Milestone 5 已确认 SQLite-first 为 durable 主路线。本 milestone 现在是下一个执行切面。
 
 ### 目标
 
@@ -693,11 +749,11 @@ npm run smoke
 
 ## Milestone 6B — Postgres-first durable slice
 
-状态：**conditional**
+状态：**deferred / candidate**
 
 ### 何时选择
 
-如果部署目标已经明显偏向 hosted multi-user / remote service，才优先走这条路。
+Milestone 5 决策后，Postgres 已降级为候选方案。仅在部署目标明显偏向 hosted multi-user / remote service 时才重新评估。
 
 ### 目标
 
@@ -814,11 +870,10 @@ npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**下一刀就做 Milestone 3：Scene / Venting Trench v0.1。**
+**Milestone 5 已完成，durable 主路线确认为 SQLite-first。下一刀就做 Milestone 6A — SQLite-first durable slice。**
 
 原因很简单：
 
-- Current 和 system world-state 已经有了第一版可用实现
-- 下一步最缺的是 social continuity，而不是更多基础事件表面
-- Encounter 可以直接复用现有 friendship / message / SeaEvent 数据
-- 它比现在就切 durable backend 更贴近 AquaClaw 的产品价值验证
+- Current / Encounter / Scene 模型和 store seam 已经齐了（M1–M4）
+- Durable 主路线已经收敛为 SQLite-first（M5）
+- 下一步就是让海的记忆在重启后保留下来

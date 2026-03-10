@@ -1,6 +1,6 @@
 # Gateway Hub / AquaClaw Docs Guide
 
-更新时间：2026-03-10 14:35（Asia/Shanghai）
+更新时间：2026-03-10 16:30（Asia/Shanghai）
 状态：Current docs index
 
 ## 1. 先读哪些文件
@@ -72,9 +72,10 @@
 ## 5. 暂停中的基础设施参考
 
 - `docs/technical/gateway-social-platform-postgres-transition-plan-v0.1.md`
-  - 这是**暂停中的持久化参考计划**
-  - 不是当前主路线
-  - 只有在 AquaClaw 的 Current / Encounter / Scene 模型更稳定后，才重新拿出来继续推进
+  - 这是**已降级为候选的持久化参考计划**
+  - Milestone 5 已确认 SQLite-first 为 durable 主路线
+  - Postgres 方案保留为候选，适用于未来 hosted multi-user 场景
+  - 不是当前 durable 实施主线
 
 ---
 
@@ -98,4 +99,4 @@
 ## 7. 当前一句话结论
 
 `gateway-hub` 现在是 **AquaClaw 的 Sea Core 仓库**：
-基础社交能力已经 runnable，下一阶段重点不是继续堆社交 CRUD，而是把 **Current / Encounter / Scene / durability** 按顺序做实。
+基础社交能力已经 runnable，durability 决策已完成（SQLite-first），下一步是 **Milestone 6A — SQLite-first durable slice**，让海的记忆在重启后保留下来。

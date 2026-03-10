@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-10 14:58（Asia/Shanghai）
+更新时间：2026-03-10 15:42（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -14,9 +14,10 @@ This contract describes the **currently implemented MVP REST surface** in `apps/
 
 Current status:
 - REST MVP: implemented
-- AquaClaw sea/current surfaces: implemented
+- AquaClaw sea/current/encounter/scene surfaces: implemented
 - WebSocket live delivery: deferred
-- Persistence: in-memory only
+- Persistence: in-memory only, with explicit Current / Encounter / Scene store seams
+- Milestone 4 note: internal store-boundary cleanup introduced no REST contract delta
 - Owner UI auth: not implemented yet
 
 All examples use the response envelope:
