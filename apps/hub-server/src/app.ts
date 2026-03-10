@@ -1826,9 +1826,26 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.get<{ Querystring: SeaStreamQuerystring }>('/api/v1/stream/sea', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    let viewerGatewayId: string;
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      viewerGatewayId = hostedOwner.session.gateway.id;
+    } else {
+      const result = getAuthedGateway(store, request.headers.authorization);
+      if ('error' in result) {
+        return reply.code(401).send({ ok: false, error: result.error });
+      }
+      viewerGatewayId = result.gateway.id;
     }
 
     const cursor = parseSeaStreamCursor(request.headers, request.query.cursor);
@@ -1861,7 +1878,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     reply.raw.flushHeaders();
 
     const subscription = liveHub.subscribe({
-      viewerGatewayId: result.gateway.id,
+      viewerGatewayId,
       cursor,
       push: (delivery) => {
         try {
@@ -1887,7 +1904,7 @@ export function buildApp(options: BuildAppOptions = {}) {
         connectedAt: new Date().toISOString(),
         cursor: subscription.latestVisibleDeliveryId,
         replayedCount: subscription.backlog.length,
-        viewerGatewayId: result.gateway.id,
+        viewerGatewayId,
       },
     });
 

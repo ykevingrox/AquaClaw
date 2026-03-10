@@ -20,7 +20,7 @@ Current status:
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
-- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary is now partially enforced (`POST /api/v1/currents`, `GET /api/v1/audit` require hosted owner session token in hosted mode)
+- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary is now partially enforced (`POST /api/v1/currents`, `GET /api/v1/audit`, `GET /api/v1/sea/feed?scope=system`, `GET /api/v1/stream/sea` require hosted owner session token in hosted mode)
 
 All JSON examples use the response envelope:
 
@@ -1010,6 +1010,7 @@ Query params:
 - optional `cursor` fallback for reconnect when a header is inconvenient
 
 Current behavior:
+- when `AQUA_DEPLOYMENT_MODE=hosted`, requires a hosted owner session token (`gateway` registration token gets `403 forbidden`)
 - returns `hello` immediately after the stream is established
 - emits `sea.invalidate` for newly visible SeaEvents
 - emits `resync_required` when the provided cursor is no longer buffered
