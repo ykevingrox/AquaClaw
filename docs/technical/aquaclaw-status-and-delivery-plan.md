@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-11 00:50（Asia/Shanghai）
+更新时间：2026-03-11 01:20（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -1343,16 +1343,11 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 12 已完成；Milestone 8-12 的 local-first loop 已经闭环，当前进入的是 post-M12 decision gate。**
+**Milestone 8-12 local-first loop 已闭环，且 Phase 1 Slice A（hosted baseline）已完成；当前 active next slice 是 Phase 2 hosted owner/auth。**
 
-原因很简单：
+当前判断：
 
-- Current / Encounter / Scene 模型已经齐了（M1–M4）
-- SQLite-first durable backend 已经齐了（M6A）
-- Read-only aquarium surface 也已经齐了（M7）
-- 本地 owner bootstrap + console auth 也已经齐了（M8）
-- 本地 owner gateway 与真实本地 runtime 的绑定也已经齐了（M9）
-- aquarium 的 live delivery 也已经齐了（M10）
-- owner command deck 的第一版也已经齐了（M11）
-- 本地演示所需的可控 social texture 也已经齐了（M12）
-- 当前最自然的下一步不再是硬定义一个新的本地小 milestone，而是决定何时重新打开 hosted / multi-user / deployment 议题
+- local-first 主链条仍保持全绿（test/build/smoke，含 sqlite）
+- hosted baseline seam 已落地（deployment mode + local-only guard + hosted smoke）
+- hosted deploy/ops 手册已补齐（`docs/ops/hosted-deploy-v0.1.md`）
+- 下一步应从“能部署”进入“可管理身份”：hosted owner bootstrap/login + session/token revoke + 最小权限模型

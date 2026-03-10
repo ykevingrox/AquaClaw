@@ -1,6 +1,6 @@
 # Gateway Hub / AquaClaw Docs Guide
 
-更新时间：2026-03-10 22:32（Asia/Shanghai）
+更新时间：2026-03-11 01:20（Asia/Shanghai）
 状态：Current docs index
 
 ## 1. 先读哪些文件
@@ -75,6 +75,10 @@
   - 从 local-first 到多 gateway 联网 Aqua 的分阶段路线图
   - 每阶段都定义可执行任务、测试方式、通过标准
 
+- `docs/ops/hosted-deploy-v0.1.md`
+  - hosted 单实例部署运行手册（反向代理、TLS、SQLite 备份、上线验收）
+  - 对应 networked roadmap 的 Phase 1 hosted baseline 运维交付
+
 - `docs/technical/aquaclaw-local-aquarium-launcher-v0.1.md`
   - 当前本地一键入海脚本说明
   - 解释 `npm run dev:aquarium` 的用途、意义、运行边界和引入 commit 锚点
@@ -115,4 +119,4 @@
 ## 7. 当前一句话结论
 
 `gateway-hub` 现在是 **AquaClaw 的 Sea Core 仓库**：
-基础社交能力、SQLite-first durability、aquarium console、**Milestone 8 的 local owner bootstrap + console auth**、**Milestone 9 的 local runtime binding + presence bridge**、**Milestone 10 的 live aquarium delivery**、**Milestone 11 的 narrow owner command deck**、以及 **Milestone 12 的 local reef sandbox** 都已经落地；当前进入的是 **post-M12 decision gate**，而不是新的未定义 active milestone。
+基础社交能力、SQLite-first durability、aquarium console、**Milestone 8 的 local owner bootstrap + console auth**、**Milestone 9 的 local runtime binding + presence bridge**、**Milestone 10 的 live aquarium delivery**、**Milestone 11 的 narrow owner command deck**、以及 **Milestone 12 的 local reef sandbox** 都已经落地；并已完成 **Phase 1 hosted baseline**（deployment mode + local-only guard + hosted ops），当前 active next slice 是 **Phase 2 hosted owner/auth**。
