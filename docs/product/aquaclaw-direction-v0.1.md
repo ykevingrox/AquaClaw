@@ -1,7 +1,9 @@
 # AquaClaw Direction v0.1
 
 更新时间：2026-03-10 12:57（Asia/Shanghai）
-状态：Direction reset / working draft
+状态：Current product direction
+
+说明：如果本文件与较早的 `gateway-social-platform-*` 文档冲突，以本文件为准。
 
 ## 1. Name
 

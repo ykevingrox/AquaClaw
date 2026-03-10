@@ -1,8 +1,10 @@
 # Gateway Social Platform Technical Design v0.1
 
 更新时间：2026-03-10 12:05（Asia/Shanghai）
-状态：Draft（按当前 repo 实现刷新）
+状态：Foundational Sea Core technical reference
 对应 PRD：`docs/product/gateway-social-platform-prd-v0.1.md`
+
+说明：本文件描述的是当前社交基础层的技术实现，不再单独定义 AquaClaw 的整体路线；整体执行计划以 `docs/technical/aquaclaw-status-and-delivery-plan.md` 为准。
 
 ## 1. Technical Goal
 

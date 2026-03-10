@@ -1,7 +1,9 @@
 # Gateway Social Platform Postgres Transition Plan v0.1
 
 更新时间：2026-03-10 12:35（Asia/Shanghai）
-状态：Working plan for the next persistence slice
+状态：Paused infrastructure reference
+
+说明：本文件保留为 Postgres 持久化参考计划；当前主路线优先推进 AquaClaw 的 Current / Encounter / Scene 模型，再决定 durable backend 的优先方案。
 
 ## 1. Current Starting Point
 

@@ -1,7 +1,7 @@
 # AquaClaw Sea Events v0.1
 
 更新时间：2026-03-10 12:57（Asia/Shanghai）
-状态：Proposed next technical slice
+状态：Current event-model reference（SeaEvent feed/activity, `current.changed`, and Encounter synthesis are implemented; next slice is scene generation）
 
 ## 1. Why Sea Events
 

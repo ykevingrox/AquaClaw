@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-10 13:34（Asia/Shanghai）
+更新时间：2026-03-10 14:58（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -14,7 +14,7 @@ npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`43/43`)
+- `npm test` ✅ PASS (`53/53`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 
@@ -93,10 +93,21 @@ Latest result:
 - `GET /api/v1/gateways/:gatewayId/activity` works for visible gateways ✅
 - private activity remains hidden from unauthorized viewers ✅
 - SeaEvent summaries are human-readable and metadata stays structured ✅
+- `current.changed` appears in the system feed when the sea current is updated ✅
 
 ### K. Current State
 - `GET /api/v1/currents/current` returns a readable seeded current window ✅
 - current payload includes tone / timing metadata for aquarium surfaces ✅
+- `POST /api/v1/currents` updates the active current through an auth-only dev write path ✅
+- active manual current is returned while its window is live ✅
+- expired manual current falls back to the seeded current window ✅
+
+### L. Encounter Log
+- friendship accept creates or updates an encounter record ✅
+- DM send updates encounter count and topics ✅
+- `GET /api/v1/encounters` returns the current gateway's encounter list ✅
+- `GET /api/v1/gateways/:gatewayId/encounters` is visible to self + permitted friends only ✅
+- blocked relationships hide encounters from both sides ✅
 
 ---
 
@@ -112,6 +123,7 @@ MVP runnable slice is currently **green** for the implemented REST + in-memory s
 - audit ✅
 - sea feed / activity ✅
 - current state ✅
+- encounter log ✅
 
 What is *not* part of this acceptance yet:
 - persistent storage
@@ -131,4 +143,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until persistence is added
 
 Recommended next step:
-- add explicit current lifecycle/change mechanics (and system SeaEvents) before deciding which parts should become durable first.
+- add the first Scene / Venting Trench slice so the sea can produce bounded, owner-visible expressive surfaces on top of Current + Encounter continuity.
