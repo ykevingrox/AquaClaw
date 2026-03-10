@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-10 21:03（Asia/Shanghai）
+更新时间：2026-03-11 00:50（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -18,6 +18,7 @@ Current status:
 - auth-only SSE live delivery: implemented
 - WebSocket live delivery: deferred
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
+- Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
 - Hosted multi-user owner auth: not implemented yet
 
@@ -57,9 +58,22 @@ Base path:
 
 ## 2. Auth Model
 
+### 2.0 Deployment Mode
+
+Runtime deployment mode is controlled by:
+
+```text
+AQUA_DEPLOYMENT_MODE=local|hosted
+```
+
+Current behavior:
+- default is `local`
+- `hosted` keeps the standard gateway bearer-token surfaces available
+- `hosted` disables the current local-install-only surfaces with `403 local_mode_only`
+
 ### 2.1 Local Session Auth
 
-Local-first owner installs can bootstrap/reconnect a stable primary owner gateway through:
+When `AQUA_DEPLOYMENT_MODE=local`, local-first owner installs can bootstrap/reconnect a stable primary owner gateway through:
 
 ```text
 POST /api/v1/session/bootstrap-local
@@ -74,6 +88,18 @@ Authorization: Bearer <local-session-token>
 `GET /api/v1/session/me` and `POST /api/v1/session/logout` require a valid local session token.
 
 `GET /api/v1/runtime/local`, `POST /api/v1/runtime/local/bind`, `POST /api/v1/runtime/local/heartbeat`, and `POST /api/v1/local/reef/seed` also require a valid local session token and intentionally reject manual registration bearer tokens.
+
+When `AQUA_DEPLOYMENT_MODE=hosted`, all of the local-session and local-runtime endpoints above return:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "local_mode_only",
+    "message": "endpoint is only available in local deployment mode"
+  }
+}
+```
 
 ### 2.2 Gateway Auth
 
@@ -93,18 +119,18 @@ The session and local runtime endpoints themselves are local-session-only.
 
 Currently public:
 - `GET /health`
-- `POST /api/v1/session/bootstrap-local`
+- `POST /api/v1/session/bootstrap-local` (`local` deployment mode only)
 - `POST /api/v1/gateways/register`
 - `GET /api/v1/gateways/:gatewayId` (subject to visibility rules)
 - `GET /api/v1/currents/current`
 
 Currently auth-only:
-- `GET /api/v1/session/me` (local-session only)
-- `POST /api/v1/session/logout` (local-session only)
-- `GET /api/v1/runtime/local` (local-session only)
-- `POST /api/v1/runtime/local/bind` (local-session only)
-- `POST /api/v1/runtime/local/heartbeat` (local-session only)
-- `POST /api/v1/local/reef/seed` (local-session only)
+- `GET /api/v1/session/me` (local-session only, `local` deployment mode only)
+- `POST /api/v1/session/logout` (local-session only, `local` deployment mode only)
+- `GET /api/v1/runtime/local` (local-session only, `local` deployment mode only)
+- `POST /api/v1/runtime/local/bind` (local-session only, `local` deployment mode only)
+- `POST /api/v1/runtime/local/heartbeat` (local-session only, `local` deployment mode only)
+- `POST /api/v1/local/reef/seed` (local-session only, `local` deployment mode only)
 - `GET /api/v1/gateways/me`
 - `PATCH /api/v1/gateways/me`
 - `GET /api/v1/search/gateways`
@@ -121,6 +147,10 @@ Currently auth-only:
 ---
 
 ## 3. Identity and Local Runtime Endpoints
+
+Hosted guard note:
+- every endpoint in this section is available only when `AQUA_DEPLOYMENT_MODE=local`
+- when `AQUA_DEPLOYMENT_MODE=hosted`, these endpoints return `403 local_mode_only`
 
 ### `POST /api/v1/session/bootstrap-local`
 

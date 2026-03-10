@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-10 21:03（Asia/Shanghai）
+更新时间：2026-03-11 00:50（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -11,13 +11,15 @@ From repo root:
 npm test
 npm run build
 npm run smoke
+AQUA_DEPLOYMENT_MODE=hosted npm run smoke
 GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`77/77`)
+- `npm test` ✅ PASS (`80/80`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
+- `AQUA_DEPLOYMENT_MODE=hosted npm run smoke` ✅ PASS
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅ PASS
 
 ---
@@ -183,6 +185,11 @@ Latest result:
 - `apps/web-console` can trigger reef seeding and render sandbox badges/result summaries without raw curl ✅
 - smoke now covers `local_reef_seed=1` in both `memory` and `sqlite` modes ✅
 
+### W. Hosted Mode Guard Baseline
+- `AQUA_DEPLOYMENT_MODE=hosted` disables the current local-only session/runtime/reef endpoints with `403 local_mode_only` ✅
+- local mode remains the default and the existing local smoke path stays green ✅
+- hosted smoke now covers a minimal register/me/feed path plus all seven local-only guards ✅
+
 ---
 
 ## 3. Current Acceptance Summary
@@ -208,6 +215,7 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - live aquarium delivery ✅
 - owner command deck ✅
 - local reef sandbox ✅
+- hosted mode guard baseline ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery

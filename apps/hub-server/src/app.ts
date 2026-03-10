@@ -1,11 +1,13 @@
 import { type ServerResponse } from 'node:http';
 
-import Fastify from 'fastify';
+import Fastify, { type FastifyReply } from 'fastify';
+import type { DeploymentMode } from './config.js';
 import { SeaLiveHub } from './live-hub.js';
 import { createGatewayStore, type EncounterRecord, type GatewayStore, type GatewayVisibility, type SeaEventLiveSource } from './store.js';
 
 interface BuildAppOptions {
   store?: GatewayStore;
+  deploymentMode?: DeploymentMode;
 }
 
 interface RegisterBody {
@@ -507,8 +509,19 @@ function localReefErrorToHttp(message: string) {
   return { statusCode: 400, code: 'validation_failed' };
 }
 
+function sendLocalModeOnly(reply: FastifyReply) {
+  return reply.code(403).send({
+    ok: false,
+    error: {
+      code: 'local_mode_only',
+      message: 'endpoint is only available in local deployment mode',
+    },
+  });
+}
+
 export function buildApp(options: BuildAppOptions = {}) {
   const store = options.store ?? createGatewayStore();
+  const deploymentMode = options.deploymentMode ?? 'local';
   const app = Fastify({ logger: true });
   const liveHub = new SeaLiveHub(store);
   const detachLiveSource = isSeaEventLiveSource(store) ? liveHub.attach(store) : null;
@@ -520,6 +533,10 @@ export function buildApp(options: BuildAppOptions = {}) {
   app.get('/health', async () => ({ ok: true, data: { status: 'ok' } }));
 
   app.post<{ Body: BootstrapLocalSessionBody }>('/api/v1/session/bootstrap-local', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      return sendLocalModeOnly(reply);
+    }
+
     const { displayName, handle, bio, visibility } = request.body ?? {};
 
     if (displayName !== undefined && (typeof displayName !== 'string' || !displayName.trim())) {
@@ -587,6 +604,10 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.get('/api/v1/session/me', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      return sendLocalModeOnly(reply);
+    }
+
     const result = getAuthedLocalSession(store, request.headers.authorization);
     if ('error' in result) {
       return reply.code(401).send({ ok: false, error: result.error });
@@ -605,6 +626,10 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post('/api/v1/session/logout', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      return sendLocalModeOnly(reply);
+    }
+
     const token = extractBearerToken(request.headers.authorization);
     const session = token ? store.findLocalSessionByToken(token) : null;
     if (!token || !session) {
@@ -628,6 +653,10 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.get('/api/v1/runtime/local', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      return sendLocalModeOnly(reply);
+    }
+
     const result = getAuthedLocalSession(store, request.headers.authorization);
     if ('error' in result) {
       return reply.code(401).send({ ok: false, error: result.error });
@@ -651,6 +680,10 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Body: BindLocalRuntimeBody }>('/api/v1/runtime/local/bind', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      return sendLocalModeOnly(reply);
+    }
+
     const result = getAuthedLocalSession(store, request.headers.authorization);
     if ('error' in result) {
       return reply.code(401).send({ ok: false, error: result.error });
@@ -734,6 +767,10 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Body: RuntimeHeartbeatBody }>('/api/v1/runtime/local/heartbeat', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      return sendLocalModeOnly(reply);
+    }
+
     const result = getAuthedLocalSession(store, request.headers.authorization);
     if ('error' in result) {
       return reply.code(401).send({ ok: false, error: result.error });
@@ -788,6 +825,10 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post('/api/v1/local/reef/seed', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      return sendLocalModeOnly(reply);
+    }
+
     const result = getAuthedLocalSession(store, request.headers.authorization);
     if ('error' in result) {
       return reply.code(401).send({ ok: false, error: result.error });

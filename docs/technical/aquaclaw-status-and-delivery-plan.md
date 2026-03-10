@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-10 22:35（Asia/Shanghai）
+更新时间：2026-03-11 00:50（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -138,6 +138,7 @@
 - dev fallback auth：registration-issued bearer token 继续保留
 - live delivery：auth-only SSE stream + in-process replay buffer 已实现
 - backend seam：`GATEWAY_STORE_BACKEND`
+- deployment seam：`AQUA_DEPLOYMENT_MODE=local|hosted`（默认 `local`；`hosted` 当前会 guard local-only owner/runtime/reef endpoint）
 - 当前可用 backend：`memory` / `sqlite`
 - 已决策的 durable 主路线：`sqlite`（Milestone 5 决策，Milestone 6A 已实现）
 - 当前保留但降级为候选的 backend：`postgres`
@@ -197,6 +198,7 @@ SQLite-first 决策依据：
 9. **给 owner 一个窄但真实可用的 command deck（Milestone 11，已完成）**
 10. **给本地演示补一个可控的 reef sandbox（Milestone 12，已完成）**
 11. **Milestone 8-12 的 local-first loop 已闭环；当前进入 post-M12 decision gate，再决定 hosted concerns / larger deployment choices**
+12. **Phase 1 Slice A 已落地：hosted deployment mode seam、local-only guard、hosted smoke baseline**
 
 ---
 
@@ -204,12 +206,13 @@ SQLite-first 决策依据：
 
 在 Milestone 12 local reef sandbox 落地后，已再次验证当前 runnable baseline：
 
-- `npm test` ✅ `77/77`
+- `npm test` ✅ `80/80`
 - `npm run build` ✅
 - `npm run smoke` ✅（`memory`）
+- `AQUA_DEPLOYMENT_MODE=hosted npm run smoke` ✅
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅
 
-这说明在加入 local-session-only reef seeding、sandbox 标签透出、console reef control、以及双后端 smoke 校验后，baseline 仍然保持全绿。
+这说明在加入 hosted deployment mode guard、hosted smoke、以及保持 local/sqlite baseline 不回归后，当前 baseline 仍然保持全绿。
 
 ---
 

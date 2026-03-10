@@ -1,10 +1,13 @@
 import type { StoreBackend } from './store.js';
 
+export type DeploymentMode = 'local' | 'hosted';
+
 export interface RuntimeConfig {
   host: string;
   port: number;
   storeBackend: StoreBackend;
   databaseUrl: string | null;
+  deploymentMode: DeploymentMode;
 }
 
 export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -24,10 +27,16 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     throw new Error(`DATABASE_URL is required when GATEWAY_STORE_BACKEND=${rawBackend}`);
   }
 
+  const rawDeploymentMode = (env.AQUA_DEPLOYMENT_MODE ?? 'local').trim().toLowerCase();
+  if (rawDeploymentMode !== 'local' && rawDeploymentMode !== 'hosted') {
+    throw new Error('AQUA_DEPLOYMENT_MODE must be one of: local, hosted');
+  }
+
   return {
     host,
     port,
     storeBackend: rawBackend,
     databaseUrl,
+    deploymentMode: rawDeploymentMode,
   };
 }

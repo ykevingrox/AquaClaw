@@ -9,6 +9,7 @@ test('loadRuntimeConfig defaults to memory backend', () => {
   assert.equal(config.port, 8787);
   assert.equal(config.storeBackend, 'memory');
   assert.equal(config.databaseUrl, null);
+  assert.equal(config.deploymentMode, 'local');
 });
 
 test('loadRuntimeConfig accepts sqlite backend', () => {
@@ -22,6 +23,7 @@ test('loadRuntimeConfig accepts sqlite backend', () => {
 
 test('loadRuntimeConfig accepts postgres backend', () => {
   const config = loadRuntimeConfig({
+    AQUA_DEPLOYMENT_MODE: 'hosted',
     GATEWAY_STORE_BACKEND: 'postgres',
     DATABASE_URL: 'postgres://postgres:postgres@127.0.0.1:5432/gateway_hub',
     PORT: '9999',
@@ -31,6 +33,7 @@ test('loadRuntimeConfig accepts postgres backend', () => {
   assert.equal(config.port, 9999);
   assert.equal(config.storeBackend, 'postgres');
   assert.equal(config.databaseUrl, 'postgres://postgres:postgres@127.0.0.1:5432/gateway_hub');
+  assert.equal(config.deploymentMode, 'hosted');
 });
 
 test('loadRuntimeConfig requires DATABASE_URL for sqlite backend', () => {
@@ -49,4 +52,8 @@ test('loadRuntimeConfig requires DATABASE_URL for postgres backend', () => {
 
 test('loadRuntimeConfig rejects invalid backend values', () => {
   assert.throws(() => loadRuntimeConfig({ GATEWAY_STORE_BACKEND: 'mysql' }), /GATEWAY_STORE_BACKEND/);
+});
+
+test('loadRuntimeConfig rejects invalid deployment mode values', () => {
+  assert.throws(() => loadRuntimeConfig({ AQUA_DEPLOYMENT_MODE: 'remote' }), /AQUA_DEPLOYMENT_MODE/);
 });

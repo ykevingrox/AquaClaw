@@ -1,6 +1,6 @@
 # AquaClaw Networked Multi-Gateway Roadmap v0.1
 
-更新时间：2026-03-11 00:40（Asia/Shanghai）
+更新时间：2026-03-11 00:50（Asia/Shanghai）
 状态：Proposed execution roadmap（从 local-first 走向多 gateway 联网）
 
 ## 0. 目标定义（终局）
@@ -66,6 +66,12 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 1. 增加运行模式配置与 guard（local-only endpoint 在 hosted 下受限）
 2. 新增 `docs/ops/hosted-deploy-v0.1.md`（域名、TLS、端口、备份）
 3. 增加 hosted smoke（可通过环境变量走远端 base URL）
+
+Slice A 状态（2026-03-11）：
+- 已完成：`AQUA_DEPLOYMENT_MODE=local|hosted`
+- 已完成：local-only endpoint 在 hosted 下统一返回 `403 local_mode_only`
+- 已完成：repo smoke 增加最小 hosted 路径，验证 register/me/feed + local-only guards
+- 待完成：hosted deploy/ops 文档
 
 ### 测试
 - local 模式功能不回归
@@ -238,10 +244,10 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 为确保路线可落地，建议马上执行这两刀：
 
-### Next Slice A（优先）
+### Completed Slice A
 **Hosted mode guard + hosted smoke**
 
-### Next Slice B
+### Next Slice B（优先）
 **Remote bridge bind 最小握手（单 gateway 入云海）**
 
 这两刀完成后，就能实证回答：
