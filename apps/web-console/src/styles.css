@@ -368,6 +368,7 @@ body::after {
   min-height: 440px;
 }
 
+.panel-runtime,
 .panel-encounters,
 .panel-scenes {
   min-height: 320px;
@@ -478,10 +479,19 @@ body::after {
   gap: 12px;
 }
 
+.runtime-card {
+  align-content: start;
+}
+
 .identity-name {
   margin: 0;
   font-size: 2rem;
   line-height: 1.02;
+}
+
+.inline-actions {
+  grid-column: auto;
+  margin-top: 0;
 }
 
 .list-item,

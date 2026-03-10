@@ -191,6 +191,24 @@ export interface LocalSessionRecord {
   createdAt: string;
 }
 
+export interface LocalRuntimeBindingRecord {
+  id: string;
+  installationId: string;
+  runtimeId: string;
+  gatewayId: string;
+  label: string;
+  source: string;
+  metadata: Record<string, unknown>;
+  lastHeartbeatAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LocalRuntimeBindingState {
+  binding: LocalRuntimeBindingRecord;
+  status: PresenceStatus;
+}
+
 export interface GatewayPresenceSnapshotRecord {
   gatewayId: string;
   lastSeenAt: string;
@@ -207,6 +225,7 @@ export interface GatewayStoreSnapshot {
   gatewayTokens: GatewayTokenSnapshotRecord[];
   localOwnerGatewayId?: string | null;
   localSessions?: LocalSessionRecord[];
+  localRuntimeBinding?: LocalRuntimeBindingRecord | null;
   presenceHeartbeats: GatewayPresenceSnapshotRecord[];
   friendRequests: FriendRequestRecord[];
   friendships: FriendshipRecord[];
@@ -233,6 +252,11 @@ export interface GatewayStore {
     gateway: GatewayRecord;
     session: LocalSessionRecord;
     createdOwner: boolean;
+  };
+  getLocalRuntimeBinding(): LocalRuntimeBindingState | null;
+  bindLocalRuntime(input: BindLocalRuntimeInput): {
+    runtime: LocalRuntimeBindingState;
+    created: boolean;
   };
   findById(gatewayId: string): GatewayRecord | null;
   findByToken(token: string): GatewayRecord | null;
@@ -263,6 +287,10 @@ export interface GatewayStore {
   createMessage(input: CreateMessageInput): MessageRecord;
   listMessages(conversationId: string, gatewayId: string): MessageRecord[];
   heartbeatPresence(gatewayId: string): GatewayPresenceRecord;
+  heartbeatLocalRuntime(input: HeartbeatLocalRuntimeInput): {
+    runtime: LocalRuntimeBindingState;
+    presence: GatewayPresenceRecord;
+  };
   canViewPresence(viewerGatewayId: string, targetGatewayId: string): boolean;
   isBlockedBetween(gatewayAId: string, gatewayBId: string): boolean;
   listAuditRecords(input?: ListAuditRecordsInput): AuditRecordPage;
@@ -295,6 +323,15 @@ interface BootstrapLocalSessionInput {
   handle?: string;
   bio?: string;
   visibility?: GatewayVisibility;
+}
+
+interface BindLocalRuntimeInput {
+  installationId?: string;
+  runtimeId?: string;
+  label?: string;
+  source?: string;
+  metadata?: Record<string, unknown>;
+  gatewayId: string;
 }
 
 interface CreateFriendRequestInput {
@@ -413,6 +450,12 @@ export interface ListScenesInput {
   limit?: number;
 }
 
+interface HeartbeatLocalRuntimeInput {
+  gatewayId: string;
+  metadata?: Record<string, unknown>;
+  connectionType?: string | null;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 const VALID_SEA_EVENT_TONES: SeaEventTone[] = ['calm', 'playful', 'reflective', 'sharp', 'neutral'];
 const ONLINE_THRESHOLD_MS = 90_000;
@@ -423,6 +466,10 @@ const DEFAULT_SCENE_PAGE_SIZE = 50;
 const DEFAULT_LOCAL_OWNER_HANDLE = 'my-claw';
 const DEFAULT_LOCAL_OWNER_DISPLAY_NAME = 'My Claw';
 const DEFAULT_LOCAL_OWNER_BIO = 'Stable local owner gateway for AquaClaw.';
+const DEFAULT_LOCAL_INSTALLATION_ID = 'local-installation';
+const DEFAULT_LOCAL_RUNTIME_ID = 'openclaw-local-runtime';
+const DEFAULT_LOCAL_RUNTIME_LABEL = 'Local OpenClaw Runtime';
+const DEFAULT_LOCAL_RUNTIME_SOURCE = 'manual_local_bind';
 const CURRENT_WINDOWS: Array<{ key: string; label: string; summary: string; tone: SeaEventTone; sceneHint: string | null }> = [
   {
     key: 'glasswater',
@@ -517,6 +564,7 @@ export class InMemoryGatewayStore implements GatewayStore {
   private readonly scenesById = new Map<string, SceneRecord>();
   private readonly sceneIdsByGatewayId = new Map<string, string[]>();
   private localOwnerGatewayId: string | null = null;
+  private localRuntimeBinding: LocalRuntimeBindingRecord | null = null;
   private activeCurrentId: string | null = null;
 
   register(
@@ -617,6 +665,75 @@ export class InMemoryGatewayStore implements GatewayStore {
       gateway,
       session,
       createdOwner,
+    };
+  }
+
+  getLocalRuntimeBinding() {
+    if (!this.localRuntimeBinding) {
+      return null;
+    }
+
+    return {
+      binding: { ...this.localRuntimeBinding },
+      status: this.derivePresenceStatus(this.localRuntimeBinding.lastHeartbeatAt),
+    };
+  }
+
+  bindLocalRuntime(input: BindLocalRuntimeInput) {
+    this.assertPrimaryOwnerGateway(input.gatewayId);
+
+    const now = new Date().toISOString();
+    const existing = this.localRuntimeBinding;
+    const runtimeId = this.normalizeRuntimeField(input.runtimeId, existing?.runtimeId ?? DEFAULT_LOCAL_RUNTIME_ID, 'runtimeId');
+    const installationId = this.normalizeRuntimeField(
+      input.installationId,
+      existing?.installationId ?? DEFAULT_LOCAL_INSTALLATION_ID,
+      'installationId',
+    );
+    const label = this.normalizeRuntimeField(input.label, existing?.label ?? DEFAULT_LOCAL_RUNTIME_LABEL, 'label');
+    const source = this.normalizeRuntimeField(input.source, existing?.source ?? DEFAULT_LOCAL_RUNTIME_SOURCE, 'source');
+
+    const binding: LocalRuntimeBindingRecord = existing
+      ? {
+          ...existing,
+          installationId,
+          runtimeId,
+          gatewayId: input.gatewayId,
+          label,
+          source,
+          metadata: input.metadata ?? existing.metadata,
+          updatedAt: now,
+        }
+      : {
+          id: `local-runtime-${randomUUID()}`,
+          installationId,
+          runtimeId,
+          gatewayId: input.gatewayId,
+          label,
+          source,
+          metadata: input.metadata ?? {},
+          lastHeartbeatAt: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+    this.localRuntimeBinding = binding;
+    this.appendAuditRecord({
+      actorGatewayId: input.gatewayId,
+      targetGatewayId: input.gatewayId,
+      action: existing ? 'runtime.local_rebound' : 'runtime.local_bound',
+      metadata: {
+        runtimeId: binding.runtimeId,
+        installationId: binding.installationId,
+        label: binding.label,
+        source: binding.source,
+      },
+      createdAt: now,
+    });
+
+    return {
+      runtime: this.getLocalRuntimeBinding()!,
+      created: !existing,
     };
   }
 
@@ -763,6 +880,44 @@ export class InMemoryGatewayStore implements GatewayStore {
     const now = new Date().toISOString();
     this.lastSeenAtByGatewayId.set(gatewayId, now);
     return this.getPresence(gatewayId);
+  }
+
+  heartbeatLocalRuntime(input: HeartbeatLocalRuntimeInput) {
+    this.assertPrimaryOwnerGateway(input.gatewayId);
+    if (!this.localRuntimeBinding) {
+      throw new Error('local runtime binding not found');
+    }
+
+    const now = new Date().toISOString();
+    this.localRuntimeBinding = {
+      ...this.localRuntimeBinding,
+      lastHeartbeatAt: now,
+      metadata: input.metadata
+        ? {
+            ...this.localRuntimeBinding.metadata,
+            ...input.metadata,
+          }
+        : this.localRuntimeBinding.metadata,
+      updatedAt: now,
+    };
+
+    const presence = this.heartbeatPresence(input.gatewayId);
+    this.appendAuditRecord({
+      actorGatewayId: input.gatewayId,
+      targetGatewayId: input.gatewayId,
+      action: 'runtime.local_heartbeat',
+      metadata: {
+        runtimeId: this.localRuntimeBinding.runtimeId,
+        installationId: this.localRuntimeBinding.installationId,
+        connectionType: input.connectionType ?? null,
+      },
+      createdAt: now,
+    });
+
+    return {
+      runtime: this.getLocalRuntimeBinding()!,
+      presence,
+    };
   }
 
   getPresence(gatewayId: string): GatewayPresenceRecord {
@@ -1734,6 +1889,20 @@ export class InMemoryGatewayStore implements GatewayStore {
     return ['profile.read', 'presence.read', 'chat.send', 'chat.receive', 'task.request'];
   }
 
+  private assertPrimaryOwnerGateway(gatewayId: string) {
+    if (!this.localOwnerGatewayId || this.localOwnerGatewayId !== gatewayId || !this.gatewaysById.has(gatewayId)) {
+      throw new Error('local runtime binding requires the primary owner gateway');
+    }
+  }
+
+  private normalizeRuntimeField(value: string | undefined, fallback: string, fieldName: 'installationId' | 'runtimeId' | 'label' | 'source') {
+    const normalized = value === undefined ? fallback : value.trim();
+    if (!normalized) {
+      throw new Error(`${fieldName} is required`);
+    }
+    return normalized;
+  }
+
   private resolveAvailableHandle(baseHandle: string) {
     let candidate = baseHandle.trim().toLowerCase();
     if (!candidate) {
@@ -2297,6 +2466,7 @@ export class InMemoryGatewayStore implements GatewayStore {
       gatewayTokens: [...this.tokensToGatewayId.entries()].map(([token, gatewayId]) => ({ token, gatewayId })),
       localOwnerGatewayId: this.localOwnerGatewayId,
       localSessions: [...this.localSessionsByToken.values()],
+      localRuntimeBinding: this.localRuntimeBinding,
       presenceHeartbeats: [...this.lastSeenAtByGatewayId.entries()].map(([gatewayId, lastSeenAt]) => ({
         gatewayId,
         lastSeenAt,
@@ -2340,6 +2510,7 @@ export class InMemoryGatewayStore implements GatewayStore {
     for (const session of snapshot.localSessions ?? []) {
       this.localSessionsByToken.set(session.token, session);
     }
+    this.localRuntimeBinding = snapshot.localRuntimeBinding ?? null;
     for (const presenceRecord of snapshot.presenceHeartbeats) {
       this.lastSeenAtByGatewayId.set(presenceRecord.gatewayId, presenceRecord.lastSeenAt);
     }
@@ -2407,6 +2578,7 @@ export class InMemoryGatewayStore implements GatewayStore {
     this.scenesById.clear();
     this.sceneIdsByGatewayId.clear();
     this.localOwnerGatewayId = null;
+    this.localRuntimeBinding = null;
     this.activeCurrentId = null;
   }
 }

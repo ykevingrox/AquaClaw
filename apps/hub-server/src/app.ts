@@ -19,6 +19,14 @@ interface BootstrapLocalSessionBody {
   visibility?: GatewayVisibility;
 }
 
+interface BindLocalRuntimeBody {
+  installationId?: string;
+  runtimeId?: string;
+  label?: string;
+  source?: string;
+  metadata?: Record<string, unknown>;
+}
+
 interface UpdateMeBody {
   displayName?: string;
   bio?: string;
@@ -80,6 +88,11 @@ interface UpdateFriendScopesBody {
 interface PresenceHeartbeatBody {
   sessionId?: string;
   connectionType?: string;
+}
+
+interface RuntimeHeartbeatBody {
+  connectionType?: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface SetCurrentBody {
@@ -243,6 +256,50 @@ function toLocalSessionSummary(session: { id: string; gatewayId: string; created
   };
 }
 
+function toLocalRuntimeSummary(
+  store: GatewayStore,
+  runtime: {
+    binding: {
+      id: string;
+      installationId: string;
+      runtimeId: string;
+      gatewayId: string;
+      label: string;
+      source: string;
+      metadata: Record<string, unknown>;
+      lastHeartbeatAt: string | null;
+      createdAt: string;
+      updatedAt: string;
+    };
+    status: 'online' | 'recently_active' | 'offline';
+  },
+) {
+  const gateway = store.findById(runtime.binding.gatewayId);
+  const presence = gateway ? store.getPresence(gateway.id) : null;
+
+  return {
+    runtime: {
+      id: runtime.binding.id,
+      installationId: runtime.binding.installationId,
+      runtimeId: runtime.binding.runtimeId,
+      label: runtime.binding.label,
+      source: runtime.binding.source,
+      status: runtime.status,
+      lastHeartbeatAt: runtime.binding.lastHeartbeatAt,
+      metadata: runtime.binding.metadata,
+      createdAt: runtime.binding.createdAt,
+      updatedAt: runtime.binding.updatedAt,
+    },
+    gateway: gateway ? toGatewaySummary(gateway) : null,
+    presence: presence
+      ? {
+          status: presence.status,
+          lastSeenAt: presence.lastSeenAt,
+        }
+      : null,
+  };
+}
+
 function parsePositiveIntegerQuery(value: string | undefined) {
   if (value === undefined) {
     return { value: undefined } as const;
@@ -381,6 +438,16 @@ function sceneErrorToHttp(message: string) {
   return { statusCode: 400, code: 'validation_failed' };
 }
 
+function localRuntimeErrorToHttp(message: string) {
+  if (message === 'local runtime binding not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'local runtime binding requires the primary owner gateway') {
+    return { statusCode: 403, code: 'forbidden' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
 export function buildApp(options: BuildAppOptions = {}) {
   const store = options.store ?? createGatewayStore();
   const app = Fastify({ logger: true });
@@ -493,6 +560,166 @@ export function buildApp(options: BuildAppOptions = {}) {
         sessionId: session.session.id,
       },
     };
+  });
+
+  app.get('/api/v1/runtime/local', async (request, reply) => {
+    const result = getAuthedLocalSession(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const runtime = store.getLocalRuntimeBinding();
+    if (!runtime) {
+      return reply.code(404).send({
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: 'local runtime binding not found',
+        },
+      });
+    }
+
+    return {
+      ok: true,
+      data: toLocalRuntimeSummary(store, runtime),
+    };
+  });
+
+  app.post<{ Body: BindLocalRuntimeBody }>('/api/v1/runtime/local/bind', async (request, reply) => {
+    const result = getAuthedLocalSession(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const { installationId, runtimeId, label, source, metadata } = request.body ?? {};
+    if (installationId !== undefined && (typeof installationId !== 'string' || !installationId.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'installationId must be a non-empty string when provided',
+        },
+      });
+    }
+    if (runtimeId !== undefined && (typeof runtimeId !== 'string' || !runtimeId.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'runtimeId must be a non-empty string when provided',
+        },
+      });
+    }
+    if (label !== undefined && (typeof label !== 'string' || !label.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'label must be a non-empty string when provided',
+        },
+      });
+    }
+    if (source !== undefined && (typeof source !== 'string' || !source.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'source must be a non-empty string when provided',
+        },
+      });
+    }
+    if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'metadata must be an object when provided',
+        },
+      });
+    }
+
+    try {
+      const runtime = store.bindLocalRuntime({
+        gatewayId: result.gateway.id,
+        installationId,
+        runtimeId,
+        label,
+        source,
+        metadata,
+      });
+
+      return reply.code(runtime.created ? 201 : 200).send({
+        ok: true,
+        data: {
+          ...toLocalRuntimeSummary(store, runtime.runtime),
+          created: runtime.created,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to bind local runtime';
+      const mapped = localRuntimeErrorToHttp(message);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: RuntimeHeartbeatBody }>('/api/v1/runtime/local/heartbeat', async (request, reply) => {
+    const result = getAuthedLocalSession(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const connectionType = request.body?.connectionType?.trim();
+    if (request.body?.connectionType !== undefined && !connectionType) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'connectionType must be a non-empty string when provided',
+        },
+      });
+    }
+    const metadata = request.body?.metadata;
+    if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'metadata must be an object when provided',
+        },
+      });
+    }
+
+    try {
+      const runtime = store.heartbeatLocalRuntime({
+        gatewayId: result.gateway.id,
+        connectionType: connectionType ?? null,
+        metadata,
+      });
+
+      return {
+        ok: true,
+        data: {
+          ...toLocalRuntimeSummary(store, runtime.runtime),
+          connectionType: connectionType ?? null,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to heartbeat local runtime';
+      const mapped = localRuntimeErrorToHttp(message);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message,
+        },
+      });
+    }
   });
 
   app.get('/api/v1/currents/current', async () => ({

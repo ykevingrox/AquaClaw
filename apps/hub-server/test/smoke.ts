@@ -42,6 +42,36 @@ const me = await app.inject({
 });
 assert.equal(me.statusCode, 200);
 
+const runtimeBind = await app.inject({
+  method: 'POST',
+  url: '/api/v1/runtime/local/bind',
+  headers: { authorization: `Bearer ${token}` },
+  payload: {
+    source: 'smoke',
+  },
+});
+assert.equal(runtimeBind.statusCode, 201);
+
+const runtimeHeartbeat = await app.inject({
+  method: 'POST',
+  url: '/api/v1/runtime/local/heartbeat',
+  headers: { authorization: `Bearer ${token}` },
+  payload: {
+    connectionType: 'smoke_local_runtime',
+  },
+});
+assert.equal(runtimeHeartbeat.statusCode, 200);
+assert.equal(runtimeHeartbeat.json().data.runtime.status, 'online');
+
+const runtime = await app.inject({
+  method: 'GET',
+  url: '/api/v1/runtime/local',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(runtime.statusCode, 200);
+assert.equal(runtime.json().data.gateway.id, gatewayId);
+assert.equal(runtime.json().data.runtime.status, 'online');
+
 const writeCurrent = await app.inject({
   method: 'POST',
   url: '/api/v1/currents',
@@ -202,5 +232,5 @@ if (store instanceof SqliteGatewayStore) {
   store.close();
 }
 console.log(
-  `smoke_ok backend=${config.storeBackend} health=1 current=1 bootstrap=1 session_me=1 me=1 current_write=1 search=1 register=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1`,
+  `smoke_ok backend=${config.storeBackend} health=1 current=1 bootstrap=1 session_me=1 me=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 current_write=1 search=1 register=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1`,
 );

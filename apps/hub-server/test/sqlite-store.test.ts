@@ -368,3 +368,69 @@ test('sqlite backend preserves local owner bootstrap and session continuity acro
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('sqlite backend preserves local runtime binding and heartbeat continuity across restart', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-runtime-'));
+  const databasePath = join(tempDir, 'aquaclaw.sqlite');
+
+  const store1 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+  const app1 = buildApp({ store: store1 });
+
+  try {
+    const owner = await bootstrapLocalSessionViaApi(app1, {
+      displayName: 'SQLite Runtime Owner',
+      handle: 'sqlite-runtime-owner',
+    });
+
+    const bind = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/runtime/local/bind',
+      headers: { authorization: `Bearer ${owner.credential.token}` },
+      payload: {
+        installationId: 'sqlite-runtime-install',
+        runtimeId: 'sqlite-runtime-main',
+        label: 'SQLite Runtime',
+      },
+    });
+    assert.equal(bind.statusCode, 201);
+
+    const heartbeat = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/runtime/local/heartbeat',
+      headers: { authorization: `Bearer ${owner.credential.token}` },
+      payload: {
+        connectionType: 'sqlite_test',
+      },
+    });
+    assert.equal(heartbeat.statusCode, 200);
+
+    await app1.close();
+    if (store1 instanceof SqliteGatewayStore) {
+      store1.close();
+    }
+
+    const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    const app2 = buildApp({ store: store2 });
+
+    try {
+      const runtime = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/runtime/local',
+        headers: { authorization: `Bearer ${owner.credential.token}` },
+      });
+      assert.equal(runtime.statusCode, 200);
+      assert.equal(runtime.json().data.runtime.runtimeId, 'sqlite-runtime-main');
+      assert.equal(runtime.json().data.runtime.installationId, 'sqlite-runtime-install');
+      assert.equal(runtime.json().data.runtime.status, 'online');
+      assert.equal(runtime.json().data.gateway.handle, 'sqlite-runtime-owner');
+      assert.equal(runtime.json().data.presence.status, 'online');
+    } finally {
+      await app2.close();
+      if (store2 instanceof SqliteGatewayStore) {
+        store2.close();
+      }
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});

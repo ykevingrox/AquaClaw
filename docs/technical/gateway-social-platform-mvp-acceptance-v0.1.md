@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-10 16:30（Asia/Shanghai）
+更新时间：2026-03-10 18:35（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -15,7 +15,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`68/68`)
+- `npm test` ✅ PASS (`72/72`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅ PASS
@@ -148,6 +148,14 @@ Latest result:
 - SQLite backend preserves local owner bootstrap/session continuity across restart ✅
 - web-console can enter the aquarium without pasted tokens, while bearer-token dev fallback still works ✅
 
+### S. Local Runtime Binding
+- `GET /api/v1/runtime/local` returns the bound local runtime summary plus gateway/presence context ✅
+- `POST /api/v1/runtime/local/bind` creates or refreshes a stable local runtime binding for the primary owner gateway ✅
+- `POST /api/v1/runtime/local/heartbeat` updates runtime heartbeat state and bridges into gateway presence ✅
+- runtime endpoints reject manual registration bearer tokens and require the local owner session path ✅
+- SQLite backend preserves local runtime binding and heartbeat continuity across restart ✅
+- web-console shows a runtime card with one-click local bind when the owner session is active ✅
+
 ---
 
 ## 3. Current Acceptance Summary
@@ -169,10 +177,10 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - sqlite-first durable slice ✅
 - read-only aquarium console ✅
 - local owner bootstrap / console auth ✅
+- local runtime binding ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
-- runtime binding
 - write-capable owner command deck
 - read receipts / unread counts
 - media / attachments
@@ -188,7 +196,7 @@ For a durable local-first prototype:
 - **ready enough** ✅
 
 For a durable multi-user MVP deployment:
-- **not ready yet** until hosted deployment concerns such as runtime binding, live delivery, and multi-user operations are addressed
+- **not ready yet** until hosted deployment concerns such as live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- continue with **Milestone 9 — OpenClaw runtime binding** rather than adding another storage slice.
+- continue with **Milestone 10 — live aquarium delivery** rather than adding another backend/storage detour.

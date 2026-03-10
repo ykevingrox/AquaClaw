@@ -25,6 +25,7 @@ const elements = {
   heroSync: document.querySelector('#hero-sync'),
   profilePanel: document.querySelector('#profile-panel'),
   refreshButton: document.querySelector('#refresh-button'),
+  runtimePanel: document.querySelector('#runtime-panel'),
   scenePanel: document.querySelector('#scene-panel'),
   token: document.querySelector('#bearer-token'),
 };
@@ -265,6 +266,55 @@ function renderProfile(me, syncedAt) {
   elements.heroSync.textContent = `Synced ${formatRelativeTime(syncedAt)}`;
 }
 
+function renderRuntimeSummary(payload) {
+  const runtime = payload.runtime;
+  const gateway = payload.gateway;
+  const presence = payload.presence;
+  const metadataEntries = Object.entries(runtime.metadata || {});
+  const metadata = metadataEntries.length
+    ? metadataEntries
+        .map(([key, value]) => `<span class="meta-pill">${escapeHtml(key)}: ${escapeHtml(JSON.stringify(value))}</span>`)
+        .join('')
+    : '<span class="meta-pill">metadata: none</span>';
+
+  elements.runtimePanel.className = 'panel-body';
+  elements.runtimePanel.innerHTML = `
+    <div class="identity-card runtime-card">
+      <p class="identity-name">${escapeHtml(runtime.label)}</p>
+      <p class="identity-bio">${escapeHtml(
+        gateway
+          ? `Bound to @${gateway.handle} · runtime=${runtime.runtimeId} · installation=${runtime.installationId}`
+          : `runtime=${runtime.runtimeId} · installation=${runtime.installationId}`,
+      )}</p>
+      <div class="identity-meta">
+        <span class="meta-pill">runtime: ${escapeHtml(runtime.status)}</span>
+        <span class="meta-pill">gateway presence: ${escapeHtml(presence?.status ?? 'unknown')}</span>
+        <span class="meta-pill">source: ${escapeHtml(runtime.source)}</span>
+      </div>
+      <div class="meta-pill-row">${metadata}</div>
+      <p class="sync-mark">Last runtime heartbeat: ${escapeHtml(formatWhen(runtime.lastHeartbeatAt))}</p>
+    </div>
+  `;
+}
+
+function renderRuntimeBindPrompt() {
+  elements.runtimePanel.className = 'panel-body';
+  elements.runtimePanel.innerHTML = `
+    <div class="identity-card runtime-card">
+      <p class="identity-name">Runtime Not Bound</p>
+      <p class="identity-bio">Bind this stable local owner gateway to your local OpenClaw runtime so the aquarium can show a real installation identity.</p>
+      <div class="dock-actions inline-actions">
+        <button class="button button-primary" data-runtime-action="bind" type="button">Bind Local Runtime</button>
+      </div>
+      <p class="sync-mark">No runtime heartbeat recorded yet.</p>
+    </div>
+  `;
+}
+
+function renderRuntimeUnavailable(message) {
+  renderEmpty(elements.runtimePanel, message);
+}
+
 function renderFeed(items, scope) {
   elements.feedNote.textContent = `Scope: ${scope}`;
   if (!items.length) {
@@ -410,6 +460,22 @@ async function loadAquarium() {
       renderError(elements.currentPanel, currentResult.reason.message);
     }
 
+    if (authMode === 'local_session') {
+      try {
+        const runtimePayload = await requestJson('/api/v1/runtime/local', { apiOrigin, token });
+        renderRuntimeSummary(runtimePayload.data);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message === 'local runtime binding not found') {
+          renderRuntimeBindPrompt();
+        } else {
+          renderError(elements.runtimePanel, message);
+        }
+      }
+    } else {
+      renderRuntimeUnavailable('Local runtime summary is available only when connected through the local owner session path.');
+    }
+
     if (feedResult.status === 'fulfilled') {
       renderFeed(feedResult.value.data.items, feedScope);
     } else {
@@ -458,6 +524,7 @@ async function loadAquarium() {
     setStatus(message, 'error');
     renderError(elements.profilePanel, message);
     renderEmpty(elements.currentPanel, 'Current data unavailable.');
+    renderEmpty(elements.runtimePanel, 'Runtime summary unavailable.');
     renderEmpty(elements.feedPanel, 'Feed unavailable.');
     renderEmpty(elements.activityPanel, 'Activity unavailable.');
     renderEmpty(elements.encounterPanel, 'Encounters unavailable.');
@@ -512,6 +579,7 @@ async function clearConsoleAuth() {
   authMode = 'bearer';
   renderEmpty(elements.profilePanel, 'Your gateway summary appears here after local session or token auth succeeds.');
   renderEmpty(elements.currentPanel, 'The current card will appear here after the first sync.');
+  renderEmpty(elements.runtimePanel, 'Your local runtime summary will appear here after the first successful sync.');
   renderEmpty(elements.feedPanel, 'Sea events will stream into this panel after a successful read.');
   renderEmpty(elements.activityPanel, 'Choose a gateway id or accept your own default activity stream.');
   renderEmpty(elements.encounterPanel, 'Encounter summaries will appear here once your gateway has history.');
@@ -525,6 +593,39 @@ elements.clearButton.addEventListener('click', () => {
 document.addEventListener('click', (event) => {
   const trigger = event.target.closest('[data-activity-gateway-id]');
   if (!trigger) {
+    const runtimeTrigger = event.target.closest('[data-runtime-action]');
+    if (!runtimeTrigger) {
+      return;
+    }
+
+    if (runtimeTrigger.dataset.runtimeAction === 'bind') {
+      const token = elements.token.value.trim();
+      if (!token || authMode !== 'local_session') {
+        setStatus('Runtime binding requires a local owner session.', 'warning');
+        return;
+      }
+
+      setStatus('Binding local runtime…', 'neutral');
+      void requestJson('/api/v1/runtime/local/bind', {
+        apiOrigin: elements.apiOrigin.value.trim(),
+        token,
+        method: 'POST',
+        payload: {
+          source: 'aquarium_console',
+        },
+      })
+        .then((payload) => {
+          setStatus(payload.data.created ? 'Local runtime bound.' : 'Local runtime binding refreshed.', 'success');
+          return loadAquarium();
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : 'Failed to bind local runtime';
+          setStatus(message, 'error');
+          renderError(elements.runtimePanel, message);
+        });
+      return;
+    }
+
     return;
   }
 

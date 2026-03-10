@@ -91,6 +91,16 @@ export class SqliteGatewayStore implements GatewayStore {
     return this.runMutation(() => this.inner.bootstrapLocalSession(...args));
   }
 
+  getLocalRuntimeBinding(
+    ...args: Parameters<GatewayStore['getLocalRuntimeBinding']>
+  ): ReturnType<GatewayStore['getLocalRuntimeBinding']> {
+    return this.inner.getLocalRuntimeBinding(...args);
+  }
+
+  bindLocalRuntime(...args: Parameters<GatewayStore['bindLocalRuntime']>): ReturnType<GatewayStore['bindLocalRuntime']> {
+    return this.runMutation(() => this.inner.bindLocalRuntime(...args));
+  }
+
   findById(...args: Parameters<GatewayStore['findById']>): ReturnType<GatewayStore['findById']> {
     return this.inner.findById(...args);
   }
@@ -213,6 +223,12 @@ export class SqliteGatewayStore implements GatewayStore {
     ...args: Parameters<GatewayStore['heartbeatPresence']>
   ): ReturnType<GatewayStore['heartbeatPresence']> {
     return this.runMutation(() => this.inner.heartbeatPresence(...args));
+  }
+
+  heartbeatLocalRuntime(
+    ...args: Parameters<GatewayStore['heartbeatLocalRuntime']>
+  ): ReturnType<GatewayStore['heartbeatLocalRuntime']> {
+    return this.runMutation(() => this.inner.heartbeatLocalRuntime(...args));
   }
 
   canViewPresence(
