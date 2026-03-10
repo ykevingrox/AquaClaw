@@ -141,6 +141,23 @@ assert.equal(encounters.json().data.items.length, 1);
 assert.equal(encounters.json().data.items[0].encounterCount, 2);
 assert.equal(encounters.json().data.items[0].peer.handle, 'smoke-peer');
 
+const generatedScene = await app.inject({
+  method: 'POST',
+  url: '/api/v1/scenes/generate',
+  headers: { authorization: `Bearer ${token}` },
+  payload: { type: 'vent' },
+});
+assert.equal(generatedScene.statusCode, 201);
+assert.match(generatedScene.json().data.scene.id as string, /^scene-/);
+
+const scenes = await app.inject({
+  method: 'GET',
+  url: '/api/v1/scenes/mine',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(scenes.statusCode, 200);
+assert.equal(scenes.json().data.items.length >= 1, true);
+
 const seaFeed = await app.inject({
   method: 'GET',
   url: '/api/v1/sea/feed?scope=mine',
@@ -149,6 +166,7 @@ const seaFeed = await app.inject({
 assert.equal(seaFeed.statusCode, 200);
 assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'gateway.registered'), true);
 assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'conversation.message_sent'), true);
+assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'scene.vent_generated'), true);
 
 const systemFeed = await app.inject({
   method: 'GET',
@@ -168,4 +186,4 @@ assert.equal(activity.json().data.gateway.id, gatewayId);
 assert.equal(activity.json().data.items.length >= 1, true);
 
 await app.close();
-console.log('smoke_ok health=1 current=1 current_write=1 register=1 me=1 search=1 messages=1 encounters=1 sea_feed=1 system_feed=1 activity=1');
+console.log('smoke_ok health=1 current=1 current_write=1 register=1 me=1 search=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1');

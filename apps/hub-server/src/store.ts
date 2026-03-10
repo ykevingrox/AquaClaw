@@ -159,6 +159,25 @@ export interface EncounterPage {
   nextCursor: string | null;
 }
 
+export type SceneType = 'vent' | 'social_glimpse';
+export type SceneVisibility = 'private';
+
+export interface SceneRecord {
+  id: string;
+  gatewayId: string;
+  type: SceneType;
+  visibility: SceneVisibility;
+  summary: string;
+  tone: SeaEventTone;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ScenePage {
+  items: SceneRecord[];
+  nextCursor: string | null;
+}
+
 export type StoreBackend = 'memory' | 'postgres';
 
 export interface GatewayStore {
@@ -198,6 +217,8 @@ export interface GatewayStore {
   getCurrent(): CurrentRecord;
   setCurrent(input: SetCurrentInput): CurrentRecord;
   listEncounters(input: ListEncountersInput): EncounterPage;
+  generateScene(input: GenerateSceneInput): SceneRecord;
+  listScenes(input: ListScenesInput): ScenePage;
 }
 
 interface RegisterInput {
@@ -295,12 +316,24 @@ interface SetCurrentInput {
   actorGatewayId?: string | null;
 }
 
+interface GenerateSceneInput {
+  gatewayId: string;
+  type: SceneType;
+}
+
+interface ListScenesInput {
+  gatewayId: string;
+  cursor?: string;
+  limit?: number;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 const VALID_SEA_EVENT_TONES: SeaEventTone[] = ['calm', 'playful', 'reflective', 'sharp', 'neutral'];
 const ONLINE_THRESHOLD_MS = 90_000;
 const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
 const DEFAULT_AUDIT_PAGE_SIZE = 50;
 const DEFAULT_SEA_PAGE_SIZE = 50;
+const DEFAULT_SCENE_PAGE_SIZE = 50;
 const CURRENT_WINDOWS: Array<{ key: string; label: string; summary: string; tone: SeaEventTone; sceneHint: string | null }> = [
   {
     key: 'glasswater',
@@ -390,6 +423,8 @@ export class InMemoryGatewayStore implements GatewayStore {
   private readonly auditLog: AuditRecord[] = [];
   private readonly seaEvents: SeaEvent[] = [];
   private readonly encountersByPairKey = new Map<string, EncounterRecord>();
+  private readonly scenesById = new Map<string, SceneRecord>();
+  private readonly sceneIdsByGatewayId = new Map<string, string[]>();
   private currentOverride: CurrentRecord | null = null;
 
   register(
@@ -1190,6 +1225,107 @@ export class InMemoryGatewayStore implements GatewayStore {
     return { items, nextCursor };
   }
 
+  generateScene(input: GenerateSceneInput): SceneRecord {
+    if (!this.gatewaysById.has(input.gatewayId)) {
+      throw new Error('gateway not found');
+    }
+    if (input.type !== 'vent' && input.type !== 'social_glimpse') {
+      throw new Error('invalid scene type');
+    }
+
+    const gateway = this.gatewaysById.get(input.gatewayId)!;
+    const now = new Date().toISOString();
+    const current = this.getCurrent();
+
+    const latestEncounter = this.latestEncounterForGateway(input.gatewayId);
+    const encounterSummary = latestEncounter
+      ? {
+          encounterId: latestEncounter.id,
+          encounterCount: latestEncounter.encounterCount,
+          peerGatewayId: latestEncounter.gatewayAId === input.gatewayId ? latestEncounter.gatewayBId : latestEncounter.gatewayAId,
+          recentTopics: latestEncounter.recentTopics,
+          lastEncounteredAt: latestEncounter.lastEncounteredAt,
+        }
+      : null;
+
+    const recentEventTypes = this.recentSeaEventTypesForGateway(input.gatewayId, 5);
+
+    const baseMetadata = {
+      generatedBy: 'template',
+      current: {
+        id: current.id,
+        key: current.key,
+        label: current.label,
+        tone: current.tone,
+        source: current.source,
+      },
+      encounter: encounterSummary,
+      recentEventTypes,
+    };
+
+    const sceneTone: SeaEventTone = input.type === 'vent' ? 'sharp' : current.tone;
+    const summary =
+      input.type === 'vent'
+        ? this.renderVentSummary(gateway, current, encounterSummary)
+        : this.renderSocialGlimpseSummary(gateway, current, encounterSummary);
+
+    const scene: SceneRecord = {
+      id: `scene-${randomUUID()}`,
+      gatewayId: gateway.id,
+      type: input.type,
+      visibility: 'private',
+      summary,
+      tone: sceneTone,
+      metadata: baseMetadata,
+      createdAt: now,
+    };
+
+    this.scenesById.set(scene.id, scene);
+    const existing = this.sceneIdsByGatewayId.get(scene.gatewayId) ?? [];
+    this.sceneIdsByGatewayId.set(scene.gatewayId, [...existing, scene.id]);
+
+    const seaType = scene.type === 'vent' ? 'scene.vent_generated' : 'scene.social_glimpse_generated';
+    this.appendSeaEvent({
+      type: seaType,
+      actorGatewayId: scene.gatewayId,
+      subjectGatewayId: scene.gatewayId,
+      objectGatewayId: encounterSummary?.peerGatewayId ?? null,
+      visibility: 'private',
+      summary: scene.summary,
+      tone: scene.tone,
+      sceneHint: scene.type,
+      metadata: {
+        sceneId: scene.id,
+        sceneType: scene.type,
+        sceneVisibility: scene.visibility,
+        ...baseMetadata,
+      },
+      createdAt: now,
+    });
+
+    return scene;
+  }
+
+  listScenes(input: ListScenesInput): ScenePage {
+    if (!this.gatewaysById.has(input.gatewayId)) {
+      throw new Error('gateway not found');
+    }
+
+    const ids = (this.sceneIdsByGatewayId.get(input.gatewayId) ?? []).slice().reverse();
+    const items = ids.map((id) => this.scenesById.get(id)).filter((scene): scene is SceneRecord => Boolean(scene));
+
+    const normalizedCursor = input.cursor?.trim();
+    const startIndex = normalizedCursor ? items.findIndex((scene) => scene.id === normalizedCursor) + 1 : 0;
+    if (normalizedCursor && startIndex === 0) {
+      throw new Error('invalid scene cursor');
+    }
+
+    const pageSize = Math.min(Math.max(input.limit ?? DEFAULT_SCENE_PAGE_SIZE, 1), DEFAULT_SCENE_PAGE_SIZE);
+    const pageItems = items.slice(startIndex, startIndex + pageSize);
+    const nextCursor = startIndex + pageItems.length < items.length && pageItems.length > 0 ? pageItems[pageItems.length - 1]!.id : null;
+    return { items: pageItems, nextCursor };
+  }
+
   findConversationById(conversationId: string): ConversationRecord | null {
     return this.conversationsById.get(conversationId) ?? null;
   }
@@ -1422,6 +1558,44 @@ export class InMemoryGatewayStore implements GatewayStore {
       .map((token) => token.trim())
       .filter((token) => token.length >= 3)
       .slice(0, 3);
+  }
+
+  private latestEncounterForGateway(gatewayId: string) {
+    const encounters = Array.from(this.encountersByPairKey.values()).filter(
+      (encounter) => encounter.gatewayAId === gatewayId || encounter.gatewayBId === gatewayId,
+    );
+    encounters.sort((a, b) => b.lastEncounteredAt.localeCompare(a.lastEncounteredAt));
+    return encounters[0] ?? null;
+  }
+
+  private recentSeaEventTypesForGateway(gatewayId: string, max = 5) {
+    const types: string[] = [];
+    for (let i = this.seaEvents.length - 1; i >= 0 && types.length < max; i -= 1) {
+      const event = this.seaEvents[i]!;
+      if (event.actorGatewayId === gatewayId || event.subjectGatewayId === gatewayId || event.objectGatewayId === gatewayId) {
+        types.push(event.type);
+      }
+    }
+    return types;
+  }
+
+  private renderVentSummary(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    encounter: { encounterId: string; encounterCount: number; peerGatewayId: string; recentTopics: string[]; lastEncounteredAt: string } | null,
+  ) {
+    const topicText = encounter?.recentTopics?.length ? `topics=${encounter.recentTopics.join(', ')}` : 'no-topics-yet';
+    const encounterText = encounter ? `encounters=${encounter.encounterCount}` : 'encounters=0';
+    return `In the venting trench, @${gateway.handle} exhales under "${current.label}" (${encounterText}; ${topicText}).`;
+  }
+
+  private renderSocialGlimpseSummary(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    encounter: { encounterId: string; encounterCount: number; peerGatewayId: string; recentTopics: string[]; lastEncounteredAt: string } | null,
+  ) {
+    const topicText = encounter?.recentTopics?.length ? encounter.recentTopics.slice(0, 2).join(' & ') : current.key;
+    return `A soft glimpse: @${gateway.handle} drifts with "${current.label}", carrying hints of ${topicText}.`;
   }
 
   private paginateSeaEvents(events: SeaEvent[], cursor?: string, limit?: number): SeaEventPage {
@@ -1910,6 +2084,8 @@ export class InMemoryGatewayStore implements GatewayStore {
     this.auditLog.length = 0;
     this.seaEvents.length = 0;
     this.encountersByPairKey.clear();
+    this.scenesById.clear();
+    this.sceneIdsByGatewayId.clear();
     this.currentOverride = null;
   }
 }

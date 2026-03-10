@@ -86,6 +86,10 @@ interface SetCurrentBody {
   metadata?: Record<string, unknown>;
 }
 
+interface GenerateSceneBody {
+  type?: string;
+}
+
 interface CreateInviteBody {
   maxUses?: number | null;
   expiresAt?: string | null;
@@ -322,6 +326,16 @@ function encounterErrorToHttp(message: string) {
     return { statusCode: 403, code: 'forbidden' };
   }
   if (message === 'invalid encounter cursor') {
+    return { statusCode: 400, code: 'invalid_cursor' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function sceneErrorToHttp(message: string) {
+  if (message === 'gateway not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'invalid scene cursor') {
     return { statusCode: 400, code: 'invalid_cursor' };
   }
   return { statusCode: 400, code: 'validation_failed' };
@@ -753,6 +767,89 @@ export function buildApp(options: BuildAppOptions = {}) {
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'failed to list encounters';
       const mapped = encounterErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: GenerateSceneBody }>('/api/v1/scenes/generate', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const type = request.body?.type?.trim() ?? 'vent';
+    if (!['vent', 'social_glimpse'].includes(type)) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'type must be one of vent, social_glimpse',
+        },
+      });
+    }
+
+    try {
+      const scene = store.generateScene({
+        gatewayId: result.gateway.id,
+        type: type as 'vent' | 'social_glimpse',
+      });
+
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          scene,
+        },
+      });
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to generate scene';
+      const mapped = sceneErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.get<{ Querystring: GatewayActivityQuerystring }>('/api/v1/scenes/mine', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+
+    try {
+      const scenes = store.listScenes({
+        gatewayId: result.gateway.id,
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+      });
+
+      return {
+        ok: true,
+        data: scenes,
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list scenes';
+      const mapped = sceneErrorToHttp(messageText);
       return reply.code(mapped.statusCode).send({
         ok: false,
         error: {
