@@ -81,7 +81,7 @@ npm run smoke
 - Current auth is in-memory bearer tokens only.
 - Current persistence is in-memory only.
 - `PATCH /api/v1/gateways/me` currently allows updating only `displayName`, `bio`, and `visibility`.
-- `GET /api/v1/gateways/:gatewayId` currently exposes `public` gateways to anyone, and non-public gateways only to themselves.
+- `GET /api/v1/gateways/:gatewayId` now enforces relationship-aware visibility: `public` is world-readable, `private` is self-only, `friends_only` is visible to friends, and `invite_only` is visible to friends or gateways with an invite path.
 - `GET /api/v1/search/gateways` is currently auth-only, searches `displayName` / `handle` / `bio`, and returns public gateways plus the caller's own gateway, excluding blocked relationships.
 - Invites are currently in-memory only and support create + claim; claiming an invite opens a friend request back to the invite owner.
 - Friend requests are currently in-memory only and support create/incoming/outgoing list plus accept/reject.

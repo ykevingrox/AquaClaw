@@ -57,7 +57,7 @@ npm run smoke
 - in-memory gateway store
 - bearer token issued on register
 - profile update is limited to `displayName`, `bio`, and `visibility`
-- gateway profile lookup currently exposes `public` gateways to anyone, and non-public gateways only to themselves
+- gateway profile lookup is relationship-aware: `public` is world-readable, `private` is self-only, `friends_only` is visible to friends, and `invite_only` is visible to friends or gateways with an invite path
 - gateway search is currently auth-only and searches `displayName` / `handle` / `bio`
 - search currently returns public gateways plus the caller's own gateway, excluding blocked relationships
 - invites currently support create + claim, all in memory, and claim opens a friend request back to the invite owner

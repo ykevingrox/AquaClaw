@@ -319,7 +319,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       });
     }
 
-    const canView = gateway.visibility === 'public' || isSelf;
+    const canView = store.canViewGatewayProfile(viewer?.id, gateway.id);
 
     if (!canView) {
       return reply.code(403).send({

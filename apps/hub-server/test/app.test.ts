@@ -206,6 +206,165 @@ test('private gateway profile is only visible to itself', async () => {
   await app.close();
 });
 
+test('friends_only gateway profile is visible to friends but not strangers', async () => {
+  const app = buildApp();
+
+  const owner = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Friends Only Claw',
+      handle: 'friends-only-claw',
+      visibility: 'friends_only',
+    },
+  });
+  const ownerId = owner.json().data.gateway.id as string;
+  const ownerToken = owner.json().data.credential.token as string;
+
+  const friend = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Friend Claw',
+      handle: 'friend-claw',
+      visibility: 'public',
+    },
+  });
+  const friendToken = friend.json().data.credential.token as string;
+
+  const stranger = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Stranger Claw',
+      handle: 'stranger-claw',
+      visibility: 'public',
+    },
+  });
+  const strangerToken = stranger.json().data.credential.token as string;
+
+  const beforeFriendship = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${ownerId}`,
+    headers: { authorization: `Bearer ${friendToken}` },
+  });
+  assert.equal(beforeFriendship.statusCode, 403);
+
+  const request = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${friendToken}` },
+    payload: { toGatewayId: ownerId },
+  });
+  const requestId = request.json().data.request.id as string;
+  await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+
+  const friendView = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${ownerId}`,
+    headers: { authorization: `Bearer ${friendToken}` },
+  });
+  assert.equal(friendView.statusCode, 200);
+  assert.equal(friendView.json().data.gateway.handle, 'friends-only-claw');
+
+  const strangerView = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${ownerId}`,
+    headers: { authorization: `Bearer ${strangerToken}` },
+  });
+  assert.equal(strangerView.statusCode, 403);
+
+  const ownerView = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${ownerId}`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+  assert.equal(ownerView.statusCode, 200);
+
+  await app.close();
+});
+
+test('invite_only gateway profile is visible after an invite path exists', async () => {
+  const app = buildApp();
+
+  const owner = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Invite Only Claw',
+      handle: 'invite-only-claw',
+      visibility: 'invite_only',
+    },
+  });
+  const ownerId = owner.json().data.gateway.id as string;
+  const ownerToken = owner.json().data.credential.token as string;
+
+  const viewer = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Invite Viewer',
+      handle: 'invite-viewer',
+      visibility: 'public',
+    },
+  });
+  const viewerToken = viewer.json().data.credential.token as string;
+
+  const stranger = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Invite Stranger',
+      handle: 'invite-stranger',
+      visibility: 'public',
+    },
+  });
+  const strangerToken = stranger.json().data.credential.token as string;
+
+  const beforeClaim = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${ownerId}`,
+    headers: { authorization: `Bearer ${viewerToken}` },
+  });
+  assert.equal(beforeClaim.statusCode, 403);
+
+  const invite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+  const code = invite.json().data.invite.code as string;
+
+  const claim = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: { authorization: `Bearer ${viewerToken}` },
+    payload: { code },
+  });
+  assert.equal(claim.statusCode, 200);
+
+  const viewerAfterClaim = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${ownerId}`,
+    headers: { authorization: `Bearer ${viewerToken}` },
+  });
+  assert.equal(viewerAfterClaim.statusCode, 200);
+  assert.equal(viewerAfterClaim.json().data.gateway.handle, 'invite-only-claw');
+
+  const strangerView = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${ownerId}`,
+    headers: { authorization: `Bearer ${strangerToken}` },
+  });
+  assert.equal(strangerView.statusCode, 403);
+
+  await app.close();
+});
+
 test('search returns public gateways and self only, with query filtering', async () => {
   const app = buildApp();
 

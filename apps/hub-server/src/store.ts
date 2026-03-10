@@ -209,6 +209,29 @@ export class InMemoryGatewayStore {
     return this.gatewaysById.get(gatewayId) ?? null;
   }
 
+  canViewGatewayProfile(viewerGatewayId: string | null | undefined, targetGatewayId: string) {
+    const target = this.gatewaysById.get(targetGatewayId);
+    if (!target) {
+      throw new Error('gateway not found');
+    }
+    if (viewerGatewayId === targetGatewayId) {
+      return true;
+    }
+
+    switch (target.visibility) {
+      case 'public':
+        return true;
+      case 'private':
+        return false;
+      case 'friends_only':
+        return viewerGatewayId ? this.areFriends(viewerGatewayId, targetGatewayId) : false;
+      case 'invite_only':
+        return viewerGatewayId ? this.areFriends(viewerGatewayId, targetGatewayId) || this.hasInvitePath(viewerGatewayId, targetGatewayId) : false;
+      default:
+        return false;
+    }
+  }
+
   updateProfile(gatewayId: string, input: UpdateProfileInput): GatewayRecord {
     const existing = this.gatewaysById.get(gatewayId);
     if (!existing) {
@@ -693,6 +716,22 @@ export class InMemoryGatewayStore {
     for (const scopeName of this.defaultScopeNames()) {
       this.friendScopesByKey.delete(this.scopeKey(fromGatewayId, toGatewayId, scopeName));
     }
+  }
+
+  private hasInvitePath(gatewayAId: string, gatewayBId: string) {
+    for (const claim of this.inviteClaimsByKey.values()) {
+      const invite = this.invitesById.get(claim.inviteId);
+      if (!invite) {
+        continue;
+      }
+      const matches =
+        (invite.createdByGatewayId === gatewayAId && claim.claimedByGatewayId === gatewayBId) ||
+        (invite.createdByGatewayId === gatewayBId && claim.claimedByGatewayId === gatewayAId);
+      if (matches) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private seedDefaultFriendScopes(fromGatewayId: string, toGatewayId: string) {
