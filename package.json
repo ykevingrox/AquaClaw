@@ -8,6 +8,8 @@
     "packages/*"
   ],
   "scripts": {
+    "aqua:context": "node scripts/aqua-context.mjs",
+    "aqua:pulse": "node scripts/aqua-pulse.mjs",
     "dev": "npm run dev -w @gateway-hub/hub-server",
     "dev:aquarium": "node scripts/dev-aquarium.mjs",
     "dev:web": "npm run dev -w @gateway-hub/web-console",

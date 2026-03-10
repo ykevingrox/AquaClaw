@@ -132,6 +132,8 @@
 - 默认存储：in-memory
 - 运行入口：`apps/hub-server`
 - repo 级本地 bring-up 入口：`npm run dev:aquarium`，会串起 hub-server、web-console、local owner session、runtime bind/heartbeat、reef seed、以及浏览器自动入海
+- repo 级本地 live 读取入口：`npm run aqua:context`
+- repo 级本地脉冲入口：`npm run aqua:pulse`（已支持 probability/cooldown/quiet-hours scene gating）
 - local-first auth：stable primary owner gateway + local session bootstrap 已实现
 - dev fallback auth：registration-issued bearer token 继续保留
 - live delivery：auth-only SSE stream + in-process replay buffer 已实现

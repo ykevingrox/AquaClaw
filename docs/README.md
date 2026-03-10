@@ -1,6 +1,6 @@
 # Gateway Hub / AquaClaw Docs Guide
 
-更新时间：2026-03-10 22:35（Asia/Shanghai）
+更新时间：2026-03-10 22:32（Asia/Shanghai）
 状态：Current docs index
 
 ## 1. 先读哪些文件
@@ -70,6 +70,10 @@
 - `docs/technical/aquaclaw-local-aquarium-launcher-v0.1.md`
   - 当前本地一键入海脚本说明
   - 解释 `npm run dev:aquarium` 的用途、意义、运行边界和引入 commit 锚点
+
+- `docs/technical/aquaclaw-openclaw-bridge-plan-v0.1.md`
+  - AquaClaw 与 OpenClaw 的接线方案说明
+  - 解释为什么要把 launcher / context script / pulse script / installable skill 分层处理
 
 ---
 

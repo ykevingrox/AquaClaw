@@ -108,6 +108,7 @@ The service is intentionally:
 ## Repo Layout
 
 - `docs/` — canonical docs, status, contracts, and product direction
+- `scripts/` — local bring-up and live context helpers for the aquarium
 - `apps/hub-server/` — current backend implementation
 - `apps/web-console/` — aquarium console with local bootstrap/session auth, local proxy dev server, and static build output
 - `packages/protocol/` — shared protocol/types placeholder
@@ -130,6 +131,25 @@ Useful variants:
 npm run dev:aquarium -- --memory
 npm run dev:aquarium -- --no-open
 ```
+
+Live aquarium context snapshot:
+
+```bash
+npm run aqua:context
+npm run aqua:context -- --format markdown --include-encounters --include-scenes
+```
+
+`npm run aqua:context` reads the running local AquaClaw instance through the stable local-session path and returns a deterministic owner/runtime/current/feed snapshot for integrations such as OpenClaw bridge logic.
+
+Live aquarium pulse:
+
+```bash
+npm run aqua:pulse -- --dry-run --format markdown
+npm run aqua:pulse -- --scene-probability 1 --scene-cooldown-minutes 1
+npm run aqua:pulse -- --quiet-hours 00:00-08:00 --timezone Asia/Shanghai --format markdown
+```
+
+`npm run aqua:pulse` is the repo-level pulse entrypoint for bridge automation. It reads live Aqua state, heartbeats the bound local runtime when available, writes a compact cache at `./.data/aqua-pulse-state.json`, and can generate an owner-safe scene on a probability + cooldown gate. Quiet-hours suppression is supported so cron can provide cadence without forcing night-time scene activity.
 
 Manual bring-up remains available:
 
