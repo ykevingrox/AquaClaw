@@ -2,6 +2,30 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/app.js';
 
+async function registerGateway(
+  app: ReturnType<typeof buildApp>,
+  payload: { displayName: string; handle: string; bio?: string; visibility?: string },
+) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload,
+  });
+  assert.equal(response.statusCode, 201);
+  const json = response.json();
+  return {
+    token: json.data.credential.token as string,
+    gateway: json.data.gateway as {
+      id: string;
+      handle: string;
+      displayName: string;
+      bio: string;
+      visibility: string;
+      createdAt: string;
+    },
+  };
+}
+
 test('health endpoint returns ok', async () => {
   const app = buildApp();
   const response = await app.inject({ method: 'GET', url: '/health' });
@@ -1697,6 +1721,300 @@ test('blocking hides public profiles and search results from the blocked side', 
   });
   assert.equal(search.statusCode, 200);
   assert.equal(search.json().data.items.some((item: { id: string }) => item.id === alphaId), false);
+
+  await app.close();
+});
+
+test('audit endpoint records representative critical actions', async () => {
+  const app = buildApp();
+
+  const alpha = await registerGateway(app, {
+    displayName: 'Audit Alpha',
+    handle: 'audit-alpha',
+    visibility: 'public',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Audit Beta',
+    handle: 'audit-beta',
+    visibility: 'public',
+  });
+  const gamma = await registerGateway(app, {
+    displayName: 'Audit Gamma',
+    handle: 'audit-gamma',
+    visibility: 'public',
+  });
+
+  const profileUpdate = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/gateways/me',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: {
+      displayName: 'Audit Alpha Updated',
+      visibility: 'friends_only',
+    },
+  });
+  assert.equal(profileUpdate.statusCode, 200);
+
+  const invite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: { maxUses: 2 },
+  });
+  assert.equal(invite.statusCode, 201);
+  const inviteCode = invite.json().data.invite.code as string;
+
+  const claim = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: { authorization: `Bearer ${beta.token}` },
+    payload: { code: inviteCode },
+  });
+  assert.equal(claim.statusCode, 200);
+  const claimedRequestId = claim.json().data.friendRequest.id as string;
+
+  const accepted = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${claimedRequestId}/accept`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(accepted.statusCode, 200);
+  const conversationId = accepted.json().data.conversation.id as string;
+
+  const scopeUpdate = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/friends/${beta.gateway.id}/scopes`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: {
+      updates: [{ scopeName: 'task.request', state: 'granted' }],
+    },
+  });
+  assert.equal(scopeUpdate.statusCode, 200);
+
+  const message = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${beta.token}` },
+    payload: { body: 'audit trail message' },
+  });
+  assert.equal(message.statusCode, 201);
+
+  const removeFriend = await app.inject({
+    method: 'DELETE',
+    url: `/api/v1/friends/${beta.gateway.id}`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(removeFriend.statusCode, 200);
+
+  const gammaRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${gamma.token}` },
+    payload: { toGatewayId: alpha.gateway.id, message: 'hello alpha' },
+  });
+  assert.equal(gammaRequest.statusCode, 201);
+  const gammaRequestId = gammaRequest.json().data.request.id as string;
+
+  const rejected = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${gammaRequestId}/reject`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(rejected.statusCode, 200);
+
+  const blocked = await app.inject({
+    method: 'POST',
+    url: '/api/v1/blocks',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: { gatewayId: gamma.gateway.id, reason: 'audit coverage' },
+  });
+  assert.equal(blocked.statusCode, 201);
+
+  const unblocked = await app.inject({
+    method: 'DELETE',
+    url: `/api/v1/blocks/${gamma.gateway.id}`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(unblocked.statusCode, 200);
+
+  const audit = await app.inject({
+    method: 'GET',
+    url: '/api/v1/audit',
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(audit.statusCode, 200);
+
+  const actions = audit.json().data.items.map((item: { action: string }) => item.action);
+  const uniqueActions = new Set(actions);
+  assert.equal(uniqueActions.has('gateway.registered'), true);
+  assert.equal(uniqueActions.has('gateway.profile_updated'), true);
+  assert.equal(uniqueActions.has('invite.created'), true);
+  assert.equal(uniqueActions.has('invite.claimed'), true);
+  assert.equal(uniqueActions.has('friend_request.created'), true);
+  assert.equal(uniqueActions.has('friend_request.accepted'), true);
+  assert.equal(uniqueActions.has('friend_request.rejected'), true);
+  assert.equal(uniqueActions.has('friend.removed'), true);
+  assert.equal(uniqueActions.has('gateway.blocked'), true);
+  assert.equal(uniqueActions.has('gateway.unblocked'), true);
+  assert.equal(uniqueActions.has('friend.scope_changed'), true);
+  assert.equal(uniqueActions.has('message.sent'), true);
+
+  await app.close();
+});
+
+test('audit endpoint filters by actor, target, action, and cursor', async () => {
+  const app = buildApp();
+
+  const alpha = await registerGateway(app, {
+    displayName: 'Filter Alpha',
+    handle: 'filter-alpha',
+    visibility: 'public',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Filter Beta',
+    handle: 'filter-beta',
+    visibility: 'public',
+  });
+
+  const profileUpdate = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/gateways/me',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: { bio: 'filter bio' },
+  });
+  assert.equal(profileUpdate.statusCode, 200);
+
+  const request = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: { toGatewayId: beta.gateway.id, message: 'filter request' },
+  });
+  assert.equal(request.statusCode, 201);
+
+  const fullAudit = await app.inject({
+    method: 'GET',
+    url: '/api/v1/audit',
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(fullAudit.statusCode, 200);
+  const fullItems = fullAudit.json().data.items as Array<{ id: string; actorGatewayId: string | null; targetGatewayId: string | null; action: string }>;
+  assert.equal(fullItems.length >= 4, true);
+
+  const actorFiltered = await app.inject({
+    method: 'GET',
+    url: `/api/v1/audit?actorGatewayId=${alpha.gateway.id}`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(actorFiltered.statusCode, 200);
+  assert.equal(
+    actorFiltered.json().data.items.every((item: { actorGatewayId: string | null }) => item.actorGatewayId === alpha.gateway.id),
+    true,
+  );
+
+  const targetFiltered = await app.inject({
+    method: 'GET',
+    url: `/api/v1/audit?targetGatewayId=${beta.gateway.id}`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(targetFiltered.statusCode, 200);
+  assert.equal(
+    targetFiltered.json().data.items.every((item: { targetGatewayId: string | null }) => item.targetGatewayId === beta.gateway.id),
+    true,
+  );
+
+  const actionFiltered = await app.inject({
+    method: 'GET',
+    url: '/api/v1/audit?action=gateway.profile_updated',
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(actionFiltered.statusCode, 200);
+  assert.deepEqual(
+    actionFiltered.json().data.items.map((item: { action: string }) => item.action),
+    ['gateway.profile_updated'],
+  );
+
+  const cursorFiltered = await app.inject({
+    method: 'GET',
+    url: `/api/v1/audit?cursor=${fullItems[0]!.id}`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(cursorFiltered.statusCode, 200);
+  const cursorItems = cursorFiltered.json().data.items as Array<{ id: string }>;
+  assert.equal(cursorItems.some((item) => item.id === fullItems[0]!.id), false);
+  assert.equal(cursorItems.length, fullItems.length - 1);
+
+  await app.close();
+});
+
+test('message audit stores metadata without full message body text', async () => {
+  const app = buildApp();
+
+  const alpha = await registerGateway(app, {
+    displayName: 'Message Audit Alpha',
+    handle: 'message-audit-alpha',
+    visibility: 'public',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Message Audit Beta',
+    handle: 'message-audit-beta',
+    visibility: 'public',
+  });
+
+  const request = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: { toGatewayId: beta.gateway.id },
+  });
+  assert.equal(request.statusCode, 201);
+  const requestId = request.json().data.request.id as string;
+
+  const accepted = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(accepted.statusCode, 200);
+  const conversationId = accepted.json().data.conversation.id as string;
+
+  const body = 'super secret dm body';
+  const sent = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: { body },
+  });
+  assert.equal(sent.statusCode, 201);
+  const messageId = sent.json().data.message.id as string;
+
+  const audit = await app.inject({
+    method: 'GET',
+    url: '/api/v1/audit?action=message.sent',
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(audit.statusCode, 200);
+
+  const entry = audit.json().data.items.find((item: { metadata: { messageId?: string } }) => item.metadata.messageId === messageId) as {
+    actorGatewayId: string | null;
+    targetGatewayId: string | null;
+    metadata: {
+      messageId: string;
+      conversationId: string;
+      messageType: string;
+      bodyLength: number;
+      body?: string;
+    };
+  };
+
+  assert.equal(entry.actorGatewayId, alpha.gateway.id);
+  assert.equal(entry.targetGatewayId, beta.gateway.id);
+  assert.equal(entry.metadata.messageId, messageId);
+  assert.equal(entry.metadata.conversationId, conversationId);
+  assert.equal(entry.metadata.messageType, 'text');
+  assert.equal(entry.metadata.bodyLength, body.length);
+  assert.equal('body' in entry.metadata, false);
+  assert.equal(JSON.stringify(entry.metadata).includes(body), false);
 
   await app.close();
 });

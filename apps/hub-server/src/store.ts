@@ -89,6 +89,15 @@ export interface MessageRecord {
   createdAt: string;
 }
 
+export interface AuditRecord {
+  id: string;
+  actorGatewayId: string | null;
+  targetGatewayId: string | null;
+  action: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
 interface RegisterInput {
   displayName: string;
   handle: string;
@@ -143,9 +152,18 @@ interface CreateBlockInput {
   reason?: string;
 }
 
+interface ListAuditRecordsInput {
+  actorGatewayId?: string;
+  targetGatewayId?: string;
+  action?: string;
+  cursor?: string;
+  limit?: number;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 const ONLINE_THRESHOLD_MS = 90_000;
 const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
+const DEFAULT_AUDIT_PAGE_SIZE = 50;
 
 export class InMemoryGatewayStore {
   private readonly gatewaysById = new Map<string, GatewayRecord>();
@@ -161,6 +179,7 @@ export class InMemoryGatewayStore {
   private readonly conversationsById = new Map<string, ConversationRecord>();
   private readonly messagesById = new Map<string, MessageRecord>();
   private readonly lastSeenAtByGatewayId = new Map<string, string>();
+  private readonly auditLog: AuditRecord[] = [];
 
   register(input: RegisterInput) {
     const normalizedHandle = input.handle.trim().toLowerCase();
@@ -195,6 +214,16 @@ export class InMemoryGatewayStore {
     this.gatewaysById.set(gateway.id, gateway);
     this.gatewaysByHandle.set(gateway.handle, gateway);
     this.tokensToGatewayId.set(token, gateway.id);
+    this.appendAuditRecord({
+      actorGatewayId: gateway.id,
+      targetGatewayId: gateway.id,
+      action: 'gateway.registered',
+      metadata: {
+        handle: gateway.handle,
+        visibility: gateway.visibility,
+      },
+      createdAt: now,
+    });
 
     return { gateway, token };
   }
@@ -268,6 +297,20 @@ export class InMemoryGatewayStore {
 
     this.gatewaysById.set(updated.id, updated);
     this.gatewaysByHandle.set(updated.handle, updated);
+    this.appendAuditRecord({
+      actorGatewayId: updated.id,
+      targetGatewayId: updated.id,
+      action: 'gateway.profile_updated',
+      metadata: {
+        changedFields: [
+          ...(existing.displayName !== updated.displayName ? ['displayName'] : []),
+          ...(existing.bio !== updated.bio ? ['bio'] : []),
+          ...(existing.visibility !== updated.visibility ? ['visibility'] : []),
+        ],
+        visibility: updated.visibility,
+      },
+      createdAt: updated.updatedAt,
+    });
     return updated;
   }
 
@@ -338,6 +381,17 @@ export class InMemoryGatewayStore {
 
     this.invitesById.set(invite.id, invite);
     this.invitesByCode.set(invite.code, invite);
+    this.appendAuditRecord({
+      actorGatewayId: invite.createdByGatewayId,
+      action: 'invite.created',
+      metadata: {
+        inviteId: invite.id,
+        code: invite.code,
+        maxUses: invite.maxUses,
+        expiresAt: invite.expiresAt,
+      },
+      createdAt: now,
+    });
     return invite;
   }
 
@@ -380,6 +434,17 @@ export class InMemoryGatewayStore {
     };
     this.invitesById.set(updatedInvite.id, updatedInvite);
     this.invitesByCode.set(updatedInvite.code, updatedInvite);
+    this.appendAuditRecord({
+      actorGatewayId: input.claimedByGatewayId,
+      targetGatewayId: updatedInvite.createdByGatewayId,
+      action: 'invite.claimed',
+      metadata: {
+        inviteId: updatedInvite.id,
+        code: updatedInvite.code,
+        useCount: updatedInvite.useCount,
+      },
+      createdAt: claim.createdAt,
+    });
 
     const friendRequest = this.createFriendRequest({
       fromGatewayId: input.claimedByGatewayId,
@@ -431,6 +496,16 @@ export class InMemoryGatewayStore {
     };
 
     this.friendRequestsById.set(request.id, request);
+    this.appendAuditRecord({
+      actorGatewayId: request.fromGatewayId,
+      targetGatewayId: request.toGatewayId,
+      action: 'friend_request.created',
+      metadata: {
+        requestId: request.id,
+        messageLength: request.message.length,
+      },
+      createdAt: now,
+    });
     return request;
   }
 
@@ -471,6 +546,17 @@ export class InMemoryGatewayStore {
     this.seedDefaultFriendScopes(request.toGatewayId, request.fromGatewayId);
 
     const conversation = this.ensureDmConversation(request.fromGatewayId, request.toGatewayId);
+    this.appendAuditRecord({
+      actorGatewayId: actingGatewayId,
+      targetGatewayId: request.fromGatewayId,
+      action: 'friend_request.accepted',
+      metadata: {
+        requestId: updatedRequest.id,
+        friendshipId: friendship.id,
+        conversationId: conversation.id,
+      },
+      createdAt: now,
+    });
 
     return { request: updatedRequest, friendship, conversation };
   }
@@ -495,6 +581,15 @@ export class InMemoryGatewayStore {
       respondedAt: now,
     };
     this.friendRequestsById.set(request.id, updatedRequest);
+    this.appendAuditRecord({
+      actorGatewayId: actingGatewayId,
+      targetGatewayId: request.fromGatewayId,
+      action: 'friend_request.rejected',
+      metadata: {
+        requestId: updatedRequest.id,
+      },
+      createdAt: now,
+    });
     return updatedRequest;
   }
 
@@ -511,6 +606,14 @@ export class InMemoryGatewayStore {
     this.friendshipsById.delete(friendship.id);
     this.clearFriendScopes(gatewayAId, gatewayBId);
     this.clearFriendScopes(gatewayBId, gatewayAId);
+    this.appendAuditRecord({
+      actorGatewayId: gatewayAId,
+      targetGatewayId: gatewayBId,
+      action: 'friend.removed',
+      metadata: {
+        friendshipId: friendship.id,
+      },
+    });
     return friendship;
   }
 
@@ -540,6 +643,15 @@ export class InMemoryGatewayStore {
       createdAt: new Date().toISOString(),
     };
     this.blocksByKey.set(key, block);
+    this.appendAuditRecord({
+      actorGatewayId: block.blockerGatewayId,
+      targetGatewayId: block.blockedGatewayId,
+      action: 'gateway.blocked',
+      metadata: {
+        reasonLength: block.reason.length,
+      },
+      createdAt: block.createdAt,
+    });
     return block;
   }
 
@@ -550,6 +662,12 @@ export class InMemoryGatewayStore {
       throw new Error('block not found');
     }
     this.blocksByKey.delete(key);
+    this.appendAuditRecord({
+      actorGatewayId: blockerGatewayId,
+      targetGatewayId: blockedGatewayId,
+      action: 'gateway.unblocked',
+      metadata: {},
+    });
     return existing;
   }
 
@@ -624,7 +742,43 @@ export class InMemoryGatewayStore {
       this.friendScopesByKey.set(this.scopeKey(input.fromGatewayId, input.toGatewayId, update.scopeName), record);
     }
 
-    return this.listFriendScopes(input.fromGatewayId, input.toGatewayId);
+    const scopes = this.listFriendScopes(input.fromGatewayId, input.toGatewayId);
+    this.appendAuditRecord({
+      actorGatewayId: input.fromGatewayId,
+      targetGatewayId: input.toGatewayId,
+      action: 'friend.scope_changed',
+      metadata: {
+        updates: input.updates.map((update) => ({
+          scopeName: update.scopeName,
+          state: update.state,
+        })),
+      },
+      createdAt: now,
+    });
+    return scopes;
+  }
+
+  listAuditRecords(input: ListAuditRecordsInput = {}) {
+    const filtered = [...this.auditLog]
+      .reverse()
+      .filter((record) => !input.actorGatewayId || record.actorGatewayId === input.actorGatewayId)
+      .filter((record) => !input.targetGatewayId || record.targetGatewayId === input.targetGatewayId)
+      .filter((record) => !input.action || record.action === input.action);
+
+    const cursor = input.cursor?.trim();
+    const startIndex = cursor ? filtered.findIndex((record) => record.id === cursor) + 1 : 0;
+    if (cursor && startIndex === 0) {
+      throw new Error('invalid audit cursor');
+    }
+
+    const pageSize = Math.min(Math.max(input.limit ?? DEFAULT_AUDIT_PAGE_SIZE, 1), DEFAULT_AUDIT_PAGE_SIZE);
+    const items = filtered.slice(startIndex, startIndex + pageSize);
+    const nextCursor = startIndex + items.length < filtered.length && items.length > 0 ? items[items.length - 1]!.id : null;
+
+    return {
+      items,
+      nextCursor,
+    };
   }
 
   findConversationById(conversationId: string): ConversationRecord | null {
@@ -682,6 +836,18 @@ export class InMemoryGatewayStore {
     this.conversationsById.set(conversation.id, {
       ...conversation,
       updatedAt: now,
+    });
+    this.appendAuditRecord({
+      actorGatewayId: input.senderGatewayId,
+      targetGatewayId: peerGatewayId,
+      action: 'message.sent',
+      metadata: {
+        messageId: message.id,
+        conversationId: conversation.id,
+        messageType: message.messageType,
+        bodyLength: message.body.length,
+      },
+      createdAt: now,
     });
 
     return message;
@@ -795,6 +961,25 @@ export class InMemoryGatewayStore {
     return this.blocksByKey.has(this.blockKey(gatewayAId, gatewayBId)) || this.blocksByKey.has(this.blockKey(gatewayBId, gatewayAId));
   }
 
+  private appendAuditRecord(input: {
+    actorGatewayId?: string | null;
+    targetGatewayId?: string | null;
+    action: string;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+  }) {
+    const record: AuditRecord = {
+      id: randomUUID(),
+      actorGatewayId: input.actorGatewayId ?? null,
+      targetGatewayId: input.targetGatewayId ?? null,
+      action: input.action,
+      metadata: input.metadata ?? {},
+      createdAt: input.createdAt ?? new Date().toISOString(),
+    };
+    this.auditLog.push(record);
+    return record;
+  }
+
   private rejectPendingBetween(gatewayAId: string, gatewayBId: string) {
     const now = new Date().toISOString();
     for (const request of this.friendRequestsById.values()) {
@@ -842,6 +1027,7 @@ export class InMemoryGatewayStore {
     this.conversationsById.clear();
     this.messagesById.clear();
     this.lastSeenAtByGatewayId.clear();
+    this.auditLog.length = 0;
   }
 }
 

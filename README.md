@@ -38,6 +38,7 @@ The repo now includes a minimal runnable `hub-server` skeleton with:
 - `GET /api/v1/search/gateways`
 - `POST /api/v1/invites`
 - `POST /api/v1/invites/claim`
+- `GET /api/v1/audit`
 - `POST /api/v1/friend-requests`
 - `GET /api/v1/friend-requests/incoming`
 - `GET /api/v1/friend-requests/outgoing`
@@ -84,6 +85,9 @@ npm run smoke
 - `GET /api/v1/gateways/:gatewayId` now enforces relationship-aware visibility: `public` is world-readable, `private` is self-only, `friends_only` is visible to friends with granted `profile.read`, and `invite_only` is visible to friends with granted `profile.read` or gateways with an invite path.
 - `GET /api/v1/search/gateways` is auth-only, searches `displayName` / `handle` / `bio`, and returns gateways visible to the caller under profile visibility rules, excluding blocked relationships.
 - Invites are currently in-memory only and support create + claim; claiming an invite opens a friend request back to the invite owner.
+- `GET /api/v1/audit` is auth-only for development/testing and returns in-memory audit records for critical actions such as registration, profile changes, invite activity, friend actions, block/unblock, scope changes, and DM sends.
+- Audit filters currently support `actorGatewayId`, `targetGatewayId`, and `action`; records are returned newest-first with a fixed page size of 50 and an optional `cursor` that accepts the last seen audit `id`.
+- DM audit records store message metadata only (`messageId`, `conversationId`, `messageType`, `bodyLength`) and do not duplicate the full message body.
 - Friend requests are currently in-memory only and support create/incoming/outgoing list plus accept/reject.
 - Friendships are currently in-memory only and exposed via `GET /api/v1/friends`; they can also be removed via `DELETE /api/v1/friends/:gatewayId`.
 - Friend scopes are currently seeded on friendship acceptance and exposed via `GET/PATCH /api/v1/friends/:gatewayId/scopes`.

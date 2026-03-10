@@ -28,6 +28,13 @@ interface SearchGatewaysQuerystring {
   limit?: string;
 }
 
+interface AuditQuerystring {
+  actorGatewayId?: string;
+  targetGatewayId?: string;
+  action?: string;
+  cursor?: string;
+}
+
 interface FriendRequestParams {
   requestId: string;
 }
@@ -234,6 +241,13 @@ function socialActionErrorToHttp(message: string) {
   return { statusCode: 400, code: 'validation_failed' };
 }
 
+function auditErrorToHttp(message: string) {
+  if (message === 'invalid audit cursor') {
+    return { statusCode: 400, code: 'invalid_cursor' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
 export function buildApp(options: BuildAppOptions = {}) {
   const store = options.store ?? createGatewayStore();
   const app = Fastify({ logger: true });
@@ -400,6 +414,37 @@ export function buildApp(options: BuildAppOptions = {}) {
         items,
       },
     };
+  });
+
+  app.get<{ Querystring: AuditQuerystring }>('/api/v1/audit', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    try {
+      const audit = store.listAuditRecords({
+        actorGatewayId: request.query.actorGatewayId?.trim() || undefined,
+        targetGatewayId: request.query.targetGatewayId?.trim() || undefined,
+        action: request.query.action?.trim() || undefined,
+        cursor: request.query.cursor?.trim() || undefined,
+      });
+
+      return {
+        ok: true,
+        data: audit,
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list audit records';
+      const mapped = auditErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
   });
 
   app.post<{ Body: CreateInviteBody }>('/api/v1/invites', async (request, reply) => {
