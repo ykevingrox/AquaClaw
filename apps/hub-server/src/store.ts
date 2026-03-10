@@ -634,8 +634,12 @@ export class InMemoryGatewayStore {
   listConversations(gatewayId: string): Array<{ conversation: ConversationRecord; peerGateway: GatewayRecord }> {
     return Array.from(this.conversationsById.values())
       .filter((conversation) => conversation.memberGatewayIds.includes(gatewayId))
+      .filter((conversation) => {
+        const peerGatewayId = this.getConversationPeerGatewayId(conversation, gatewayId);
+        return this.isBlockedEitherWay(gatewayId, peerGatewayId) || this.hasGrantedDmScope(peerGatewayId, gatewayId, 'chat.receive');
+      })
       .map((conversation) => {
-        const peerGatewayId = conversation.memberGatewayIds[0] === gatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
+        const peerGatewayId = this.getConversationPeerGatewayId(conversation, gatewayId);
         const peerGateway = this.gatewaysById.get(peerGatewayId);
         return peerGateway ? { conversation, peerGateway } : null;
       })
@@ -651,9 +655,12 @@ export class InMemoryGatewayStore {
     if (!conversation.memberGatewayIds.includes(input.senderGatewayId)) {
       throw new Error('gateway is not a member of this conversation');
     }
-    const peerGatewayId = conversation.memberGatewayIds[0] === input.senderGatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
+    const peerGatewayId = this.getConversationPeerGatewayId(conversation, input.senderGatewayId);
     if (this.isBlockedEitherWay(input.senderGatewayId, peerGatewayId)) {
       throw new Error('blocked relationship');
+    }
+    if (!this.hasGrantedDmScope(peerGatewayId, input.senderGatewayId, 'chat.send')) {
+      throw new Error('chat send not allowed');
     }
 
     const body = input.body.trim();
@@ -688,9 +695,12 @@ export class InMemoryGatewayStore {
     if (!conversation.memberGatewayIds.includes(viewerGatewayId)) {
       throw new Error('gateway is not a member of this conversation');
     }
-    const peerGatewayId = conversation.memberGatewayIds[0] === viewerGatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
+    const peerGatewayId = this.getConversationPeerGatewayId(conversation, viewerGatewayId);
     if (this.isBlockedEitherWay(viewerGatewayId, peerGatewayId)) {
       throw new Error('blocked relationship');
+    }
+    if (!this.hasGrantedDmScope(peerGatewayId, viewerGatewayId, 'chat.receive')) {
+      throw new Error('chat receive not allowed');
     }
 
     return Array.from(this.messagesById.values())
@@ -723,10 +733,18 @@ export class InMemoryGatewayStore {
     return ['profile.read', 'presence.read', 'chat.send', 'chat.receive', 'task.request'];
   }
 
+  private getConversationPeerGatewayId(conversation: ConversationRecord, gatewayId: string) {
+    return conversation.memberGatewayIds[0] === gatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
+  }
+
   private clearFriendScopes(fromGatewayId: string, toGatewayId: string) {
     for (const scopeName of this.defaultScopeNames()) {
       this.friendScopesByKey.delete(this.scopeKey(fromGatewayId, toGatewayId, scopeName));
     }
+  }
+
+  private hasGrantedDmScope(ownerGatewayId: string, viewerGatewayId: string, scopeName: 'chat.send' | 'chat.receive') {
+    return this.areFriends(ownerGatewayId, viewerGatewayId) && this.hasGrantedFriendScope(ownerGatewayId, viewerGatewayId, scopeName);
   }
 
   private hasGrantedFriendScope(ownerGatewayId: string, viewerGatewayId: string, scopeName: ScopeName) {

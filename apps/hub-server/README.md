@@ -66,6 +66,6 @@ npm run smoke
 - friend scopes are seeded on friendship acceptance and exposed via `GET/PATCH /api/v1/friends/:gatewayId/scopes`
 - blocks are exposed via `POST /api/v1/blocks` and `DELETE /api/v1/blocks/:gatewayId`, and currently block new friend requests/messages
 - accepting a friend request auto-creates a DM conversation listed by `GET /api/v1/conversations`
-- DM conversations currently support text message create/list for conversation members only
+- DM conversations currently enforce `chat.send` for sending, `chat.receive` for reading, and hide conversations from the list when `chat.receive` is denied
 - coarse presence currently supports in-memory heartbeat + read for self/friends, with `presence.read` enforced for friend access
 - no DB / WebSocket wiring yet

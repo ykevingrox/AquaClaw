@@ -943,6 +943,181 @@ test('conversation members can send and list dm messages', async () => {
   await app.close();
 });
 
+test('denying chat.send blocks sending but still allows reading when chat.receive remains granted', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Chat Send', handle: 'alpha-chat-send' },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+  const alphaGatewayId = alphaRegister.json().data.gateway.id as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Chat Send', handle: 'beta-chat-send' },
+  });
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accept = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  const conversationId = accept.json().data.conversation.id as string;
+
+  const initialSend = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { body: 'before deny' },
+  });
+  assert.equal(initialSend.statusCode, 201);
+
+  const denySend = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/friends/${alphaGatewayId}/scopes`,
+    headers: { authorization: `Bearer ${betaToken}` },
+    payload: {
+      updates: [{ scopeName: 'chat.send', state: 'denied' }],
+    },
+  });
+  assert.equal(denySend.statusCode, 200);
+
+  const deniedSend = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { body: 'after deny' },
+  });
+  assert.equal(deniedSend.statusCode, 403);
+  assert.equal(deniedSend.json().error.code, 'forbidden');
+
+  const listed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/conversations',
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(listed.statusCode, 200);
+  assert.deepEqual(
+    listed.json().data.items.map((item: { id: string; peer: { handle: string } }) => ({ id: item.id, peer: item.peer.handle })),
+    [{ id: conversationId, peer: 'beta-chat-send' }],
+  );
+
+  const readable = await app.inject({
+    method: 'GET',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(readable.statusCode, 200);
+  assert.equal(readable.json().data.items.length, 1);
+  assert.equal(readable.json().data.items[0].body, 'before deny');
+
+  await app.close();
+});
+
+test('denying chat.receive blocks reading and hides the conversation from the list', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Chat Receive', handle: 'alpha-chat-receive' },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+  const alphaGatewayId = alphaRegister.json().data.gateway.id as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Chat Receive', handle: 'beta-chat-receive' },
+  });
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accept = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  const conversationId = accept.json().data.conversation.id as string;
+
+  const seedMessage = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${betaToken}` },
+    payload: { body: 'beta says hi' },
+  });
+  assert.equal(seedMessage.statusCode, 201);
+
+  const denyReceive = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/friends/${alphaGatewayId}/scopes`,
+    headers: { authorization: `Bearer ${betaToken}` },
+    payload: {
+      updates: [{ scopeName: 'chat.receive', state: 'denied' }],
+    },
+  });
+  assert.equal(denyReceive.statusCode, 200);
+
+  const hiddenFromList = await app.inject({
+    method: 'GET',
+    url: '/api/v1/conversations',
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(hiddenFromList.statusCode, 200);
+  assert.deepEqual(hiddenFromList.json().data.items, []);
+
+  const deniedRead = await app.inject({
+    method: 'GET',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(deniedRead.statusCode, 403);
+  assert.equal(deniedRead.json().error.code, 'forbidden');
+
+  const betaList = await app.inject({
+    method: 'GET',
+    url: '/api/v1/conversations',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(betaList.statusCode, 200);
+  assert.deepEqual(
+    betaList.json().data.items.map((item: { id: string; peer: { handle: string } }) => ({ id: item.id, peer: item.peer.handle })),
+    [{ id: conversationId, peer: 'alpha-chat-receive' }],
+  );
+
+  const betaRead = await app.inject({
+    method: 'GET',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(betaRead.statusCode, 200);
+  assert.equal(betaRead.json().data.items.length, 1);
+  assert.equal(betaRead.json().data.items[0].body, 'beta says hi');
+
+  await app.close();
+});
+
 test('non-members cannot read or send conversation messages', async () => {
   const app = buildApp();
 

@@ -179,7 +179,11 @@ function conversationErrorToHttp(message: string) {
   if (message === 'conversation not found') {
     return { statusCode: 404, code: 'not_found' };
   }
-  if (message === 'gateway is not a member of this conversation') {
+  if (
+    message === 'gateway is not a member of this conversation' ||
+    message === 'chat send not allowed' ||
+    message === 'chat receive not allowed'
+  ) {
     return { statusCode: 403, code: 'forbidden' };
   }
   if (message === 'blocked relationship') {
