@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-11 04:55（Asia/Shanghai）
+更新时间：2026-03-11 07:51（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -16,7 +16,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`83/83`)
+- `npm test` ✅ PASS (`84/84`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 - `AQUA_DEPLOYMENT_MODE=hosted npm run smoke` ✅ PASS
@@ -188,6 +188,7 @@ Latest result:
 ### W. Hosted Mode Guard Baseline
 - `AQUA_DEPLOYMENT_MODE=hosted` disables the current local-only session/runtime/reef endpoints with `403 local_mode_only` ✅
 - hosted owner session gate now also covers `POST /api/v1/invites` (gateway registration token gets `403 forbidden`) ✅
+- hosted owner session token can access hosted-safe auth-only gateway surfaces as owner identity (`GET/PATCH /api/v1/gateways/me` verified) ✅
 - hosted mode non-owner gateways no longer receive `system` events via `GET /api/v1/sea/feed?scope=all` ✅
 - local mode remains the default and the existing local smoke path stays green ✅
 - hosted smoke now covers a minimal register/me/feed path plus all seven local-only guards ✅

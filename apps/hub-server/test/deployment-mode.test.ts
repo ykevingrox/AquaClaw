@@ -266,6 +266,59 @@ test('hosted bootstrap requires configured key and supports hosted session lifec
   await app.close();
 });
 
+test('hosted owner session token can access hosted-safe gateway surfaces as owner identity', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const hostedBootstrap = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-hosted',
+    payload: {
+      bootstrapKey: 'hosted-secret',
+      displayName: 'Hosted Owner',
+      handle: 'hosted-owner-gateway-surfaces',
+    },
+  });
+  assert.equal(hostedBootstrap.statusCode, 201);
+
+  const ownerGatewayId = hostedBootstrap.json().data.gateway.id as string;
+  const ownerToken = hostedBootstrap.json().data.credential.token as string;
+
+  const me = await app.inject({
+    method: 'GET',
+    url: '/api/v1/gateways/me',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  assert.equal(me.statusCode, 200);
+  assert.equal(me.json().data.gateway.id, ownerGatewayId);
+
+  const updateProfile = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/gateways/me',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      bio: 'Hosted owner profile update via hosted session token.',
+    },
+  });
+  assert.equal(updateProfile.statusCode, 200);
+  assert.equal(updateProfile.json().data.gateway.id, ownerGatewayId);
+  assert.equal(updateProfile.json().data.gateway.bio, 'Hosted owner profile update via hosted session token.');
+
+  const ownerMineFeed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sea/feed?scope=mine',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  assert.equal(ownerMineFeed.statusCode, 200);
+
+  await app.close();
+});
+
 test('hosted owner session gate protects owner-only hosted-session/current/audit/system feed/stream/invite endpoints from gateway tokens', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 

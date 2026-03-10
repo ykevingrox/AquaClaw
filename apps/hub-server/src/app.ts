@@ -204,16 +204,21 @@ function getAuthedGateway(store: GatewayStore, authorization: string | undefined
   }
 
   const gateway = store.findByToken(token);
-  if (!gateway) {
-    return {
-      error: {
-        code: 'unauthorized',
-        message: 'invalid bearer token',
-      },
-    } as const;
+  if (gateway) {
+    return { gateway } as const;
   }
 
-  return { gateway } as const;
+  const hostedSession = store.findHostedSessionByToken(token);
+  if (hostedSession) {
+    return { gateway: hostedSession.gateway } as const;
+  }
+
+  return {
+    error: {
+      code: 'unauthorized',
+      message: 'invalid bearer token',
+    },
+  } as const;
 }
 
 function getOptionalAuthedGateway(store: GatewayStore, authorization: string | undefined) {

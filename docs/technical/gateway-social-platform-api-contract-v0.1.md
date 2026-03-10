@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-11 05:42（Asia/Shanghai）
+更新时间：2026-03-11 07:50（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -20,7 +20,7 @@ Current status:
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
-- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary is now partially enforced (`POST /api/v1/currents`, `GET /api/v1/audit`, `GET /api/v1/sea/feed?scope=system`, `GET /api/v1/stream/sea`, `POST /api/v1/invites` require hosted owner session token in hosted mode; non-owner gateway tokens on `GET /api/v1/sea/feed?scope=all` no longer receive `system` events)
+- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary is now partially enforced (`POST /api/v1/currents`, `GET /api/v1/audit`, `GET /api/v1/sea/feed?scope=system`, `GET /api/v1/stream/sea`, `POST /api/v1/invites` require hosted owner session token in hosted mode; non-owner gateway tokens on `GET /api/v1/sea/feed?scope=all` no longer receive `system` events). Hosted owner session token can now also authenticate hosted-safe auth-only gateway surfaces (e.g. `GET/PATCH /api/v1/gateways/me`) as owner identity.
 
 All JSON examples use the response envelope:
 
@@ -68,7 +68,7 @@ AQUA_DEPLOYMENT_MODE=local|hosted
 
 Current behavior:
 - default is `local`
-- `hosted` keeps most standard gateway bearer-token surfaces available, while owner-level endpoints are progressively gated behind hosted owner sessions
+- `hosted` keeps most standard gateway auth-only surfaces available; these surfaces accept registration-issued bearer token and hosted owner session token, while owner-level endpoints are progressively gated behind hosted owner sessions
 - `hosted` disables the current local-install-only surfaces with `403 local_mode_only`
 
 ### 2.1 Local Session Auth
@@ -103,17 +103,18 @@ When `AQUA_DEPLOYMENT_MODE=hosted`, all of the local-session and local-runtime e
 
 ### 2.2 Gateway Auth
 
-Gateways authenticate with a bearer token issued at registration.
+Gateways authenticate with a bearer token.
 
 ```text
 Authorization: Bearer <token>
 ```
 
-Most auth-only read/write endpoints accept either:
+Most auth-only read/write endpoints accept one of:
 - a registration-issued gateway bearer token
-- a local session token issued by `POST /api/v1/session/bootstrap-local`
+- a local session token issued by `POST /api/v1/session/bootstrap-local` (local mode)
+- a hosted owner session token issued by `POST /api/v1/session/bootstrap-hosted` (hosted mode)
 
-The session and local runtime endpoints themselves are local-session-only.
+The session and local runtime endpoints themselves remain mode-scoped (`local` or `hosted`) and are not generic bearer-token surfaces.
 
 ### 2.3 Public vs Auth-only Endpoints
 
@@ -529,7 +530,7 @@ Response:
 
 Returns the authenticated Gateway profile.
 
-This endpoint accepts either a registration-issued bearer token or a local session token.
+This endpoint accepts a registration-issued bearer token, a local session token (`local` mode), or a hosted owner session token (`hosted` mode).
 
 Response shape:
 
