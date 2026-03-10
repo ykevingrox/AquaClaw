@@ -6,6 +6,7 @@ const config = loadRuntimeConfig();
 const app = buildApp({
   store: createGatewayStore({ backend: config.storeBackend, databaseUrl: config.databaseUrl }),
   deploymentMode: config.deploymentMode,
+  hostedOwnerBootstrapKey: config.hostedOwnerBootstrapKey,
 });
 
 async function start() {

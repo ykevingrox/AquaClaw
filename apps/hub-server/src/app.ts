@@ -8,6 +8,7 @@ import { createGatewayStore, type EncounterRecord, type GatewayStore, type Gatew
 interface BuildAppOptions {
   store?: GatewayStore;
   deploymentMode?: DeploymentMode;
+  hostedOwnerBootstrapKey?: string | null;
 }
 
 interface RegisterBody {
@@ -18,6 +19,14 @@ interface RegisterBody {
 }
 
 interface BootstrapLocalSessionBody {
+  displayName?: string;
+  handle?: string;
+  bio?: string;
+  visibility?: GatewayVisibility;
+}
+
+interface BootstrapHostedSessionBody {
+  bootstrapKey?: string;
   displayName?: string;
   handle?: string;
   bio?: string;
@@ -235,6 +244,30 @@ function getAuthedLocalSession(store: GatewayStore, authorization: string | unde
   return session;
 }
 
+function getAuthedHostedSession(store: GatewayStore, authorization: string | undefined) {
+  const token = extractBearerToken(authorization);
+  if (!token) {
+    return {
+      error: {
+        code: 'unauthorized',
+        message: 'missing or invalid hosted session token',
+      },
+    } as const;
+  }
+
+  const session = store.findHostedSessionByToken(token);
+  if (!session) {
+    return {
+      error: {
+        code: 'unauthorized',
+        message: 'invalid hosted session token',
+      },
+    } as const;
+  }
+
+  return session;
+}
+
 function toGatewaySummary(gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
   return {
     id: gateway.id,
@@ -301,6 +334,15 @@ function toLocalSessionSummary(session: { id: string; gatewayId: string; created
     gatewayId: session.gatewayId,
     createdAt: session.createdAt,
     kind: 'local_session',
+  };
+}
+
+function toHostedSessionSummary(session: { id: string; gatewayId: string; createdAt: string }) {
+  return {
+    id: session.id,
+    gatewayId: session.gatewayId,
+    createdAt: session.createdAt,
+    kind: 'hosted_session',
   };
 }
 
@@ -519,9 +561,20 @@ function sendLocalModeOnly(reply: FastifyReply) {
   });
 }
 
+function sendHostedModeOnly(reply: FastifyReply) {
+  return reply.code(403).send({
+    ok: false,
+    error: {
+      code: 'hosted_mode_only',
+      message: 'endpoint is only available in hosted deployment mode',
+    },
+  });
+}
+
 export function buildApp(options: BuildAppOptions = {}) {
   const store = options.store ?? createGatewayStore();
   const deploymentMode = options.deploymentMode ?? 'local';
+  const hostedOwnerBootstrapKey = options.hostedOwnerBootstrapKey ?? process.env.AQUA_HOSTED_OWNER_BOOTSTRAP_KEY ?? null;
   const app = Fastify({ logger: true });
   const liveHub = new SeaLiveHub(store);
   const detachLiveSource = isSeaEventLiveSource(store) ? liveHub.attach(store) : null;
@@ -643,6 +696,155 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
 
     store.logoutLocalSession(token);
+    return {
+      ok: true,
+      data: {
+        loggedOut: true,
+        sessionId: session.session.id,
+      },
+    };
+  });
+
+  app.post<{ Body: BootstrapHostedSessionBody }>('/api/v1/session/bootstrap-hosted', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const configuredBootstrapKey = hostedOwnerBootstrapKey?.trim();
+    if (!configuredBootstrapKey) {
+      return reply.code(503).send({
+        ok: false,
+        error: {
+          code: 'hosted_bootstrap_not_configured',
+          message: 'AQUA_HOSTED_OWNER_BOOTSTRAP_KEY is required for hosted owner bootstrap',
+        },
+      });
+    }
+
+    const { bootstrapKey, displayName, handle, bio, visibility } = request.body ?? {};
+    if (typeof bootstrapKey !== 'string' || !bootstrapKey.trim()) {
+      return reply.code(401).send({
+        ok: false,
+        error: {
+          code: 'unauthorized',
+          message: 'bootstrapKey is required',
+        },
+      });
+    }
+    if (bootstrapKey.trim() !== configuredBootstrapKey) {
+      return reply.code(401).send({
+        ok: false,
+        error: {
+          code: 'unauthorized',
+          message: 'invalid bootstrapKey',
+        },
+      });
+    }
+
+    if (displayName !== undefined && (typeof displayName !== 'string' || !displayName.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'displayName must be a non-empty string when provided',
+        },
+      });
+    }
+    if (handle !== undefined && (typeof handle !== 'string' || !handle.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'handle must be a non-empty string when provided',
+        },
+      });
+    }
+    if (bio !== undefined && typeof bio !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'bio must be a string when provided',
+        },
+      });
+    }
+
+    try {
+      const result = store.bootstrapHostedSession({
+        displayName,
+        handle,
+        bio,
+        visibility,
+      });
+
+      return reply.code(result.createdOwner ? 201 : 200).send({
+        ok: true,
+        data: {
+          gateway: result.gateway,
+          session: toHostedSessionSummary(result.session),
+          credential: {
+            token: result.session.token,
+            kind: 'hosted_session',
+          },
+          owner: {
+            isPrimary: true,
+            created: result.createdOwner,
+          },
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to bootstrap hosted session';
+      const statusCode = message === 'handle already exists' ? 409 : 400;
+      return reply.code(statusCode).send({
+        ok: false,
+        error: {
+          code: statusCode === 409 ? 'handle_conflict' : 'validation_failed',
+          message,
+        },
+      });
+    }
+  });
+
+  app.get('/api/v1/session/hosted/me', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const result = getAuthedHostedSession(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    return {
+      ok: true,
+      data: {
+        gateway: result.gateway,
+        session: toHostedSessionSummary(result.session),
+        owner: {
+          isPrimary: true,
+        },
+      },
+    };
+  });
+
+  app.post('/api/v1/session/hosted/logout', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const token = extractBearerToken(request.headers.authorization);
+    const session = token ? store.findHostedSessionByToken(token) : null;
+    if (!token || !session) {
+      return reply.code(401).send({
+        ok: false,
+        error: {
+          code: 'unauthorized',
+          message: 'invalid hosted session token',
+        },
+      });
+    }
+
+    store.logoutHostedSession(token);
     return {
       ok: true,
       data: {

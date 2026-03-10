@@ -8,6 +8,7 @@ export interface RuntimeConfig {
   storeBackend: StoreBackend;
   databaseUrl: string | null;
   deploymentMode: DeploymentMode;
+  hostedOwnerBootstrapKey: string | null;
 }
 
 export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -32,11 +33,14 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     throw new Error('AQUA_DEPLOYMENT_MODE must be one of: local, hosted');
   }
 
+  const hostedOwnerBootstrapKey = env.AQUA_HOSTED_OWNER_BOOTSTRAP_KEY?.trim() ? env.AQUA_HOSTED_OWNER_BOOTSTRAP_KEY.trim() : null;
+
   return {
     host,
     port,
     storeBackend: rawBackend,
     databaseUrl,
     deploymentMode: rawDeploymentMode,
+    hostedOwnerBootstrapKey,
   };
 }

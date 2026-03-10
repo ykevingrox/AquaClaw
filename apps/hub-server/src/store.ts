@@ -197,6 +197,13 @@ export interface LocalSessionRecord {
   createdAt: string;
 }
 
+export interface HostedSessionRecord {
+  id: string;
+  gatewayId: string;
+  token: string;
+  createdAt: string;
+}
+
 export interface LocalRuntimeBindingRecord {
   id: string;
   installationId: string;
@@ -230,7 +237,9 @@ export interface GatewayStoreSnapshot {
   gateways: GatewayRecord[];
   gatewayTokens: GatewayTokenSnapshotRecord[];
   localOwnerGatewayId?: string | null;
+  hostedOwnerGatewayId?: string | null;
   localSessions?: LocalSessionRecord[];
+  hostedSessions?: HostedSessionRecord[];
   localRuntimeBinding?: LocalRuntimeBindingRecord | null;
   presenceHeartbeats: GatewayPresenceSnapshotRecord[];
   friendRequests: FriendRequestRecord[];
@@ -259,6 +268,13 @@ export interface GatewayStore {
     session: LocalSessionRecord;
     createdOwner: boolean;
   };
+  bootstrapHostedSession(input?: BootstrapHostedSessionInput): {
+    gateway: GatewayRecord;
+    session: HostedSessionRecord;
+    createdOwner: boolean;
+  };
+  findHostedSessionByToken(token: string): { gateway: GatewayRecord; session: HostedSessionRecord } | null;
+  logoutHostedSession(token: string): HostedSessionRecord;
   getLocalRuntimeBinding(): LocalRuntimeBindingState | null;
   bindLocalRuntime(input: BindLocalRuntimeInput): {
     runtime: LocalRuntimeBindingState;
@@ -327,6 +343,13 @@ interface UpdateProfileInput {
 }
 
 interface BootstrapLocalSessionInput {
+  displayName?: string;
+  handle?: string;
+  bio?: string;
+  visibility?: GatewayVisibility;
+}
+
+interface BootstrapHostedSessionInput {
   displayName?: string;
   handle?: string;
   bio?: string;
@@ -507,6 +530,9 @@ const DEFAULT_SCENE_PAGE_SIZE = 50;
 const DEFAULT_LOCAL_OWNER_HANDLE = 'my-claw';
 const DEFAULT_LOCAL_OWNER_DISPLAY_NAME = 'My Claw';
 const DEFAULT_LOCAL_OWNER_BIO = 'Stable local owner gateway for AquaClaw.';
+const DEFAULT_HOSTED_OWNER_HANDLE = 'hosted-owner';
+const DEFAULT_HOSTED_OWNER_DISPLAY_NAME = 'Hosted Owner';
+const DEFAULT_HOSTED_OWNER_BIO = 'Primary hosted owner gateway for AquaClaw.';
 const DEFAULT_LOCAL_INSTALLATION_ID = 'local-installation';
 const DEFAULT_LOCAL_RUNTIME_ID = 'openclaw-local-runtime';
 const DEFAULT_LOCAL_RUNTIME_LABEL = 'Local OpenClaw Runtime';
@@ -629,6 +655,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly gatewaysByHandle = new Map<string, GatewayRecord>();
   private readonly tokensToGatewayId = new Map<string, string>();
   private readonly localSessionsByToken = new Map<string, LocalSessionRecord>();
+  private readonly hostedSessionsByToken = new Map<string, HostedSessionRecord>();
   private readonly friendRequestsById = new Map<string, FriendRequestRecord>();
   private readonly friendshipsById = new Map<string, FriendshipRecord>();
   private readonly friendScopesByKey = new Map<string, FriendScopeRecord>();
@@ -647,6 +674,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly scenesById = new Map<string, SceneRecord>();
   private readonly sceneIdsByGatewayId = new Map<string, string[]>();
   private localOwnerGatewayId: string | null = null;
+  private hostedOwnerGatewayId: string | null = null;
   private localRuntimeBinding: LocalRuntimeBindingRecord | null = null;
   private activeCurrentId: string | null = null;
 
@@ -687,10 +715,13 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       throw new Error('displayName is required');
     }
 
-    const token = seed?.token ?? randomBytes(24).toString('hex');
     this.gatewaysById.set(gateway.id, gateway);
     this.gatewaysByHandle.set(gateway.handle, gateway);
-    this.tokensToGatewayId.set(token, gateway.id);
+
+    const token = seed?.token ?? this.issueGatewayToken(gateway.id);
+    if (seed?.token) {
+      this.tokensToGatewayId.set(seed.token, gateway.id);
+    }
     this.appendAuditRecord({
       actorGatewayId: gateway.id,
       targetGatewayId: gateway.id,
@@ -703,6 +734,12 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     });
 
     return { gateway, token };
+  }
+
+  private issueGatewayToken(gatewayId: string) {
+    const token = randomBytes(24).toString('hex');
+    this.tokensToGatewayId.set(token, gatewayId);
+    return token;
   }
 
   bootstrapLocalSession(input: BootstrapLocalSessionInput = {}) {
@@ -749,6 +786,86 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       session,
       createdOwner,
     };
+  }
+
+  bootstrapHostedSession(input: BootstrapHostedSessionInput = {}) {
+    let gateway = this.hostedOwnerGatewayId ? this.gatewaysById.get(this.hostedOwnerGatewayId) ?? null : null;
+    let createdOwner = false;
+
+    if (!gateway) {
+      const handleBase = input.handle?.trim().toLowerCase() || DEFAULT_HOSTED_OWNER_HANDLE;
+      const registerResult = this.register({
+        displayName: input.displayName?.trim() || DEFAULT_HOSTED_OWNER_DISPLAY_NAME,
+        handle: this.resolveAvailableHandle(handleBase),
+        bio: input.bio?.trim() || DEFAULT_HOSTED_OWNER_BIO,
+        visibility: input.visibility ?? 'invite_only',
+      });
+
+      gateway = registerResult.gateway;
+      this.hostedOwnerGatewayId = gateway.id;
+      createdOwner = true;
+    }
+
+    const now = new Date().toISOString();
+    const session: HostedSessionRecord = {
+      id: `hosted-session-${randomUUID()}`,
+      gatewayId: gateway.id,
+      token: this.issueGatewayToken(gateway.id),
+      createdAt: now,
+    };
+
+    this.hostedSessionsByToken.set(session.token, session);
+    this.appendAuditRecord({
+      actorGatewayId: gateway.id,
+      targetGatewayId: gateway.id,
+      action: createdOwner ? 'session.hosted_bootstrapped' : 'session.hosted_resumed',
+      metadata: {
+        sessionId: session.id,
+        createdOwner,
+      },
+      createdAt: now,
+    });
+
+    return {
+      gateway,
+      session,
+      createdOwner,
+    };
+  }
+
+  findHostedSessionByToken(token: string) {
+    const session = this.hostedSessionsByToken.get(token) ?? null;
+    if (!session) {
+      return null;
+    }
+
+    const gateway = this.gatewaysById.get(session.gatewayId) ?? null;
+    if (!gateway) {
+      return null;
+    }
+
+    return { gateway, session };
+  }
+
+  logoutHostedSession(token: string) {
+    const session = this.hostedSessionsByToken.get(token);
+    if (!session) {
+      throw new Error('hosted session not found');
+    }
+
+    this.hostedSessionsByToken.delete(token);
+    this.tokensToGatewayId.delete(token);
+    this.appendAuditRecord({
+      actorGatewayId: session.gatewayId,
+      targetGatewayId: session.gatewayId,
+      action: 'session.hosted_logged_out',
+      metadata: {
+        sessionId: session.id,
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    return session;
   }
 
   getLocalRuntimeBinding() {
@@ -2772,7 +2889,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       gateways: [...this.gatewaysById.values()],
       gatewayTokens: [...this.tokensToGatewayId.entries()].map(([token, gatewayId]) => ({ token, gatewayId })),
       localOwnerGatewayId: this.localOwnerGatewayId,
+      hostedOwnerGatewayId: this.hostedOwnerGatewayId,
       localSessions: [...this.localSessionsByToken.values()],
+      hostedSessions: [...this.hostedSessionsByToken.values()],
       localRuntimeBinding: this.localRuntimeBinding,
       presenceHeartbeats: [...this.lastSeenAtByGatewayId.entries()].map(([gatewayId, lastSeenAt]) => ({
         gatewayId,
@@ -2814,8 +2933,12 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       this.tokensToGatewayId.set(tokenRecord.token, tokenRecord.gatewayId);
     }
     this.localOwnerGatewayId = snapshot.localOwnerGatewayId ?? null;
+    this.hostedOwnerGatewayId = snapshot.hostedOwnerGatewayId ?? null;
     for (const session of snapshot.localSessions ?? []) {
       this.localSessionsByToken.set(session.token, session);
+    }
+    for (const session of snapshot.hostedSessions ?? []) {
+      this.hostedSessionsByToken.set(session.token, session);
     }
     this.localRuntimeBinding = snapshot.localRuntimeBinding ?? null;
     for (const presenceRecord of snapshot.presenceHeartbeats) {
@@ -2868,6 +2991,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.gatewaysByHandle.clear();
     this.tokensToGatewayId.clear();
     this.localSessionsByToken.clear();
+    this.hostedSessionsByToken.clear();
     this.friendRequestsById.clear();
     this.friendshipsById.clear();
     this.friendScopesByKey.clear();
@@ -2885,6 +3009,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.scenesById.clear();
     this.sceneIdsByGatewayId.clear();
     this.localOwnerGatewayId = null;
+    this.hostedOwnerGatewayId = null;
     this.localRuntimeBinding = null;
     this.activeCurrentId = null;
   }

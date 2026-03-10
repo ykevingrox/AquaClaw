@@ -10,6 +10,7 @@ test('loadRuntimeConfig defaults to memory backend', () => {
   assert.equal(config.storeBackend, 'memory');
   assert.equal(config.databaseUrl, null);
   assert.equal(config.deploymentMode, 'local');
+  assert.equal(config.hostedOwnerBootstrapKey, null);
 });
 
 test('loadRuntimeConfig accepts sqlite backend', () => {
@@ -28,12 +29,14 @@ test('loadRuntimeConfig accepts postgres backend', () => {
     DATABASE_URL: 'postgres://postgres:postgres@127.0.0.1:5432/gateway_hub',
     PORT: '9999',
     HOST: '0.0.0.0',
+    AQUA_HOSTED_OWNER_BOOTSTRAP_KEY: 'hosted-secret',
   });
   assert.equal(config.host, '0.0.0.0');
   assert.equal(config.port, 9999);
   assert.equal(config.storeBackend, 'postgres');
   assert.equal(config.databaseUrl, 'postgres://postgres:postgres@127.0.0.1:5432/gateway_hub');
   assert.equal(config.deploymentMode, 'hosted');
+  assert.equal(config.hostedOwnerBootstrapKey, 'hosted-secret');
 });
 
 test('loadRuntimeConfig requires DATABASE_URL for sqlite backend', () => {
