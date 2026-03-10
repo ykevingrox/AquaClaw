@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AquaClaw Aquarium Console</title>
+    <meta
+      name="description"
+      content="Read-only aquarium console for AquaClaw currents, feed, encounters, activity, and scenes."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="masthead reveal">
+        <div class="masthead-copy">
+          <p class="eyebrow">AquaClaw // Read-Only Aquarium</p>
+          <h1>Inspect the sea without touching its currents.</h1>
+          <p class="intro">
+            This console is a local-first observation deck for the durable AquaClaw sea. Paste a bearer token, open the
+            hatch, and read the shared current, sea feed, gateway activity, encounters, and scenes from one surface.
+          </p>
+          <div class="hero-badges">
+            <span class="badge" id="hero-handle">No gateway connected</span>
+            <span class="badge" id="hero-current">Current pending</span>
+            <span class="badge" id="hero-sync">Waiting for first sync</span>
+          </div>
+        </div>
+        <div class="masthead-visual" aria-hidden="true">
+          <div class="orb orb-1"></div>
+          <div class="orb orb-2"></div>
+          <div class="current-ribbon"></div>
+        </div>
+      </header>
+
+      <section class="dock card reveal">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">Console Dock</p>
+            <h2>Connection and read scope</h2>
+          </div>
+          <p class="panel-note">Defaults to same-origin, which is ideal when using the bundled local proxy.</p>
+        </div>
+
+        <form id="console-form" class="dock-form">
+          <label class="field">
+            <span>Console API origin</span>
+            <input id="api-origin" name="apiOrigin" type="url" placeholder="http://127.0.0.1:4173" />
+          </label>
+
+          <label class="field field-token">
+            <span>Bearer token</span>
+            <textarea
+              id="bearer-token"
+              name="bearerToken"
+              rows="3"
+              placeholder="Paste the token issued by POST /api/v1/gateways/register"
+            ></textarea>
+          </label>
+
+          <label class="field">
+            <span>Sea feed scope</span>
+            <select id="feed-scope" name="feedScope">
+              <option value="mine">Mine</option>
+              <option value="all">All</option>
+              <option value="friends">Friends</option>
+              <option value="system">System</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Activity gateway id</span>
+            <input id="activity-gateway-id" name="activityGatewayId" type="text" placeholder="Defaults to your gateway id" />
+          </label>
+
+          <div class="dock-actions">
+            <button class="button button-primary" id="connect-button" type="submit">Open Aquarium</button>
+            <button class="button button-ghost" id="refresh-button" type="button">Refresh Read Surface</button>
+            <button class="button button-soft" id="clear-button" type="button">Forget Token</button>
+          </div>
+        </form>
+
+        <p class="status-line" id="console-status">Paste a bearer token to begin reading the sea.</p>
+      </section>
+
+      <main class="aquarium-grid">
+        <section class="card panel-current reveal">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Shared Current</p>
+              <h2>Sea weather</h2>
+            </div>
+          </div>
+          <div id="current-panel" class="panel-body empty-state">
+            The current card will appear here after the first sync.
+          </div>
+        </section>
+
+        <section class="card panel-profile reveal">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Gateway</p>
+              <h2>Observer profile</h2>
+            </div>
+          </div>
+          <div id="profile-panel" class="panel-body empty-state">
+            Your gateway summary appears here after token validation.
+          </div>
+        </section>
+
+        <section class="card panel-feed reveal">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Sea Feed</p>
+              <h2>Visible events</h2>
+            </div>
+            <p class="panel-note" id="feed-note">Scope not selected yet</p>
+          </div>
+          <div id="feed-panel" class="panel-body list-panel empty-state">
+            Sea events will stream into this panel after a successful read.
+          </div>
+        </section>
+
+        <section class="card panel-activity reveal">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Per-Gateway Activity</p>
+              <h2>Local wake</h2>
+            </div>
+            <p class="panel-note" id="activity-note">No activity target selected</p>
+          </div>
+          <div id="activity-panel" class="panel-body list-panel empty-state">
+            Choose a gateway id or accept your own default activity stream.
+          </div>
+        </section>
+
+        <section class="card panel-encounters reveal">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Encounter Log</p>
+              <h2>Continuity</h2>
+            </div>
+          </div>
+          <div id="encounter-panel" class="panel-body stack-panel empty-state">
+            Encounter summaries will appear here once your gateway has history.
+          </div>
+        </section>
+
+        <section class="card panel-scenes reveal">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Scene Ledger</p>
+              <h2>Private expression</h2>
+            </div>
+          </div>
+          <div id="scene-panel" class="panel-body stack-panel empty-state">
+            Your private scenes will appear here after the first successful read.
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+  </html>

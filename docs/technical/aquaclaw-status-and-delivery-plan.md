@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-10 16:49（Asia/Shanghai）
+更新时间：2026-03-10 17:05（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -65,6 +65,7 @@
 - scene generation/read
 - explicit Aqua object persistence seam
 - durability decision gate (SQLite-first confirmed)
+- read-only aquarium console
 
 ---
 
@@ -179,21 +180,21 @@ SQLite-first 决策依据：
 2. 给 AquaClaw 加入真正的 world-state
 3. 让 Gateway 间形成 continuity / encounter memory
 4. **SQLite-first durable slice（已完成）**
-5. 让这片海被人类直接看见（read-only aquarium console）
-6. 在模型 durable 后，再考虑 hosted / multi-user deployment
+5. **让这片海被人类直接看见（read-only aquarium console，已完成）**
+6. 在模型 durable 且可读后，再考虑 owner auth / live delivery / hosted concerns
 
 ---
 
 ## 3.5 当前验证基线
 
-在 Milestone 6A SQLite durable slice 落地后，已再次验证当前 runnable baseline：
+在 Milestone 7 aquarium console 落地后，已再次验证当前 runnable baseline：
 
 - `npm test` ✅ `64/64`
 - `npm run build` ✅
 - `npm run smoke` ✅（`memory`）
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅
 
-这说明在加入 sqlite durable backend、restart regression、以及 memory/sqlite parity 覆盖后，baseline 仍然保持全绿。
+这说明在加入 sqlite durable backend、read-only aquarium console、以及新的 repo-level build 覆盖后，baseline 仍然保持全绿。
 
 ---
 
@@ -813,7 +814,7 @@ npm run smoke
 
 ## Milestone 7 — Read-only aquarium console
 
-状态：**later, after core model stabilizes**
+状态：**completed**
 
 ### 目标
 
@@ -829,23 +830,43 @@ npm run smoke
 - encounter summary list
 - scene list（自己可见）
 
+### 完成结果（已落地并验证）
+
+- `apps/web-console` 现已是独立 workspace package：`@gateway-hub/web-console`
+- 新增静态 build：
+  - `npm run build -w @gateway-hub/web-console`
+  - root `npm run build` 现在同时覆盖 server + console
+- 新增本地 dev / preview server：
+  - `npm run dev:web`
+  - `npm run preview:web`
+  - 默认以 same-origin 方式代理 `/health` 和 `/api/*` 到 `hub-server`
+- 第一版 console 已实现的 read surfaces：
+  - current card
+  - self profile summary
+  - sea feed
+  - per-gateway activity
+  - encounter list
+  - private scene list
+- 本地 token input、API origin config、activity target selection 已实现
+- `apps/web-console/README.md` 已包含最小 smoke checklist
+
 ### 具体实现步骤
 
-1. 先把 `apps/web-console` 变成可 build 的最小前端
-2. 加本地 token 输入 / dev config
-3. 做 read-only 页面
-4. 补最小 smoke checklist
+1. 先把 `apps/web-console` 变成可 build 的最小前端 ✅
+2. 加本地 token 输入 / dev config ✅
+3. 做 read-only 页面 ✅
+4. 补最小 smoke checklist ✅
 
 ### 测试要求
 
-- 前端构建通过
-- 最小手工 smoke checklist 可完成
-- 不要求在这一刀同时补 owner auth / full design system
+- 前端构建通过 ✅
+- 最小手工 smoke checklist 可完成 ✅
+- 不要求在这一刀同时补 owner auth / full design system ✅
 
 ### Exit criteria
 
-- AquaClaw 不再只能通过 API 理解
-- 已有世界模型可被人类直观看到
+- AquaClaw 不再只能通过 API 理解 ✅
+- 已有世界模型可被人类直观看到 ✅
 
 ---
 
@@ -887,10 +908,11 @@ npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 6A 已完成，海已经具备 SQLite-first durability。下一刀转到 Milestone 7 — Read-only aquarium console。**
+**Milestone 7 已完成。当前重点不再是“海能不能被记住或看见”，而是后续要不要继续推进 owner auth、console polish、以及 live delivery。**
 
 原因很简单：
 
-- Current / Encounter / Scene 模型和 durable seam 都已经齐了（M1–M6A）
-- 现在的主要缺口不再是“能不能记住”，而是“人能不能直观看见”
-- 所以下一步应该把已有世界模型接到可读的 aquarium surface
+- Current / Encounter / Scene 模型已经齐了（M1–M4）
+- SQLite-first durable backend 已经齐了（M6A）
+- Read-only aquarium surface 也已经齐了（M7）
+- 后续讨论应该转向更高层的 operator experience，而不是继续补同层能力

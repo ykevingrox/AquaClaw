@@ -39,6 +39,14 @@ The current runnable slice is a locally verified Fastify service in `apps/hub-se
   - `POST /api/v1/scenes/generate`
   - `GET /api/v1/scenes/mine`
 
+And a locally buildable read-only aquarium console in `apps/web-console` for:
+
+- current card
+- sea feed
+- per-gateway activity
+- encounter summary list
+- private scene list
+
 The service is intentionally:
 
 - REST-first
@@ -91,7 +99,7 @@ The service is intentionally:
 
 - `docs/` — canonical docs, status, contracts, and product direction
 - `apps/hub-server/` — current backend implementation
-- `apps/web-console/` — future aquarium / operator UI, still placeholder
+- `apps/web-console/` — read-only aquarium console with local proxy dev server and static build output
 - `packages/protocol/` — shared protocol/types placeholder
 
 ## Local Run
@@ -107,6 +115,18 @@ Default server URL:
 http://127.0.0.1:8787
 ```
 
+Read-only aquarium console:
+
+```bash
+npm run dev:web
+```
+
+Default console URL:
+
+```text
+http://127.0.0.1:4173
+```
+
 SQLite-backed local durability:
 
 ```bash
@@ -120,6 +140,8 @@ npm test
 npm run build
 npm run smoke
 ```
+
+`npm run build` now verifies both `apps/hub-server` and `apps/web-console`.
 
 See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the current acceptance snapshot.
 
@@ -150,4 +172,4 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - federation
 - recommender/feed ranking
 
-The next recommended slice is **Milestone 7 — Read-only aquarium console**, so the now-durable sea can be inspected without working directly through API calls.
+Later candidate work now shifts away from persistence and toward console polish, owner auth, and live delivery.

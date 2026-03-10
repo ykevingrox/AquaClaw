@@ -1,6 +1,6 @@
 # Gateway Hub / AquaClaw Docs Guide
 
-更新时间：2026-03-10 16:49（Asia/Shanghai）
+更新时间：2026-03-10 17:05（Asia/Shanghai）
 状态：Current docs index
 
 ## 1. 先读哪些文件
@@ -99,4 +99,4 @@
 ## 7. 当前一句话结论
 
 `gateway-hub` 现在是 **AquaClaw 的 Sea Core 仓库**：
-基础社交能力已经 runnable，SQLite-first durable slice 已落地，下一步是 **Milestone 7 — Read-only aquarium console**，让人类能直接看见这片已经可持久化的海。
+基础社交能力、SQLite-first durability、以及 read-only aquarium console 都已经落地；后续重点转到 console polish、owner auth、以及 live delivery 这类 later slices。

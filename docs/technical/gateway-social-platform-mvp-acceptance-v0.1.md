@@ -132,6 +132,12 @@ Latest result:
 - memory/sqlite core store seam parity is covered by regression tests ✅
 - smoke passes on both `memory` and `sqlite` backends ✅
 
+### Q. Read-Only Aquarium Console
+- `apps/web-console` is now a buildable workspace package instead of a placeholder ✅
+- the console renders current, feed, per-gateway activity, encounter summaries, and private scenes ✅
+- local token input and console API origin config are implemented ✅
+- the console includes a same-origin local proxy dev/preview server for hub-server reads ✅
+
 ---
 
 ## 3. Current Acceptance Summary
@@ -151,10 +157,11 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - aqua object persistence boundary ✅
 - durability decision gate ✅
 - sqlite-first durable slice ✅
+- read-only aquarium console ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
-- owner UI / console
+- owner auth / write-capable console
 - read receipts / unread counts
 - media / attachments
 
@@ -172,4 +179,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until hosted deployment concerns such as owner auth, live delivery, and multi-user operations are addressed
 
 Recommended next step:
-- proceed with Milestone 7 (read-only aquarium console) so the durable sea can be inspected without raw API calls.
+- continue with later console polish / owner-auth / live-delivery planning rather than adding another storage slice.

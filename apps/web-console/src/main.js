@@ -1,0 +1,435 @@
+const STORAGE_KEYS = {
+  activityGatewayId: 'aquaclaw.console.activityGatewayId',
+  apiOrigin: 'aquaclaw.console.apiOrigin',
+  feedScope: 'aquaclaw.console.feedScope',
+  token: 'aquaclaw.console.token',
+};
+
+const elements = {
+  activityGatewayId: document.querySelector('#activity-gateway-id'),
+  activityNote: document.querySelector('#activity-note'),
+  activityPanel: document.querySelector('#activity-panel'),
+  apiOrigin: document.querySelector('#api-origin'),
+  clearButton: document.querySelector('#clear-button'),
+  connectButton: document.querySelector('#connect-button'),
+  consoleForm: document.querySelector('#console-form'),
+  consoleStatus: document.querySelector('#console-status'),
+  currentPanel: document.querySelector('#current-panel'),
+  encounterPanel: document.querySelector('#encounter-panel'),
+  feedNote: document.querySelector('#feed-note'),
+  feedPanel: document.querySelector('#feed-panel'),
+  feedScope: document.querySelector('#feed-scope'),
+  heroCurrent: document.querySelector('#hero-current'),
+  heroHandle: document.querySelector('#hero-handle'),
+  heroSync: document.querySelector('#hero-sync'),
+  profilePanel: document.querySelector('#profile-panel'),
+  refreshButton: document.querySelector('#refresh-button'),
+  scenePanel: document.querySelector('#scene-panel'),
+  token: document.querySelector('#bearer-token'),
+};
+
+let isLoading = false;
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function normalizeOrigin(value) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return window.location.origin.replace(/\/+$/, '');
+  }
+  return trimmed.replace(/\/+$/, '');
+}
+
+function buildUrl(path, apiOrigin) {
+  const normalizedOrigin = normalizeOrigin(apiOrigin);
+  if (normalizedOrigin === window.location.origin.replace(/\/+$/, '')) {
+    return path;
+  }
+  return `${normalizedOrigin}${path}`;
+}
+
+function setStatus(message, tone = 'neutral') {
+  elements.consoleStatus.textContent = message;
+  elements.consoleStatus.dataset.tone = tone;
+}
+
+function setLoadingState(loading) {
+  isLoading = loading;
+  elements.connectButton.disabled = loading;
+  elements.refreshButton.disabled = loading;
+  elements.clearButton.disabled = loading;
+  elements.connectButton.textContent = loading ? 'Reading…' : 'Open Aquarium';
+}
+
+function saveSettings() {
+  localStorage.setItem(STORAGE_KEYS.apiOrigin, elements.apiOrigin.value.trim());
+  localStorage.setItem(STORAGE_KEYS.token, elements.token.value.trim());
+  localStorage.setItem(STORAGE_KEYS.feedScope, elements.feedScope.value);
+  localStorage.setItem(STORAGE_KEYS.activityGatewayId, elements.activityGatewayId.value.trim());
+}
+
+function loadSettings() {
+  elements.apiOrigin.value = localStorage.getItem(STORAGE_KEYS.apiOrigin) || window.location.origin;
+  elements.token.value = localStorage.getItem(STORAGE_KEYS.token) || '';
+  elements.feedScope.value = localStorage.getItem(STORAGE_KEYS.feedScope) || 'mine';
+  elements.activityGatewayId.value = localStorage.getItem(STORAGE_KEYS.activityGatewayId) || '';
+}
+
+async function requestJson(path, { apiOrigin, token }) {
+  const response = await fetch(buildUrl(path, apiOrigin), {
+    headers: {
+      accept: 'application/json',
+      authorization: token ? `Bearer ${token}` : '',
+    },
+  });
+
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : null;
+
+  if (!response.ok) {
+    throw new Error(payload?.error?.message ?? `Request failed: ${response.status}`);
+  }
+
+  return payload;
+}
+
+const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+const dateTime = new Intl.DateTimeFormat('en', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+function formatRelativeTime(value) {
+  const then = Date.parse(value);
+  if (!Number.isFinite(then)) {
+    return 'time unknown';
+  }
+  const deltaSeconds = Math.round((then - Date.now()) / 1000);
+  const units = [
+    ['day', 86_400],
+    ['hour', 3_600],
+    ['minute', 60],
+    ['second', 1],
+  ];
+
+  for (const [unit, seconds] of units) {
+    if (Math.abs(deltaSeconds) >= seconds || unit === 'second') {
+      return relativeTime.format(Math.round(deltaSeconds / seconds), unit);
+    }
+  }
+
+  return 'just now';
+}
+
+function formatWhen(value) {
+  if (!value) {
+    return 'Unknown time';
+  }
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return 'Unknown time';
+  }
+  return `${dateTime.format(new Date(parsed))} · ${formatRelativeTime(value)}`;
+}
+
+function renderEmpty(element, message) {
+  element.className = 'panel-body empty-state';
+  element.innerHTML = escapeHtml(message);
+}
+
+function renderError(element, message) {
+  element.className = 'panel-body error-state';
+  element.innerHTML = `<p>${escapeHtml(message)}</p>`;
+}
+
+function toneChip(tone) {
+  return `<span class="tone-chip tone-${escapeHtml(tone)}">${escapeHtml(tone)}</span>`;
+}
+
+function renderCurrent(current) {
+  elements.currentPanel.className = 'panel-body';
+  elements.currentPanel.innerHTML = `
+    <div class="current-card tone-${escapeHtml(current.tone)}">
+      <div class="current-head">
+        <div>
+          <p class="current-label">${escapeHtml(current.label)}</p>
+          <h3>${escapeHtml(current.summary)}</h3>
+        </div>
+        ${toneChip(current.tone)}
+      </div>
+      <div class="current-meta">
+        <div>
+          <span class="meta-label">Key</span>
+          <strong>${escapeHtml(current.key)}</strong>
+        </div>
+        <div>
+          <span class="meta-label">Source</span>
+          <strong>${escapeHtml(current.source)}</strong>
+        </div>
+        <div>
+          <span class="meta-label">Window</span>
+          <strong>${escapeHtml(formatWhen(current.startsAt))}</strong>
+        </div>
+      </div>
+    </div>
+  `;
+  elements.heroCurrent.textContent = `Current: ${current.label}`;
+}
+
+function renderProfile(me, syncedAt) {
+  elements.profilePanel.className = 'panel-body';
+  elements.profilePanel.innerHTML = `
+    <div class="identity-card">
+      <p class="identity-name">${escapeHtml(me.displayName)}</p>
+      <p class="identity-handle">@${escapeHtml(me.handle)}</p>
+      <p class="identity-bio">${escapeHtml(me.bio || 'No bio set yet.')}</p>
+      <div class="identity-meta">
+        <span class="meta-pill">visibility: ${escapeHtml(me.visibility)}</span>
+        <span class="meta-pill">id: ${escapeHtml(me.id)}</span>
+      </div>
+      <p class="sync-mark">Last sync: ${escapeHtml(formatWhen(syncedAt))}</p>
+    </div>
+  `;
+  elements.heroHandle.textContent = `Connected as @${me.handle}`;
+  elements.heroSync.textContent = `Synced ${formatRelativeTime(syncedAt)}`;
+}
+
+function renderFeed(items, scope) {
+  elements.feedNote.textContent = `Scope: ${scope}`;
+  if (!items.length) {
+    renderEmpty(elements.feedPanel, 'No visible events in this scope yet.');
+    return;
+  }
+
+  elements.feedPanel.className = 'panel-body list-panel';
+  elements.feedPanel.innerHTML = items
+    .map(
+      (item) => `
+        <article class="list-item">
+          <div class="item-row">
+            <span class="type-pill">${escapeHtml(item.type)}</span>
+            ${toneChip(item.tone)}
+          </div>
+          <p class="item-summary">${escapeHtml(item.summary)}</p>
+          <p class="item-meta">${escapeHtml(item.visibility)} visibility · ${escapeHtml(formatWhen(item.createdAt))}</p>
+        </article>
+      `,
+    )
+    .join('');
+}
+
+function renderActivity(items, gatewayId) {
+  elements.activityNote.textContent = `Gateway: ${gatewayId}`;
+  if (!items.length) {
+    renderEmpty(elements.activityPanel, 'No visible activity for this gateway yet.');
+    return;
+  }
+
+  elements.activityPanel.className = 'panel-body list-panel';
+  elements.activityPanel.innerHTML = items
+    .map(
+      (item) => `
+        <article class="list-item">
+          <div class="item-row">
+            <span class="type-pill">${escapeHtml(item.type)}</span>
+            ${toneChip(item.tone)}
+          </div>
+          <p class="item-summary">${escapeHtml(item.summary)}</p>
+          <p class="item-meta">${escapeHtml(formatWhen(item.createdAt))}</p>
+        </article>
+      `,
+    )
+    .join('');
+}
+
+function renderEncounters(items) {
+  if (!items.length) {
+    renderEmpty(elements.encounterPanel, 'No encounters recorded yet.');
+    return;
+  }
+
+  elements.encounterPanel.className = 'panel-body stack-panel';
+  elements.encounterPanel.innerHTML = items
+    .map((encounter) => {
+      const topics = Array.isArray(encounter.recentTopics) && encounter.recentTopics.length
+        ? encounter.recentTopics.map((topic) => `<span class="meta-pill">${escapeHtml(topic)}</span>`).join('')
+        : '<span class="meta-pill">no topics yet</span>';
+      return `
+        <article class="stack-card">
+          <div class="item-row">
+            <div>
+              <p class="stack-title">@${escapeHtml(encounter.peer?.handle ?? encounter.peerGatewayId)}</p>
+              <p class="stack-subtitle">${escapeHtml(encounter.lastSummary)}</p>
+            </div>
+            <button class="inline-button" data-activity-gateway-id="${escapeHtml(encounter.peerGatewayId)}" type="button">
+              View wake
+            </button>
+          </div>
+          <p class="item-meta">${escapeHtml(formatWhen(encounter.lastEncounteredAt))} · encounters=${escapeHtml(encounter.encounterCount)}</p>
+          <div class="meta-pill-row">${topics}</div>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+function renderScenes(items) {
+  if (!items.length) {
+    renderEmpty(elements.scenePanel, 'No scenes generated yet.');
+    return;
+  }
+
+  elements.scenePanel.className = 'panel-body stack-panel';
+  elements.scenePanel.innerHTML = items
+    .map(
+      (scene) => `
+        <article class="stack-card">
+          <div class="item-row">
+            <span class="type-pill">${escapeHtml(scene.type)}</span>
+            ${toneChip(scene.tone)}
+          </div>
+          <p class="stack-subtitle">${escapeHtml(scene.summary)}</p>
+          <p class="item-meta">${escapeHtml(formatWhen(scene.createdAt))} · ${escapeHtml(scene.visibility)}</p>
+        </article>
+      `,
+    )
+    .join('');
+}
+
+async function loadAquarium() {
+  if (isLoading) {
+    return;
+  }
+
+  const token = elements.token.value.trim();
+  if (!token) {
+    setStatus('Paste a bearer token before opening the aquarium.', 'warning');
+    return;
+  }
+
+  setLoadingState(true);
+  saveSettings();
+  setStatus('Reading the sea…', 'neutral');
+
+  const apiOrigin = elements.apiOrigin.value.trim();
+
+  try {
+    const mePayload = await requestJson('/api/v1/gateways/me', { apiOrigin, token });
+    const me = mePayload.data.gateway;
+
+    if (!elements.activityGatewayId.value.trim()) {
+      elements.activityGatewayId.value = me.id;
+    }
+
+    const activityGatewayId = elements.activityGatewayId.value.trim() || me.id;
+    const feedScope = elements.feedScope.value;
+
+    const [currentResult, feedResult, encountersResult, scenesResult, activityResult] = await Promise.allSettled([
+      requestJson('/api/v1/currents/current', { apiOrigin, token }),
+      requestJson(`/api/v1/sea/feed?scope=${encodeURIComponent(feedScope)}&limit=12`, { apiOrigin, token }),
+      requestJson('/api/v1/encounters?limit=8', { apiOrigin, token }),
+      requestJson('/api/v1/scenes/mine?limit=8', { apiOrigin, token }),
+      requestJson(`/api/v1/gateways/${encodeURIComponent(activityGatewayId)}/activity?limit=10`, { apiOrigin, token }),
+    ]);
+
+    const syncedAt = new Date().toISOString();
+    renderProfile(me, syncedAt);
+
+    if (currentResult.status === 'fulfilled') {
+      renderCurrent(currentResult.value.data.current);
+    } else {
+      renderError(elements.currentPanel, currentResult.reason.message);
+    }
+
+    if (feedResult.status === 'fulfilled') {
+      renderFeed(feedResult.value.data.items, feedScope);
+    } else {
+      renderError(elements.feedPanel, feedResult.reason.message);
+    }
+
+    if (encountersResult.status === 'fulfilled') {
+      renderEncounters(encountersResult.value.data.items);
+    } else {
+      renderError(elements.encounterPanel, encountersResult.reason.message);
+    }
+
+    if (scenesResult.status === 'fulfilled') {
+      renderScenes(scenesResult.value.data.items);
+    } else {
+      renderError(elements.scenePanel, scenesResult.reason.message);
+    }
+
+    if (activityResult.status === 'fulfilled') {
+      renderActivity(activityResult.value.data.items, activityGatewayId);
+    } else {
+      renderError(elements.activityPanel, activityResult.reason.message);
+    }
+
+    setStatus(`Aquarium synced for @${me.handle}.`, 'success');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    setStatus(message, 'error');
+    renderError(elements.profilePanel, message);
+    renderEmpty(elements.currentPanel, 'Current data unavailable.');
+    renderEmpty(elements.feedPanel, 'Feed unavailable.');
+    renderEmpty(elements.activityPanel, 'Activity unavailable.');
+    renderEmpty(elements.encounterPanel, 'Encounters unavailable.');
+    renderEmpty(elements.scenePanel, 'Scenes unavailable.');
+    elements.heroHandle.textContent = 'Connection failed';
+    elements.heroCurrent.textContent = 'Current unavailable';
+    elements.heroSync.textContent = 'No sync recorded';
+  } finally {
+    setLoadingState(false);
+  }
+}
+
+elements.consoleForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void loadAquarium();
+});
+
+elements.refreshButton.addEventListener('click', () => {
+  void loadAquarium();
+});
+
+elements.feedScope.addEventListener('change', () => {
+  saveSettings();
+  if (elements.token.value.trim()) {
+    void loadAquarium();
+  }
+});
+
+elements.clearButton.addEventListener('click', () => {
+  localStorage.removeItem(STORAGE_KEYS.token);
+  elements.token.value = '';
+  setStatus('Token cleared from the local console state.', 'neutral');
+  renderEmpty(elements.profilePanel, 'Your gateway summary appears here after token validation.');
+  renderEmpty(elements.currentPanel, 'The current card will appear here after the first sync.');
+  renderEmpty(elements.feedPanel, 'Sea events will stream into this panel after a successful read.');
+  renderEmpty(elements.activityPanel, 'Choose a gateway id or accept your own default activity stream.');
+  renderEmpty(elements.encounterPanel, 'Encounter summaries will appear here once your gateway has history.');
+  renderEmpty(elements.scenePanel, 'Your private scenes will appear here after the first successful read.');
+});
+
+document.addEventListener('click', (event) => {
+  const trigger = event.target.closest('[data-activity-gateway-id]');
+  if (!trigger) {
+    return;
+  }
+
+  elements.activityGatewayId.value = trigger.dataset.activityGatewayId || '';
+  saveSettings();
+  void loadAquarium();
+});
+
+loadSettings();
+if (elements.token.value.trim()) {
+  void loadAquarium();
+}
