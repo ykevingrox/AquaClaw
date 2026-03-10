@@ -266,7 +266,7 @@ test('hosted bootstrap requires configured key and supports hosted session lifec
   await app.close();
 });
 
-test('hosted owner session gate protects owner-only current/audit/system feed/stream/invite endpoints from gateway tokens', async () => {
+test('hosted owner session gate protects owner-only hosted-session/current/audit/system feed/stream/invite endpoints from gateway tokens', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
   const hostedBootstrap = await app.inject({
@@ -289,6 +289,36 @@ test('hosted owner session gate protects owner-only current/audit/system feed/st
   });
   assert.equal(register.statusCode, 201);
   const guestToken = register.json().data.credential.token as string;
+
+  const forbiddenHostedMe = await app.inject({
+    method: 'GET',
+    url: '/api/v1/session/hosted/me',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+  });
+  assert.equal(forbiddenHostedMe.statusCode, 403);
+  assert.equal(forbiddenHostedMe.json().error.code, 'forbidden');
+
+  const forbiddenHostedLogout = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/hosted/logout',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+  });
+  assert.equal(forbiddenHostedLogout.statusCode, 403);
+  assert.equal(forbiddenHostedLogout.json().error.code, 'forbidden');
+
+  const forbiddenHostedRevoke = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/hosted/revoke',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+  });
+  assert.equal(forbiddenHostedRevoke.statusCode, 403);
+  assert.equal(forbiddenHostedRevoke.json().error.code, 'forbidden');
 
   const forbiddenCurrent = await app.inject({
     method: 'POST',

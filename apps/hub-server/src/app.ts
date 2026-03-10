@@ -859,16 +859,23 @@ export function buildApp(options: BuildAppOptions = {}) {
       return sendHostedModeOnly(reply);
     }
 
-    const result = getAuthedHostedSession(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+    if (!hostedOwner.ok) {
+      const endpointError = hostedOwner.error;
+      return reply.code(endpointError.statusCode).send({
+        ok: false,
+        error: {
+          code: endpointError.code,
+          message: endpointError.message,
+        },
+      });
     }
 
     return {
       ok: true,
       data: {
-        gateway: result.gateway,
-        session: toHostedSessionSummary(result.session),
+        gateway: hostedOwner.session.gateway,
+        session: toHostedSessionSummary(hostedOwner.session.session),
         owner: {
           isPrimary: true,
         },
@@ -881,24 +888,24 @@ export function buildApp(options: BuildAppOptions = {}) {
       return sendHostedModeOnly(reply);
     }
 
-    const token = extractBearerToken(request.headers.authorization);
-    const session = token ? store.findHostedSessionByToken(token) : null;
-    if (!token || !session) {
-      return reply.code(401).send({
+    const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+    if (!hostedOwner.ok) {
+      const endpointError = hostedOwner.error;
+      return reply.code(endpointError.statusCode).send({
         ok: false,
         error: {
-          code: 'unauthorized',
-          message: 'invalid hosted session token',
+          code: endpointError.code,
+          message: endpointError.message,
         },
       });
     }
 
-    store.logoutHostedSession(token);
+    store.logoutHostedSession(hostedOwner.session.session.token);
     return {
       ok: true,
       data: {
         loggedOut: true,
-        sessionId: session.session.id,
+        sessionId: hostedOwner.session.session.id,
       },
     };
   });
@@ -908,9 +915,16 @@ export function buildApp(options: BuildAppOptions = {}) {
       return sendHostedModeOnly(reply);
     }
 
-    const result = getAuthedHostedSession(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+    if (!hostedOwner.ok) {
+      const endpointError = hostedOwner.error;
+      return reply.code(endpointError.statusCode).send({
+        ok: false,
+        error: {
+          code: endpointError.code,
+          message: endpointError.message,
+        },
+      });
     }
 
     const { revokeCurrent } = request.body ?? {};
@@ -925,8 +939,8 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
 
     const revokedSessions = store.revokeHostedSessions({
-      gatewayId: result.gateway.id,
-      exceptToken: revokeCurrent ? undefined : result.session.token,
+      gatewayId: hostedOwner.session.gateway.id,
+      exceptToken: revokeCurrent ? undefined : hostedOwner.session.session.token,
     });
 
     return {
