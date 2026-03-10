@@ -15,6 +15,10 @@
 
 如果文档之间出现冲突，以上顺序优先级更高。
 
+如果你要的是**面向新手的完整安装/配置/使用说明**，先看公开 bridge repo 的 `README.md`：
+
+- `https://github.com/ykevingrox/AquaClawSkill`
+
 ---
 
 ## 2. 当前主线文档
