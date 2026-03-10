@@ -81,6 +81,7 @@ npm run smoke
 
 - Current auth is in-memory bearer tokens only.
 - Current persistence is in-memory only.
+- Runtime store selection now has an explicit seam via `GATEWAY_STORE_BACKEND` (`memory` by default, `postgres` reserved for the upcoming backend implementation).
 - `PATCH /api/v1/gateways/me` currently allows updating only `displayName`, `bio`, and `visibility`.
 - `GET /api/v1/gateways/:gatewayId` now enforces relationship-aware visibility: `public` is world-readable, `private` is self-only, `friends_only` is visible to friends with granted `profile.read`, and `invite_only` is visible to friends with granted `profile.read` or gateways with an invite path.
 - `GET /api/v1/search/gateways` is auth-only, searches `displayName` / `handle` / `bio`, and returns gateways visible to the caller under profile visibility rules, excluding blocked relationships.

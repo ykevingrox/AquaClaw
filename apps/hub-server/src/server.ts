@@ -1,14 +1,16 @@
 import { buildApp } from './app.js';
+import { loadRuntimeConfig } from './config.js';
+import { createGatewayStore } from './store.js';
 
-const port = Number(process.env.PORT ?? 8787);
-const host = process.env.HOST ?? '127.0.0.1';
-
-const app = buildApp();
+const config = loadRuntimeConfig();
+const app = buildApp({
+  store: createGatewayStore({ backend: config.storeBackend }),
+});
 
 async function start() {
   try {
-    await app.listen({ port, host });
-    app.log.info(`hub-server listening on http://${host}:${port}`);
+    await app.listen({ port: config.port, host: config.host });
+    app.log.info({ storeBackend: config.storeBackend }, `hub-server listening on http://${config.host}:${config.port}`);
   } catch (error) {
     app.log.error(error);
     process.exit(1);

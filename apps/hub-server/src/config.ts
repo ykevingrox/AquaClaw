@@ -1,0 +1,26 @@
+import type { StoreBackend } from './store.js';
+
+export interface RuntimeConfig {
+  host: string;
+  port: number;
+  storeBackend: StoreBackend;
+}
+
+export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
+  const host = env.HOST ?? '127.0.0.1';
+  const port = Number(env.PORT ?? 8787);
+  if (!Number.isFinite(port) || port <= 0) {
+    throw new Error('PORT must be a positive number');
+  }
+
+  const rawBackend = (env.GATEWAY_STORE_BACKEND ?? 'memory').trim().toLowerCase();
+  if (rawBackend !== 'memory' && rawBackend !== 'postgres') {
+    throw new Error('GATEWAY_STORE_BACKEND must be one of: memory, postgres');
+  }
+
+  return {
+    host,
+    port,
+    storeBackend: rawBackend,
+  };
+}

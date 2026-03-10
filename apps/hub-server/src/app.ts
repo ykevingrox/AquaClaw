@@ -1,8 +1,8 @@
 import Fastify from 'fastify';
-import { createGatewayStore, type GatewayVisibility, type InMemoryGatewayStore } from './store.js';
+import { createGatewayStore, type GatewayStore, type GatewayVisibility } from './store.js';
 
 interface BuildAppOptions {
-  store?: InMemoryGatewayStore;
+  store?: GatewayStore;
 }
 
 interface RegisterBody {
@@ -85,7 +85,7 @@ function extractBearerToken(value: string | undefined) {
   return token;
 }
 
-function getAuthedGateway(store: InMemoryGatewayStore, authorization: string | undefined) {
+function getAuthedGateway(store: GatewayStore, authorization: string | undefined) {
   const token = extractBearerToken(authorization);
   if (!token) {
     return {
@@ -109,7 +109,7 @@ function getAuthedGateway(store: InMemoryGatewayStore, authorization: string | u
   return { gateway } as const;
 }
 
-function getOptionalAuthedGateway(store: InMemoryGatewayStore, authorization: string | undefined) {
+function getOptionalAuthedGateway(store: GatewayStore, authorization: string | undefined) {
   const token = extractBearerToken(authorization);
   if (!token) {
     return null;
@@ -127,7 +127,7 @@ function toGatewaySummary(gateway: { id: string; handle: string; displayName: st
   };
 }
 
-function toSearchResult(store: InMemoryGatewayStore, gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
+function toSearchResult(store: GatewayStore, gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
   return {
     ...toGatewaySummary(gateway),
     status: store.getPresence(gateway.id).status,
@@ -136,7 +136,7 @@ function toSearchResult(store: InMemoryGatewayStore, gateway: { id: string; hand
 }
 
 function toConversationSummary(
-  store: InMemoryGatewayStore,
+  store: GatewayStore,
   item: { conversation: { id: string; type: 'dm'; createdAt: string; updatedAt: string }; peerGateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility } },
 ) {
   return {
@@ -151,7 +151,7 @@ function toConversationSummary(
   };
 }
 
-function toFriendSummary(store: InMemoryGatewayStore, gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
+function toFriendSummary(store: GatewayStore, gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
   const presence = store.getPresence(gateway.id);
   return {
     ...toGatewaySummary(gateway),

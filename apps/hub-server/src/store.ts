@@ -98,6 +98,47 @@ export interface AuditRecord {
   createdAt: string;
 }
 
+export interface AuditRecordPage {
+  items: AuditRecord[];
+  nextCursor: string | null;
+}
+
+export type StoreBackend = 'memory' | 'postgres';
+
+export interface GatewayStore {
+  register(input: RegisterInput): { gateway: GatewayRecord; token: string };
+  findById(gatewayId: string): GatewayRecord | null;
+  findByToken(token: string): GatewayRecord | null;
+  canViewGatewayProfile(viewerGatewayId: string | null | undefined, targetGatewayId: string): boolean;
+  updateProfile(gatewayId: string, input: UpdateProfileInput): GatewayRecord;
+  getPresence(gatewayId: string): GatewayPresenceRecord;
+  searchGateways(input: SearchGatewaysInput): GatewayRecord[];
+  createInvite(input: CreateInviteInput): InviteRecord;
+  claimInvite(input: ClaimInviteInput): { invite: InviteRecord; claim: InviteClaimRecord; friendRequest: FriendRequestRecord };
+  listIncomingFriendRequests(gatewayId: string): FriendRequestRecord[];
+  listOutgoingFriendRequests(gatewayId: string): FriendRequestRecord[];
+  createFriendRequest(input: CreateFriendRequestInput): FriendRequestRecord;
+  acceptFriendRequest(requestId: string, actingGatewayId: string): {
+    request: FriendRequestRecord;
+    friendship: FriendshipRecord;
+    conversation: ConversationRecord;
+  };
+  rejectFriendRequest(requestId: string, actingGatewayId: string): FriendRequestRecord;
+  listFriends(gatewayId: string): GatewayRecord[];
+  removeFriendship(gatewayAId: string, gatewayBId: string): FriendshipRecord;
+  listFriendScopes(fromGatewayId: string, toGatewayId: string): FriendScopeRecord[];
+  updateFriendScopes(input: UpdateFriendScopesInput): FriendScopeRecord[];
+  createBlock(input: CreateBlockInput): BlockRecord;
+  removeBlock(blockerGatewayId: string, blockedGatewayId: string): BlockRecord;
+  listConversations(gatewayId: string): Array<{ conversation: ConversationRecord; peerGateway: GatewayRecord }>;
+  createMessage(input: CreateMessageInput): MessageRecord;
+  listMessages(conversationId: string, gatewayId: string): MessageRecord[];
+  heartbeatPresence(gatewayId: string): GatewayPresenceRecord;
+  canViewPresence(viewerGatewayId: string, targetGatewayId: string): boolean;
+  isBlockedBetween(gatewayAId: string, gatewayBId: string): boolean;
+  listAuditRecords(input?: ListAuditRecordsInput): AuditRecordPage;
+}
+
 interface RegisterInput {
   displayName: string;
   handle: string;
@@ -165,7 +206,7 @@ const ONLINE_THRESHOLD_MS = 90_000;
 const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
 const DEFAULT_AUDIT_PAGE_SIZE = 50;
 
-export class InMemoryGatewayStore {
+export class InMemoryGatewayStore implements GatewayStore {
   private readonly gatewaysById = new Map<string, GatewayRecord>();
   private readonly gatewaysByHandle = new Map<string, GatewayRecord>();
   private readonly tokensToGatewayId = new Map<string, string>();
@@ -1031,6 +1072,14 @@ export class InMemoryGatewayStore {
   }
 }
 
-export function createGatewayStore() {
+interface CreateGatewayStoreOptions {
+  backend?: StoreBackend;
+}
+
+export function createGatewayStore(options: CreateGatewayStoreOptions = {}): GatewayStore {
+  const backend = options.backend ?? 'memory';
+  if (backend === 'postgres') {
+    throw new Error('postgres store backend is not implemented yet');
+  }
   return new InMemoryGatewayStore();
 }

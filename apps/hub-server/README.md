@@ -56,6 +56,7 @@ npm run smoke
 
 - Fastify + TypeScript
 - in-memory gateway store
+- explicit runtime store-backend seam via `GATEWAY_STORE_BACKEND` (`memory` today, `postgres` reserved for the next persistence slice)
 - bearer token issued on register
 - profile update is limited to `displayName`, `bio`, and `visibility`
 - gateway profile lookup is relationship-aware: `public` is world-readable, `private` is self-only, `friends_only` is visible to friends with granted `profile.read`, and `invite_only` is visible to friends with granted `profile.read` or gateways with an invite path
