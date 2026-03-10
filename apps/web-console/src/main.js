@@ -1,5 +1,6 @@
 const STORAGE_KEYS = {
   activityGatewayId: 'aquaclaw.console.activityGatewayId',
+  authMode: 'aquaclaw.console.authMode',
   apiOrigin: 'aquaclaw.console.apiOrigin',
   feedScope: 'aquaclaw.console.feedScope',
   token: 'aquaclaw.console.token',
@@ -29,6 +30,7 @@ const elements = {
 };
 
 let isLoading = false;
+let authMode = 'bearer';
 
 function escapeHtml(value) {
   return String(value)
@@ -65,12 +67,13 @@ function setLoadingState(loading) {
   elements.connectButton.disabled = loading;
   elements.refreshButton.disabled = loading;
   elements.clearButton.disabled = loading;
-  elements.connectButton.textContent = loading ? 'Reading…' : 'Open Aquarium';
+  elements.connectButton.textContent = loading ? 'Reading…' : 'Enter Aquarium';
 }
 
 function saveSettings() {
   localStorage.setItem(STORAGE_KEYS.apiOrigin, elements.apiOrigin.value.trim());
   localStorage.setItem(STORAGE_KEYS.token, elements.token.value.trim());
+  localStorage.setItem(STORAGE_KEYS.authMode, authMode);
   localStorage.setItem(STORAGE_KEYS.feedScope, elements.feedScope.value);
   localStorage.setItem(STORAGE_KEYS.activityGatewayId, elements.activityGatewayId.value.trim());
 }
@@ -78,26 +81,87 @@ function saveSettings() {
 function loadSettings() {
   elements.apiOrigin.value = localStorage.getItem(STORAGE_KEYS.apiOrigin) || window.location.origin;
   elements.token.value = localStorage.getItem(STORAGE_KEYS.token) || '';
+  authMode = localStorage.getItem(STORAGE_KEYS.authMode) === 'local_session' ? 'local_session' : 'bearer';
   elements.feedScope.value = localStorage.getItem(STORAGE_KEYS.feedScope) || 'mine';
   elements.activityGatewayId.value = localStorage.getItem(STORAGE_KEYS.activityGatewayId) || '';
 }
 
-async function requestJson(path, { apiOrigin, token }) {
+async function requestJson(path, { apiOrigin, token, method = 'GET', payload } = {}) {
+  const headers = {
+    accept: 'application/json',
+  };
+  if (token) {
+    headers.authorization = `Bearer ${token}`;
+  }
+  if (payload !== undefined) {
+    headers['content-type'] = 'application/json';
+  }
+
   const response = await fetch(buildUrl(path, apiOrigin), {
-    headers: {
-      accept: 'application/json',
-      authorization: token ? `Bearer ${token}` : '',
-    },
+    method,
+    headers,
+    body: payload === undefined ? undefined : JSON.stringify(payload),
   });
 
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : null;
+  const responsePayload = text ? JSON.parse(text) : null;
 
   if (!response.ok) {
-    throw new Error(payload?.error?.message ?? `Request failed: ${response.status}`);
+    throw new Error(responsePayload?.error?.message ?? `Request failed: ${response.status}`);
   }
 
-  return payload;
+  return responsePayload;
+}
+
+async function ensureConsoleToken(apiOrigin) {
+  const existingToken = elements.token.value.trim();
+  if (existingToken) {
+    return {
+      token: existingToken,
+      bootstrapped: false,
+      createdOwner: false,
+    };
+  }
+
+  const bootstrapPayload = await requestJson('/api/v1/session/bootstrap-local', {
+    apiOrigin,
+    method: 'POST',
+  });
+
+  authMode = 'local_session';
+  elements.token.value = bootstrapPayload.data.credential.token;
+  saveSettings();
+
+  return {
+    token: bootstrapPayload.data.credential.token,
+    bootstrapped: true,
+    createdOwner: bootstrapPayload.data.owner.created,
+  };
+}
+
+async function resolveIdentity(apiOrigin, token) {
+  if (authMode === 'local_session') {
+    try {
+      const sessionPayload = await requestJson('/api/v1/session/me', { apiOrigin, token });
+      return {
+        gateway: sessionPayload.data.gateway,
+        mode: 'local_session',
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      if (!/local session token/i.test(message)) {
+        throw error;
+      }
+      authMode = 'bearer';
+      saveSettings();
+    }
+  }
+
+  const mePayload = await requestJson('/api/v1/gateways/me', { apiOrigin, token });
+  return {
+    gateway: mePayload.data.gateway,
+    mode: 'bearer',
+  };
 }
 
 const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
@@ -308,21 +372,19 @@ async function loadAquarium() {
     return;
   }
 
-  const token = elements.token.value.trim();
-  if (!token) {
-    setStatus('Paste a bearer token before opening the aquarium.', 'warning');
-    return;
-  }
-
   setLoadingState(true);
   saveSettings();
-  setStatus('Reading the sea…', 'neutral');
 
   const apiOrigin = elements.apiOrigin.value.trim();
+  setStatus(elements.token.value.trim() ? 'Reading the sea…' : 'Bootstrapping your local Claw…', 'neutral');
 
   try {
-    const mePayload = await requestJson('/api/v1/gateways/me', { apiOrigin, token });
-    const me = mePayload.data.gateway;
+    const auth = await ensureConsoleToken(apiOrigin);
+    const token = auth.token;
+    const identity = await resolveIdentity(apiOrigin, token);
+    const me = identity.gateway;
+    authMode = identity.mode;
+    saveSettings();
 
     if (!elements.activityGatewayId.value.trim()) {
       elements.activityGatewayId.value = me.id;
@@ -372,9 +434,27 @@ async function loadAquarium() {
       renderError(elements.activityPanel, activityResult.reason.message);
     }
 
-    setStatus(`Aquarium synced for @${me.handle}.`, 'success');
+    if (auth.bootstrapped) {
+      setStatus(
+        auth.createdOwner ? `Bootstrapped @${me.handle} and opened the aquarium.` : `Reconnected @${me.handle} to the aquarium.`,
+        'success',
+      );
+    } else {
+      setStatus(
+        authMode === 'local_session'
+          ? `Aquarium synced for @${me.handle} via local session.`
+          : `Aquarium synced for @${me.handle} via bearer token.`,
+        'success',
+      );
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    if (authMode === 'local_session' && /local session token/i.test(message)) {
+      authMode = 'bearer';
+      localStorage.removeItem(STORAGE_KEYS.token);
+      localStorage.removeItem(STORAGE_KEYS.authMode);
+      elements.token.value = '';
+    }
     setStatus(message, 'error');
     renderError(elements.profilePanel, message);
     renderEmpty(elements.currentPanel, 'Current data unavailable.');
@@ -406,16 +486,40 @@ elements.feedScope.addEventListener('change', () => {
   }
 });
 
-elements.clearButton.addEventListener('click', () => {
+async function clearConsoleAuth() {
+  const token = elements.token.value.trim();
+  const apiOrigin = elements.apiOrigin.value.trim();
+  const previousMode = authMode;
+
+  if (previousMode === 'local_session' && token) {
+    try {
+      await requestJson('/api/v1/session/logout', {
+        apiOrigin,
+        token,
+        method: 'POST',
+      });
+      setStatus('Local session closed and cleared from the console.', 'neutral');
+    } catch (_error) {
+      setStatus('Local session cleared from the console; remote logout could not be confirmed.', 'warning');
+    }
+  } else {
+    setStatus('Auth token cleared from the local console state.', 'neutral');
+  }
+
   localStorage.removeItem(STORAGE_KEYS.token);
+  localStorage.removeItem(STORAGE_KEYS.authMode);
   elements.token.value = '';
-  setStatus('Token cleared from the local console state.', 'neutral');
-  renderEmpty(elements.profilePanel, 'Your gateway summary appears here after token validation.');
+  authMode = 'bearer';
+  renderEmpty(elements.profilePanel, 'Your gateway summary appears here after local session or token auth succeeds.');
   renderEmpty(elements.currentPanel, 'The current card will appear here after the first sync.');
   renderEmpty(elements.feedPanel, 'Sea events will stream into this panel after a successful read.');
   renderEmpty(elements.activityPanel, 'Choose a gateway id or accept your own default activity stream.');
   renderEmpty(elements.encounterPanel, 'Encounter summaries will appear here once your gateway has history.');
   renderEmpty(elements.scenePanel, 'Your private scenes will appear here after the first successful read.');
+}
+
+elements.clearButton.addEventListener('click', () => {
+  void clearConsoleAuth();
 });
 
 document.addEventListener('click', (event) => {

@@ -85,12 +85,28 @@ export class SqliteGatewayStore implements GatewayStore {
     return this.runMutation(() => this.inner.register(...args));
   }
 
+  bootstrapLocalSession(
+    ...args: Parameters<GatewayStore['bootstrapLocalSession']>
+  ): ReturnType<GatewayStore['bootstrapLocalSession']> {
+    return this.runMutation(() => this.inner.bootstrapLocalSession(...args));
+  }
+
   findById(...args: Parameters<GatewayStore['findById']>): ReturnType<GatewayStore['findById']> {
     return this.inner.findById(...args);
   }
 
   findByToken(...args: Parameters<GatewayStore['findByToken']>): ReturnType<GatewayStore['findByToken']> {
     return this.inner.findByToken(...args);
+  }
+
+  findLocalSessionByToken(
+    ...args: Parameters<GatewayStore['findLocalSessionByToken']>
+  ): ReturnType<GatewayStore['findLocalSessionByToken']> {
+    return this.inner.findLocalSessionByToken(...args);
+  }
+
+  logoutLocalSession(...args: Parameters<GatewayStore['logoutLocalSession']>): ReturnType<GatewayStore['logoutLocalSession']> {
+    return this.runMutation(() => this.inner.logoutLocalSession(...args));
   }
 
   canViewGatewayProfile(

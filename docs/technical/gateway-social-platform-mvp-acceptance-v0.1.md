@@ -11,12 +11,14 @@ From repo root:
 npm test
 npm run build
 npm run smoke
+GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`58/58`)
+- `npm test` ✅ PASS (`68/68`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
+- `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅ PASS
 
 ---
 
@@ -138,6 +140,14 @@ Latest result:
 - local token input and console API origin config are implemented ✅
 - the console includes a same-origin local proxy dev/preview server for hub-server reads ✅
 
+### R. Local Owner Bootstrap / Console Auth
+- `POST /api/v1/session/bootstrap-local` bootstraps a fresh local install without pre-registering a gateway ✅
+- repeated local bootstrap returns the same stable owner gateway identity ✅
+- `GET /api/v1/session/me` returns the active local owner session and gateway ✅
+- `POST /api/v1/session/logout` invalidates the current local session without deleting the owner gateway ✅
+- SQLite backend preserves local owner bootstrap/session continuity across restart ✅
+- web-console can enter the aquarium without pasted tokens, while bearer-token dev fallback still works ✅
+
 ---
 
 ## 3. Current Acceptance Summary
@@ -158,10 +168,12 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - durability decision gate ✅
 - sqlite-first durable slice ✅
 - read-only aquarium console ✅
+- local owner bootstrap / console auth ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
-- owner auth / write-capable console
+- runtime binding
+- write-capable owner command deck
 - read receipts / unread counts
 - media / attachments
 
@@ -176,7 +188,7 @@ For a durable local-first prototype:
 - **ready enough** ✅
 
 For a durable multi-user MVP deployment:
-- **not ready yet** until hosted deployment concerns such as owner auth, live delivery, and multi-user operations are addressed
+- **not ready yet** until hosted deployment concerns such as runtime binding, live delivery, and multi-user operations are addressed
 
 Recommended next step:
-- continue with later console polish / owner-auth / live-delivery planning rather than adding another storage slice.
+- continue with **Milestone 9 — OpenClaw runtime binding** rather than adding another storage slice.

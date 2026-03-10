@@ -184,6 +184,13 @@ export interface GatewayTokenSnapshotRecord {
   gatewayId: string;
 }
 
+export interface LocalSessionRecord {
+  id: string;
+  gatewayId: string;
+  token: string;
+  createdAt: string;
+}
+
 export interface GatewayPresenceSnapshotRecord {
   gatewayId: string;
   lastSeenAt: string;
@@ -198,6 +205,8 @@ export interface GatewayStoreSnapshot {
   version: 1;
   gateways: GatewayRecord[];
   gatewayTokens: GatewayTokenSnapshotRecord[];
+  localOwnerGatewayId?: string | null;
+  localSessions?: LocalSessionRecord[];
   presenceHeartbeats: GatewayPresenceSnapshotRecord[];
   friendRequests: FriendRequestRecord[];
   friendships: FriendshipRecord[];
@@ -220,8 +229,15 @@ export type StoreBackend = 'memory' | 'sqlite' | 'postgres';
 
 export interface GatewayStore {
   register(input: RegisterInput): { gateway: GatewayRecord; token: string };
+  bootstrapLocalSession(input?: BootstrapLocalSessionInput): {
+    gateway: GatewayRecord;
+    session: LocalSessionRecord;
+    createdOwner: boolean;
+  };
   findById(gatewayId: string): GatewayRecord | null;
   findByToken(token: string): GatewayRecord | null;
+  findLocalSessionByToken(token: string): { gateway: GatewayRecord; session: LocalSessionRecord } | null;
+  logoutLocalSession(token: string): LocalSessionRecord;
   canViewGatewayProfile(viewerGatewayId: string | null | undefined, targetGatewayId: string): boolean;
   updateProfile(gatewayId: string, input: UpdateProfileInput): GatewayRecord;
   getPresence(gatewayId: string): GatewayPresenceRecord;
@@ -270,6 +286,13 @@ interface RegisterInput {
 
 interface UpdateProfileInput {
   displayName?: string;
+  bio?: string;
+  visibility?: GatewayVisibility;
+}
+
+interface BootstrapLocalSessionInput {
+  displayName?: string;
+  handle?: string;
   bio?: string;
   visibility?: GatewayVisibility;
 }
@@ -397,6 +420,9 @@ const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
 const DEFAULT_AUDIT_PAGE_SIZE = 50;
 const DEFAULT_SEA_PAGE_SIZE = 50;
 const DEFAULT_SCENE_PAGE_SIZE = 50;
+const DEFAULT_LOCAL_OWNER_HANDLE = 'my-claw';
+const DEFAULT_LOCAL_OWNER_DISPLAY_NAME = 'My Claw';
+const DEFAULT_LOCAL_OWNER_BIO = 'Stable local owner gateway for AquaClaw.';
 const CURRENT_WINDOWS: Array<{ key: string; label: string; summary: string; tone: SeaEventTone; sceneHint: string | null }> = [
   {
     key: 'glasswater',
@@ -473,6 +499,7 @@ export class InMemoryGatewayStore implements GatewayStore {
   private readonly gatewaysById = new Map<string, GatewayRecord>();
   private readonly gatewaysByHandle = new Map<string, GatewayRecord>();
   private readonly tokensToGatewayId = new Map<string, string>();
+  private readonly localSessionsByToken = new Map<string, LocalSessionRecord>();
   private readonly friendRequestsById = new Map<string, FriendRequestRecord>();
   private readonly friendshipsById = new Map<string, FriendshipRecord>();
   private readonly friendScopesByKey = new Map<string, FriendScopeRecord>();
@@ -489,6 +516,7 @@ export class InMemoryGatewayStore implements GatewayStore {
   private readonly encountersByPairKey = new Map<string, EncounterRecord>();
   private readonly scenesById = new Map<string, SceneRecord>();
   private readonly sceneIdsByGatewayId = new Map<string, string[]>();
+  private localOwnerGatewayId: string | null = null;
   private activeCurrentId: string | null = null;
 
   register(
@@ -546,6 +574,52 @@ export class InMemoryGatewayStore implements GatewayStore {
     return { gateway, token };
   }
 
+  bootstrapLocalSession(input: BootstrapLocalSessionInput = {}) {
+    let gateway = this.localOwnerGatewayId ? this.gatewaysById.get(this.localOwnerGatewayId) ?? null : null;
+    let createdOwner = false;
+
+    if (!gateway) {
+      const handleBase = input.handle?.trim().toLowerCase() || DEFAULT_LOCAL_OWNER_HANDLE;
+      const registerResult = this.register({
+        displayName: input.displayName?.trim() || DEFAULT_LOCAL_OWNER_DISPLAY_NAME,
+        handle: this.resolveAvailableHandle(handleBase),
+        bio: input.bio?.trim() || DEFAULT_LOCAL_OWNER_BIO,
+        visibility: input.visibility ?? 'invite_only',
+      });
+
+      gateway = registerResult.gateway;
+      this.localOwnerGatewayId = gateway.id;
+      createdOwner = true;
+    }
+
+    const now = new Date().toISOString();
+    const session: LocalSessionRecord = {
+      id: `local-session-${randomUUID()}`,
+      gatewayId: gateway.id,
+      token: randomBytes(24).toString('hex'),
+      createdAt: now,
+    };
+
+    this.localSessionsByToken.set(session.token, session);
+    this.tokensToGatewayId.set(session.token, gateway.id);
+    this.appendAuditRecord({
+      actorGatewayId: gateway.id,
+      targetGatewayId: gateway.id,
+      action: createdOwner ? 'session.local_bootstrapped' : 'session.local_resumed',
+      metadata: {
+        sessionId: session.id,
+        createdOwner,
+      },
+      createdAt: now,
+    });
+
+    return {
+      gateway,
+      session,
+      createdOwner,
+    };
+  }
+
   findById(gatewayId: string): GatewayRecord | null {
     return this.gatewaysById.get(gatewayId) ?? null;
   }
@@ -570,6 +644,39 @@ export class InMemoryGatewayStore implements GatewayStore {
     const gatewayId = this.tokensToGatewayId.get(token);
     if (!gatewayId) return null;
     return this.gatewaysById.get(gatewayId) ?? null;
+  }
+
+  findLocalSessionByToken(token: string) {
+    const session = this.localSessionsByToken.get(token) ?? null;
+    if (!session) {
+      return null;
+    }
+    const gateway = this.gatewaysById.get(session.gatewayId) ?? null;
+    if (!gateway) {
+      return null;
+    }
+    return { gateway, session };
+  }
+
+  logoutLocalSession(token: string) {
+    const session = this.localSessionsByToken.get(token);
+    if (!session) {
+      throw new Error('local session not found');
+    }
+
+    this.localSessionsByToken.delete(token);
+    this.tokensToGatewayId.delete(token);
+    this.appendAuditRecord({
+      actorGatewayId: session.gatewayId,
+      targetGatewayId: session.gatewayId,
+      action: 'session.local_logged_out',
+      metadata: {
+        sessionId: session.id,
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    return session;
   }
 
   canViewGatewayProfile(viewerGatewayId: string | null | undefined, targetGatewayId: string) {
@@ -1627,6 +1734,22 @@ export class InMemoryGatewayStore implements GatewayStore {
     return ['profile.read', 'presence.read', 'chat.send', 'chat.receive', 'task.request'];
   }
 
+  private resolveAvailableHandle(baseHandle: string) {
+    let candidate = baseHandle.trim().toLowerCase();
+    if (!candidate) {
+      candidate = DEFAULT_LOCAL_OWNER_HANDLE;
+    }
+    if (!this.gatewaysByHandle.has(candidate)) {
+      return candidate;
+    }
+
+    let suffix = 2;
+    while (this.gatewaysByHandle.has(`${candidate}-${suffix}`)) {
+      suffix += 1;
+    }
+    return `${candidate}-${suffix}`;
+  }
+
   private getConversationPeerGatewayId(conversation: ConversationRecord, gatewayId: string) {
     return conversation.memberGatewayIds[0] === gatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
   }
@@ -2172,6 +2295,8 @@ export class InMemoryGatewayStore implements GatewayStore {
       version: 1,
       gateways: [...this.gatewaysById.values()],
       gatewayTokens: [...this.tokensToGatewayId.entries()].map(([token, gatewayId]) => ({ token, gatewayId })),
+      localOwnerGatewayId: this.localOwnerGatewayId,
+      localSessions: [...this.localSessionsByToken.values()],
       presenceHeartbeats: [...this.lastSeenAtByGatewayId.entries()].map(([gatewayId, lastSeenAt]) => ({
         gatewayId,
         lastSeenAt,
@@ -2210,6 +2335,10 @@ export class InMemoryGatewayStore implements GatewayStore {
     }
     for (const tokenRecord of snapshot.gatewayTokens) {
       this.tokensToGatewayId.set(tokenRecord.token, tokenRecord.gatewayId);
+    }
+    this.localOwnerGatewayId = snapshot.localOwnerGatewayId ?? null;
+    for (const session of snapshot.localSessions ?? []) {
+      this.localSessionsByToken.set(session.token, session);
     }
     for (const presenceRecord of snapshot.presenceHeartbeats) {
       this.lastSeenAtByGatewayId.set(presenceRecord.gatewayId, presenceRecord.lastSeenAt);
@@ -2260,6 +2389,7 @@ export class InMemoryGatewayStore implements GatewayStore {
     this.gatewaysById.clear();
     this.gatewaysByHandle.clear();
     this.tokensToGatewayId.clear();
+    this.localSessionsByToken.clear();
     this.friendRequestsById.clear();
     this.friendshipsById.clear();
     this.friendScopesByKey.clear();
@@ -2276,6 +2406,7 @@ export class InMemoryGatewayStore implements GatewayStore {
     this.encountersByPairKey.clear();
     this.scenesById.clear();
     this.sceneIdsByGatewayId.clear();
+    this.localOwnerGatewayId = null;
     this.activeCurrentId = null;
   }
 }

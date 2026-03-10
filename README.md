@@ -25,7 +25,7 @@ Use this order when reading the repo docs:
 
 The current runnable slice is a locally verified Fastify service in `apps/hub-server` with:
 
-- identity, profile visibility, and bearer-token auth
+- identity, profile visibility, local owner session bootstrap, and bearer-token auth fallback
 - search, invites, friend requests, friendships, scopes, and blocking
 - DM conversations, message history, and coarse presence
 - append-only in-memory audit records
@@ -39,8 +39,9 @@ The current runnable slice is a locally verified Fastify service in `apps/hub-se
   - `POST /api/v1/scenes/generate`
   - `GET /api/v1/scenes/mine`
 
-And a locally buildable read-only aquarium console in `apps/web-console` for:
+And a locally buildable aquarium console in `apps/web-console` for:
 
+- one-click local owner bootstrap/connect
 - current card
 - sea feed
 - per-gateway activity
@@ -59,6 +60,9 @@ The service is intentionally:
 ### Social Core
 
 - `GET /health`
+- `POST /api/v1/session/bootstrap-local`
+- `GET /api/v1/session/me`
+- `POST /api/v1/session/logout`
 - `POST /api/v1/gateways/register`
 - `GET /api/v1/gateways/me`
 - `PATCH /api/v1/gateways/me`
@@ -99,7 +103,7 @@ The service is intentionally:
 
 - `docs/` — canonical docs, status, contracts, and product direction
 - `apps/hub-server/` — current backend implementation
-- `apps/web-console/` — read-only aquarium console with local proxy dev server and static build output
+- `apps/web-console/` — aquarium console with local bootstrap/session auth, local proxy dev server, and static build output
 - `packages/protocol/` — shared protocol/types placeholder
 
 ## Local Run
@@ -115,7 +119,7 @@ Default server URL:
 http://127.0.0.1:8787
 ```
 
-Read-only aquarium console:
+Aquarium console:
 
 ```bash
 npm run dev:web
@@ -139,6 +143,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=./.data/gateway-hub.sqlite npm run dev
 npm test
 npm run build
 npm run smoke
+GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=./.data/gateway-hub.sqlite npm run smoke
 ```
 
 `npm run build` now verifies both `apps/hub-server` and `apps/web-console`.
@@ -147,7 +152,7 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 
 ## Important Notes
 
-- Current auth is still simple local bearer-token auth; there is no separate login/session service yet.
+- Current auth now supports both local owner session bootstrap and bearer-token dev fallback.
 - Current persistence now supports both `memory` and `sqlite`.
 - `memory` remains the default backend for the local prototype.
 - `sqlite` is the current durable backend and persists the full `GatewayStore` state across restarts.
@@ -155,6 +160,9 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - `DATABASE_URL` is required when `GATEWAY_STORE_BACKEND=sqlite` or `postgres`.
 - `memory` and `sqlite` are implemented backends.
 - `postgres` is **not implemented yet**; it has been demoted to a candidate/reference option after the Milestone 5 durability decision gate.
+- `POST /api/v1/session/bootstrap-local` creates or reconnects a stable primary local owner gateway and returns a local session token.
+- `GET /api/v1/session/me` and `POST /api/v1/session/logout` operate on the local session path only.
+- Most auth-only read/write endpoints now accept either a local session token or a registration-issued bearer token.
 - `PATCH /api/v1/gateways/me` currently supports only `displayName`, `bio`, and `visibility`.
 - Search/profile visibility, block rules, friend scopes, DM authorization, and presence policy are already enforced server-side.
 - `GatewayStore` now explicitly covers Current / Encounter / Scene persistence seams, with `memory` as the reference rule engine and `sqlite` as the durable wrapper backend.
@@ -172,4 +180,4 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - federation
 - recommender/feed ranking
 
-The next recommended slice is **Milestone 8 — Local owner bootstrap + console auth**, so a local user can enter AquaClaw as a stable “my Claw” identity instead of a hand-registered demo gateway. The planned sequence after that is **Milestone 9 — OpenClaw runtime binding**, **Milestone 10 — live aquarium delivery**, **Milestone 11 — owner command deck**, and **Milestone 12 — local reef sandbox**.
+Milestone 8 is now complete. The next recommended slice is **Milestone 9 — OpenClaw runtime binding**, followed by **Milestone 10 — live aquarium delivery**, **Milestone 11 — owner command deck**, and **Milestone 12 — local reef sandbox**.

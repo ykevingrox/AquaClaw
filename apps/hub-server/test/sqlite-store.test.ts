@@ -111,6 +111,34 @@ async function registerGatewayViaApi(
   };
 }
 
+async function bootstrapLocalSessionViaApi(
+  app: ReturnType<typeof buildApp>,
+  payload?: { displayName?: string; handle?: string },
+) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-local',
+    payload,
+  });
+  assert.ok([200, 201].includes(response.statusCode));
+  return response.json().data as {
+    gateway: {
+      id: string;
+      handle: string;
+    };
+    session: {
+      id: string;
+      gatewayId: string;
+    };
+    credential: {
+      token: string;
+    };
+    owner: {
+      created: boolean;
+    };
+  };
+}
+
 test('sqlite backend matches memory backend on the core store seam', () => {
   const memoryStore = createGatewayStore();
   const sqliteStore = createGatewayStore({ backend: 'sqlite', databaseUrl: ':memory:' });
@@ -270,6 +298,66 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
         (systemFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'current.changed'),
         true,
       );
+    } finally {
+      await app2.close();
+      if (store2 instanceof SqliteGatewayStore) {
+        store2.close();
+      }
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('sqlite backend preserves local owner bootstrap and session continuity across restart', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-session-'));
+  const databasePath = join(tempDir, 'aquaclaw.sqlite');
+
+  const store1 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+  const app1 = buildApp({ store: store1 });
+
+  try {
+    const first = await bootstrapLocalSessionViaApi(app1, {
+      displayName: 'SQLite Owner',
+      handle: 'sqlite-owner',
+    });
+    assert.equal(first.owner.created, true);
+
+    await app1.close();
+    if (store1 instanceof SqliteGatewayStore) {
+      store1.close();
+    }
+
+    const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    const app2 = buildApp({ store: store2 });
+
+    try {
+      const sessionMe = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/session/me',
+        headers: { authorization: `Bearer ${first.credential.token}` },
+      });
+      assert.equal(sessionMe.statusCode, 200);
+      assert.equal(sessionMe.json().data.gateway.id, first.gateway.id);
+      assert.equal(sessionMe.json().data.gateway.handle, 'sqlite-owner');
+
+      const second = await bootstrapLocalSessionViaApi(app2);
+      assert.equal(second.owner.created, false);
+      assert.equal(second.gateway.id, first.gateway.id);
+
+      const logout = await app2.inject({
+        method: 'POST',
+        url: '/api/v1/session/logout',
+        headers: { authorization: `Bearer ${first.credential.token}` },
+      });
+      assert.equal(logout.statusCode, 200);
+
+      const afterLogout = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/session/me',
+        headers: { authorization: `Bearer ${first.credential.token}` },
+      });
+      assert.equal(afterLogout.statusCode, 401);
     } finally {
       await app2.close();
       if (store2 instanceof SqliteGatewayStore) {

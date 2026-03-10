@@ -19,16 +19,21 @@ assert.equal(current.statusCode, 200);
 assert.equal(typeof current.json().data.current.key, 'string');
 assert.equal(typeof current.json().data.current.tone, 'string');
 
-const register = await app.inject({
+const bootstrap = await app.inject({
   method: 'POST',
-  url: '/api/v1/gateways/register',
-  payload: {
-    displayName: 'Smoke Gateway',
-    handle: 'smoke-gateway',
-  },
+  url: '/api/v1/session/bootstrap-local',
 });
-assert.equal(register.statusCode, 201);
-const token = register.json().data.credential.token as string;
+assert.equal(bootstrap.statusCode, 201);
+const token = bootstrap.json().data.credential.token as string;
+const gatewayId = bootstrap.json().data.gateway.id as string;
+
+const sessionMe = await app.inject({
+  method: 'GET',
+  url: '/api/v1/session/me',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(sessionMe.statusCode, 200);
+assert.equal(sessionMe.json().data.gateway.id, gatewayId);
 
 const me = await app.inject({
   method: 'GET',
@@ -65,12 +70,12 @@ assert.equal(currentAfterWrite.json().data.current.source, 'manual');
 
 const search = await app.inject({
   method: 'GET',
-  url: '/api/v1/search/gateways?q=smoke',
+  url: '/api/v1/search/gateways?q=my-claw',
   headers: { authorization: `Bearer ${token}` },
 });
 assert.equal(search.statusCode, 200);
 assert.equal(search.json().data.items.length, 1);
-assert.equal(search.json().data.items[0].handle, 'smoke-gateway');
+assert.equal(search.json().data.items[0].handle, 'my-claw');
 
 const peerRegister = await app.inject({
   method: 'POST',
@@ -100,7 +105,6 @@ const accepted = await app.inject({
 });
 assert.equal(accepted.statusCode, 200);
 const conversationId = accepted.json().data.conversation.id as string;
-const gatewayId = register.json().data.gateway.id as string;
 
 const heartbeat = await app.inject({
   method: 'POST',
@@ -197,4 +201,6 @@ await app.close();
 if (store instanceof SqliteGatewayStore) {
   store.close();
 }
-console.log(`smoke_ok backend=${config.storeBackend} health=1 current=1 current_write=1 register=1 me=1 search=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1`);
+console.log(
+  `smoke_ok backend=${config.storeBackend} health=1 current=1 bootstrap=1 session_me=1 me=1 current_write=1 search=1 register=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1`,
+);

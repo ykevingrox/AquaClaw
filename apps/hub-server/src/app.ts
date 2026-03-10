@@ -12,6 +12,13 @@ interface RegisterBody {
   visibility?: GatewayVisibility;
 }
 
+interface BootstrapLocalSessionBody {
+  displayName?: string;
+  handle?: string;
+  bio?: string;
+  visibility?: GatewayVisibility;
+}
+
 interface UpdateMeBody {
   displayName?: string;
   bio?: string;
@@ -143,6 +150,30 @@ function getOptionalAuthedGateway(store: GatewayStore, authorization: string | u
   return store.findByToken(token);
 }
 
+function getAuthedLocalSession(store: GatewayStore, authorization: string | undefined) {
+  const token = extractBearerToken(authorization);
+  if (!token) {
+    return {
+      error: {
+        code: 'unauthorized',
+        message: 'missing or invalid local session token',
+      },
+    } as const;
+  }
+
+  const session = store.findLocalSessionByToken(token);
+  if (!session) {
+    return {
+      error: {
+        code: 'unauthorized',
+        message: 'invalid local session token',
+      },
+    } as const;
+  }
+
+  return session;
+}
+
 function toGatewaySummary(gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
   return {
     id: gateway.id,
@@ -200,6 +231,15 @@ function toEncounterSummary(store: GatewayStore, encounter: EncounterRecord, sub
     peer: peerGateway ? toGatewaySummary(peerGateway) : null,
     createdAt: encounter.createdAt,
     updatedAt: encounter.updatedAt,
+  };
+}
+
+function toLocalSessionSummary(session: { id: string; gatewayId: string; createdAt: string }) {
+  return {
+    id: session.id,
+    gatewayId: session.gatewayId,
+    createdAt: session.createdAt,
+    kind: 'local_session',
   };
 }
 
@@ -346,6 +386,114 @@ export function buildApp(options: BuildAppOptions = {}) {
   const app = Fastify({ logger: true });
 
   app.get('/health', async () => ({ ok: true, data: { status: 'ok' } }));
+
+  app.post<{ Body: BootstrapLocalSessionBody }>('/api/v1/session/bootstrap-local', async (request, reply) => {
+    const { displayName, handle, bio, visibility } = request.body ?? {};
+
+    if (displayName !== undefined && (typeof displayName !== 'string' || !displayName.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'displayName must be a non-empty string when provided',
+        },
+      });
+    }
+    if (handle !== undefined && (typeof handle !== 'string' || !handle.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'handle must be a non-empty string when provided',
+        },
+      });
+    }
+    if (bio !== undefined && typeof bio !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'bio must be a string when provided',
+        },
+      });
+    }
+
+    try {
+      const result = store.bootstrapLocalSession({
+        displayName,
+        handle,
+        bio,
+        visibility,
+      });
+
+      return reply.code(result.createdOwner ? 201 : 200).send({
+        ok: true,
+        data: {
+          gateway: result.gateway,
+          session: toLocalSessionSummary(result.session),
+          credential: {
+            token: result.session.token,
+            kind: 'local_session',
+          },
+          owner: {
+            isPrimary: true,
+            created: result.createdOwner,
+          },
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to bootstrap local session';
+      const statusCode = message === 'handle already exists' ? 409 : 400;
+      return reply.code(statusCode).send({
+        ok: false,
+        error: {
+          code: statusCode === 409 ? 'handle_conflict' : 'validation_failed',
+          message,
+        },
+      });
+    }
+  });
+
+  app.get('/api/v1/session/me', async (request, reply) => {
+    const result = getAuthedLocalSession(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    return {
+      ok: true,
+      data: {
+        gateway: result.gateway,
+        session: toLocalSessionSummary(result.session),
+        owner: {
+          isPrimary: true,
+        },
+      },
+    };
+  });
+
+  app.post('/api/v1/session/logout', async (request, reply) => {
+    const token = extractBearerToken(request.headers.authorization);
+    const session = token ? store.findLocalSessionByToken(token) : null;
+    if (!token || !session) {
+      return reply.code(401).send({
+        ok: false,
+        error: {
+          code: 'unauthorized',
+          message: 'invalid local session token',
+        },
+      });
+    }
+
+    store.logoutLocalSession(token);
+    return {
+      ok: true,
+      data: {
+        loggedOut: true,
+        sessionId: session.session.id,
+      },
+    };
+  });
 
   app.get('/api/v1/currents/current', async () => ({
     ok: true,

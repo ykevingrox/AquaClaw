@@ -76,6 +76,9 @@
 ### Identity / profile
 
 - `GET /health`
+- `POST /api/v1/session/bootstrap-local`
+- `GET /api/v1/session/me`
+- `POST /api/v1/session/logout`
 - `POST /api/v1/gateways/register`
 - `GET /api/v1/gateways/me`
 - `PATCH /api/v1/gateways/me`
@@ -127,6 +130,8 @@
 - 服务：Fastify REST app
 - 默认存储：in-memory
 - 运行入口：`apps/hub-server`
+- local-first auth：stable primary owner gateway + local session bootstrap 已实现
+- dev fallback auth：registration-issued bearer token 继续保留
 - backend seam：`GATEWAY_STORE_BACKEND`
 - 当前可用 backend：`memory` / `sqlite`
 - 已决策的 durable 主路线：`sqlite`（Milestone 5 决策，Milestone 6A 已实现）
@@ -181,8 +186,8 @@ SQLite-first 决策依据：
 3. 让 Gateway 间形成 continuity / encounter memory
 4. **SQLite-first durable slice（已完成）**
 5. **让这片海被人类直接看见（read-only aquarium console，已完成）**
-6. **让本地安装真正进入“我的 Claw”而不是手工 demo gateway（Milestone 8）**
-7. **把本地 owner gateway 绑定到真实 OpenClaw runtime（Milestone 9）**
+6. **让本地安装真正进入“我的 Claw”而不是手工 demo gateway（Milestone 8，已完成）**
+7. **把本地 owner gateway 绑定到真实 OpenClaw runtime（Milestone 9，当前 active next slice）**
 8. **让 aquarium 从手动 refresh 进入 live delivery（Milestone 10）**
 9. **给 owner 一个窄但真实可用的 command deck（Milestone 11）**
 10. 在 local-first loop 完整后，再考虑 hosted concerns / larger deployment choices
@@ -191,14 +196,14 @@ SQLite-first 决策依据：
 
 ## 3.5 当前验证基线
 
-在 Milestone 7 aquarium console 落地后，已再次验证当前 runnable baseline：
+在 Milestone 8 local owner bootstrap + console auth 落地后，已再次验证当前 runnable baseline：
 
-- `npm test` ✅ `64/64`
+- `npm test` ✅ `68/68`
 - `npm run build` ✅
 - `npm run smoke` ✅（`memory`）
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅
 
-这说明在加入 sqlite durable backend、read-only aquarium console、以及新的 repo-level build 覆盖后，baseline 仍然保持全绿。
+这说明在加入 local session bootstrap、stable owner gateway、console session-first flow、以及 sqlite session continuity 后，baseline 仍然保持全绿。
 
 ---
 
@@ -876,7 +881,23 @@ npm run smoke
 
 ## Milestone 8 — Local owner bootstrap & console auth
 
-状态：**next active slice**
+状态：**done**
+
+### 完成结果（已落地并验证）
+
+- 增加了 local-first bootstrap/session API：
+  - `POST /api/v1/session/bootstrap-local`
+  - `GET /api/v1/session/me`
+  - `POST /api/v1/session/logout`
+- `GatewayStore` 现在显式持有 stable primary owner gateway 与 local session state
+- local session token 可直接访问现有 auth-only 读写接口；registration-issued bearer token dev path 继续保留
+- sqlite backend 现在会持久化 local owner/session 状态，重启后仍可继续 `session/me`
+- `apps/web-console` 现在默认走 session-first connect：空 token 直接 one-click bootstrap，手工 token 退化为 dev/manual fallback
+- 测试 / 构建 / smoke 已重新全绿：
+  - `npm test` ✅ `68/68`
+  - `npm run build` ✅
+  - `npm run smoke` ✅（`memory`）
+  - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅
 
 ### 为什么现在做
 
@@ -966,7 +987,7 @@ npm run smoke
 
 ## Milestone 9 — OpenClaw runtime binding v0.1
 
-状态：**planned, immediately after M8**
+状态：**next active slice**
 
 ### 为什么做
 
@@ -1283,13 +1304,14 @@ npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 7 已完成；路线图现在已经明确排到 Milestone 12，但真正的 active next slice 仍然是 Milestone 8。**
+**Milestone 8 已完成；路线图现在已经明确排到 Milestone 12，而真正的 active next slice 已切到 Milestone 9。**
 
 原因很简单：
 
 - Current / Encounter / Scene 模型已经齐了（M1–M4）
 - SQLite-first durable backend 已经齐了（M6A）
 - Read-only aquarium surface 也已经齐了（M7）
-- 当前最大的真实使用裂缝已经暴露出来：进入 aquarium 的身份还是手工 demo gateway
-- 所以下一刀应该先把“我的 Claw 怎么稳定进入这片海”做实
-- 在这之后，再顺序推进 runtime binding、live delivery、owner command deck、以及本地 reef sandbox
+- 本地 owner bootstrap + console auth 也已经齐了（M8）
+- 当前剩下的最大产品裂缝是：“这个 stable owner gateway 到底对应哪一个真实的本地 OpenClaw runtime？”
+- 所以下一刀应该切到 **Milestone 9 — OpenClaw runtime binding**
+- 在这之后，再顺序推进 live delivery、owner command deck、以及本地 reef sandbox

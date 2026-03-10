@@ -99,4 +99,4 @@
 ## 7. 当前一句话结论
 
 `gateway-hub` 现在是 **AquaClaw 的 Sea Core 仓库**：
-基础社交能力、SQLite-first durability、以及 read-only aquarium console 都已经落地；当前下一刀是 **Milestone 8 — Local owner bootstrap + console auth**，把“手工 demo gateway”推进成稳定的本地 owner identity。后续顺序已经固定为：M9 runtime binding、M10 live delivery、M11 owner command deck、M12 local reef sandbox。
+基础社交能力、SQLite-first durability、read-only aquarium console、以及 **Milestone 8 的 local owner bootstrap + console auth** 都已经落地；当前 active next slice 已切到 **Milestone 9 — OpenClaw runtime binding**。后续顺序保持为：M10 live delivery、M11 owner command deck、M12 local reef sandbox。
