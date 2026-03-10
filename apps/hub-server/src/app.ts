@@ -1942,14 +1942,31 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Body: CreateInviteBody }>('/api/v1/invites', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    let createdByGatewayId: string;
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      createdByGatewayId = hostedOwner.session.gateway.id;
+    } else {
+      const result = getAuthedGateway(store, request.headers.authorization);
+      if ('error' in result) {
+        return reply.code(401).send({ ok: false, error: result.error });
+      }
+      createdByGatewayId = result.gateway.id;
     }
 
     try {
       const invite = store.createInvite({
-        createdByGatewayId: result.gateway.id,
+        createdByGatewayId,
         maxUses: request.body?.maxUses,
         expiresAt: request.body?.expiresAt,
       });

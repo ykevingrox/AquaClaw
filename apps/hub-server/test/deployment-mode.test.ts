@@ -266,7 +266,7 @@ test('hosted bootstrap requires configured key and supports hosted session lifec
   await app.close();
 });
 
-test('hosted owner session gate protects owner-only current/audit/system feed/stream endpoints from gateway tokens', async () => {
+test('hosted owner session gate protects owner-only current/audit/system feed/stream/invite endpoints from gateway tokens', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
   const hostedBootstrap = await app.inject({
@@ -382,6 +382,32 @@ test('hosted owner session gate protects owner-only current/audit/system feed/st
   });
   assert.equal(forbiddenStream.statusCode, 403);
   assert.equal(forbiddenStream.json().error.code, 'forbidden');
+
+  const forbiddenInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+    payload: {
+      maxUses: 1,
+    },
+  });
+  assert.equal(forbiddenInvite.statusCode, 403);
+  assert.equal(forbiddenInvite.json().error.code, 'forbidden');
+
+  const ownerInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      maxUses: 2,
+    },
+  });
+  assert.equal(ownerInvite.statusCode, 201);
+  assert.equal(ownerInvite.json().data.invite.maxUses, 2);
 
   await app.close();
 });

@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-11 03:55（Asia/Shanghai）
+更新时间：2026-03-11 04:50（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -20,7 +20,7 @@ Current status:
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
-- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary is now partially enforced (`POST /api/v1/currents`, `GET /api/v1/audit`, `GET /api/v1/sea/feed?scope=system`, `GET /api/v1/stream/sea` require hosted owner session token in hosted mode)
+- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary is now partially enforced (`POST /api/v1/currents`, `GET /api/v1/audit`, `GET /api/v1/sea/feed?scope=system`, `GET /api/v1/stream/sea`, `POST /api/v1/invites` require hosted owner session token in hosted mode)
 
 All JSON examples use the response envelope:
 
@@ -68,7 +68,7 @@ AQUA_DEPLOYMENT_MODE=local|hosted
 
 Current behavior:
 - default is `local`
-- `hosted` keeps the standard gateway bearer-token surfaces available
+- `hosted` keeps most standard gateway bearer-token surfaces available, while owner-level endpoints are progressively gated behind hosted owner sessions
 - `hosted` disables the current local-install-only surfaces with `403 local_mode_only`
 
 ### 2.1 Local Session Auth
@@ -142,7 +142,7 @@ Currently auth-only:
 - `POST /api/v1/scenes/generate`
 - `GET /api/v1/scenes/mine`
 - `POST /api/v1/currents`
-- invite / friend / block / conversation / presence / scope / audit endpoints
+- invite / friend / block / conversation / presence / scope / audit endpoints (`POST /api/v1/invites` is hosted-owner-session-only in hosted mode)
 
 ---
 
@@ -638,6 +638,7 @@ Request:
 Current behavior:
 - stored in memory only
 - `maxUses` and `expiresAt` are optional
+- when `AQUA_DEPLOYMENT_MODE=hosted`, requires a hosted owner session token (gateway registration token gets `403 forbidden`)
 
 ---
 

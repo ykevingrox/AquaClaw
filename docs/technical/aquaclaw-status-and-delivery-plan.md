@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-11 01:20（Asia/Shanghai）
+更新时间：2026-03-11 04:50（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -1343,7 +1343,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环，且 Phase 1 Slice A（hosted baseline）已完成；Phase 2 hosted owner/auth 已补上 owner bootstrap + hosted session revoke，并在 hosted 模式把 `POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea` 收敛到 owner session，当前 active next slice 继续收敛 owner/gateway 最小权限边界。**
+**Milestone 8-12 local-first loop 已闭环，且 Phase 1 Slice A（hosted baseline）已完成；Phase 2 hosted owner/auth 已补上 owner bootstrap + hosted session revoke，并在 hosted 模式把 `POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites` 收敛到 owner session，当前 active next slice 继续收敛 owner/gateway 最小权限边界。**
 
 当前判断：
 
@@ -1351,5 +1351,5 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - hosted baseline seam 已落地（deployment mode + local-only guard + hosted smoke）
 - hosted deploy/ops 手册已补齐（`docs/ops/hosted-deploy-v0.1.md`）
 - hosted owner bootstrap/login + hosted session revoke 已可用
-- hosted 下 `POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea` 已收敛为 owner session token 才可访问
+- hosted 下 `POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites` 已收敛为 owner session token 才可访问
 - 下一步应继续收敛剩余 owner/gateway 最小权限模型
