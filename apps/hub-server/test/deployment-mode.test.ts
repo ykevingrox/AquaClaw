@@ -17,6 +17,7 @@ const hostedOnlyEndpoints = [
   { method: 'POST', url: '/api/v1/session/bootstrap-hosted' },
   { method: 'GET', url: '/api/v1/session/hosted/me' },
   { method: 'POST', url: '/api/v1/session/hosted/logout' },
+  { method: 'POST', url: '/api/v1/session/hosted/revoke' },
 ] as const;
 
 test('hosted mode rejects local-only endpoints with a consistent local_mode_only error', async () => {
@@ -187,6 +188,80 @@ test('hosted bootstrap requires configured key and supports hosted session lifec
     },
   });
   assert.equal(afterLogout.statusCode, 401);
+
+  const thirdBootstrap = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-hosted',
+    payload: {
+      bootstrapKey: 'hosted-secret',
+    },
+  });
+  assert.equal(thirdBootstrap.statusCode, 200);
+  const thirdToken = thirdBootstrap.json().data.credential.token as string;
+
+  const invalidRevokePayload = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/hosted/revoke',
+    headers: {
+      authorization: `Bearer ${thirdToken}`,
+    },
+    payload: {
+      revokeCurrent: 'yes',
+    },
+  });
+  assert.equal(invalidRevokePayload.statusCode, 400);
+
+  const revokeOthers = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/hosted/revoke',
+    headers: {
+      authorization: `Bearer ${thirdToken}`,
+    },
+  });
+  assert.equal(revokeOthers.statusCode, 200);
+  assert.equal(revokeOthers.json().data.revokedCount, 1);
+  assert.equal(revokeOthers.json().data.currentSessionRevoked, false);
+
+  const firstAfterRevoke = await app.inject({
+    method: 'GET',
+    url: '/api/v1/session/hosted/me',
+    headers: {
+      authorization: `Bearer ${firstToken}`,
+    },
+  });
+  assert.equal(firstAfterRevoke.statusCode, 401);
+
+  const thirdStillValid = await app.inject({
+    method: 'GET',
+    url: '/api/v1/session/hosted/me',
+    headers: {
+      authorization: `Bearer ${thirdToken}`,
+    },
+  });
+  assert.equal(thirdStillValid.statusCode, 200);
+
+  const revokeCurrent = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/hosted/revoke',
+    headers: {
+      authorization: `Bearer ${thirdToken}`,
+    },
+    payload: {
+      revokeCurrent: true,
+    },
+  });
+  assert.equal(revokeCurrent.statusCode, 200);
+  assert.equal(revokeCurrent.json().data.revokedCount, 1);
+  assert.equal(revokeCurrent.json().data.currentSessionRevoked, true);
+
+  const thirdAfterRevokeCurrent = await app.inject({
+    method: 'GET',
+    url: '/api/v1/session/hosted/me',
+    headers: {
+      authorization: `Bearer ${thirdToken}`,
+    },
+  });
+  assert.equal(thirdAfterRevokeCurrent.statusCode, 401);
 
   await app.close();
 });

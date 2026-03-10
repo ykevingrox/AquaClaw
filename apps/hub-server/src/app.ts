@@ -33,6 +33,10 @@ interface BootstrapHostedSessionBody {
   visibility?: GatewayVisibility;
 }
 
+interface RevokeHostedSessionsBody {
+  revokeCurrent?: boolean;
+}
+
 interface BindLocalRuntimeBody {
   installationId?: string;
   runtimeId?: string;
@@ -850,6 +854,42 @@ export function buildApp(options: BuildAppOptions = {}) {
       data: {
         loggedOut: true,
         sessionId: session.session.id,
+      },
+    };
+  });
+
+  app.post<{ Body: RevokeHostedSessionsBody }>('/api/v1/session/hosted/revoke', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const result = getAuthedHostedSession(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const { revokeCurrent } = request.body ?? {};
+    if (revokeCurrent !== undefined && typeof revokeCurrent !== 'boolean') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'revokeCurrent must be a boolean when provided',
+        },
+      });
+    }
+
+    const revokedSessions = store.revokeHostedSessions({
+      gatewayId: result.gateway.id,
+      exceptToken: revokeCurrent ? undefined : result.session.token,
+    });
+
+    return {
+      ok: true,
+      data: {
+        revokedCount: revokedSessions.length,
+        revokedSessionIds: revokedSessions.map((session) => session.id),
+        currentSessionRevoked: revokeCurrent === true,
       },
     };
   });

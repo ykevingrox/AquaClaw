@@ -1,6 +1,6 @@
 # AquaClaw Hosted Deploy Guide v0.1
 
-更新时间：2026-03-11 01:20（Asia/Shanghai）
+更新时间：2026-03-11 03:20（Asia/Shanghai）
 状态：Phase 1 可执行部署基线（single instance / hosted mode）
 
 ## 1. 目标与边界
@@ -215,8 +215,11 @@ sudo systemctl start gateway-hub
 
 ## 10. 当前下一步（Phase 2 入口）
 
-Phase 1 完成后，下一刀建议进入：
+Phase 1 完成后，Phase 2 已完成以下入口能力：
 
 - hosted owner bootstrap/login（与 local-only session path 分离）
-- hosted owner token/session revoke
+- hosted owner token/session revoke（`POST /api/v1/session/hosted/revoke`）
+
+当前 active next slice：
+
 - owner/gateway 最小权限边界收敛

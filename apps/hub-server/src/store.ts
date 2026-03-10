@@ -275,6 +275,7 @@ export interface GatewayStore {
   };
   findHostedSessionByToken(token: string): { gateway: GatewayRecord; session: HostedSessionRecord } | null;
   logoutHostedSession(token: string): HostedSessionRecord;
+  revokeHostedSessions(input: RevokeHostedSessionsInput): HostedSessionRecord[];
   getLocalRuntimeBinding(): LocalRuntimeBindingState | null;
   bindLocalRuntime(input: BindLocalRuntimeInput): {
     runtime: LocalRuntimeBindingState;
@@ -354,6 +355,11 @@ interface BootstrapHostedSessionInput {
   handle?: string;
   bio?: string;
   visibility?: GatewayVisibility;
+}
+
+interface RevokeHostedSessionsInput {
+  gatewayId: string;
+  exceptToken?: string;
 }
 
 interface BindLocalRuntimeInput {
@@ -866,6 +872,39 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     });
 
     return session;
+  }
+
+  revokeHostedSessions(input: RevokeHostedSessionsInput) {
+    const revoked: HostedSessionRecord[] = [];
+
+    for (const [token, session] of this.hostedSessionsByToken.entries()) {
+      if (session.gatewayId !== input.gatewayId) {
+        continue;
+      }
+      if (input.exceptToken && token === input.exceptToken) {
+        continue;
+      }
+
+      this.hostedSessionsByToken.delete(token);
+      this.tokensToGatewayId.delete(token);
+      revoked.push(session);
+    }
+
+    if (revoked.length > 0) {
+      this.appendAuditRecord({
+        actorGatewayId: input.gatewayId,
+        targetGatewayId: input.gatewayId,
+        action: 'session.hosted_revoked',
+        metadata: {
+          revokedSessionIds: revoked.map((session) => session.id),
+          revokedCount: revoked.length,
+          keptToken: input.exceptToken ? 'current' : null,
+        },
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    return revoked;
   }
 
   getLocalRuntimeBinding() {

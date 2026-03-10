@@ -109,6 +109,12 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.logoutHostedSession(...args));
   }
 
+  revokeHostedSessions(
+    ...args: Parameters<GatewayStore['revokeHostedSessions']>
+  ): ReturnType<GatewayStore['revokeHostedSessions']> {
+    return this.runMutation(() => this.inner.revokeHostedSessions(...args));
+  }
+
   getLocalRuntimeBinding(
     ...args: Parameters<GatewayStore['getLocalRuntimeBinding']>
   ): ReturnType<GatewayStore['getLocalRuntimeBinding']> {

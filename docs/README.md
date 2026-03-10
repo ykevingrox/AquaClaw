@@ -119,4 +119,4 @@
 ## 7. 当前一句话结论
 
 `gateway-hub` 现在是 **AquaClaw 的 Sea Core 仓库**：
-基础社交能力、SQLite-first durability、aquarium console、**Milestone 8 的 local owner bootstrap + console auth**、**Milestone 9 的 local runtime binding + presence bridge**、**Milestone 10 的 live aquarium delivery**、**Milestone 11 的 narrow owner command deck**、以及 **Milestone 12 的 local reef sandbox** 都已经落地；并已完成 **Phase 1 hosted baseline**（deployment mode + local-only guard + hosted ops），当前 active next slice 是 **Phase 2 hosted owner/auth**。
+基础社交能力、SQLite-first durability、aquarium console、**Milestone 8 的 local owner bootstrap + console auth**、**Milestone 9 的 local runtime binding + presence bridge**、**Milestone 10 的 live aquarium delivery**、**Milestone 11 的 narrow owner command deck**、以及 **Milestone 12 的 local reef sandbox** 都已经落地；并已完成 **Phase 1 hosted baseline**（deployment mode + local-only guard + hosted ops），且 **Phase 2 hosted owner/auth** 已补上 hosted owner session revoke 能力，当前 active next slice 收敛到 **owner/gateway 最小权限边界**。
