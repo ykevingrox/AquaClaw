@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createPostgresGatewayStore } from './postgres-store.js';
+import { createSqliteGatewayStore } from './sqlite-store.js';
 
 export type GatewayVisibility = 'private' | 'invite_only' | 'friends_only' | 'public';
 export type PresenceStatus = 'online' | 'recently_active' | 'offline';
@@ -178,7 +179,44 @@ export interface ScenePage {
   nextCursor: string | null;
 }
 
-export type StoreBackend = 'memory' | 'postgres';
+export interface GatewayTokenSnapshotRecord {
+  token: string;
+  gatewayId: string;
+}
+
+export interface GatewayPresenceSnapshotRecord {
+  gatewayId: string;
+  lastSeenAt: string;
+}
+
+export interface GatewaySceneOrderSnapshotRecord {
+  gatewayId: string;
+  sceneIds: string[];
+}
+
+export interface GatewayStoreSnapshot {
+  version: 1;
+  gateways: GatewayRecord[];
+  gatewayTokens: GatewayTokenSnapshotRecord[];
+  presenceHeartbeats: GatewayPresenceSnapshotRecord[];
+  friendRequests: FriendRequestRecord[];
+  friendships: FriendshipRecord[];
+  friendScopes: FriendScopeRecord[];
+  blocks: BlockRecord[];
+  invites: InviteRecord[];
+  inviteClaims: InviteClaimRecord[];
+  conversations: ConversationRecord[];
+  messages: MessageRecord[];
+  auditLog: AuditRecord[];
+  seaEvents: SeaEvent[];
+  currents: CurrentRecord[];
+  activeCurrentId: string | null;
+  encounters: EncounterRecord[];
+  scenes: SceneRecord[];
+  sceneOrder: GatewaySceneOrderSnapshotRecord[];
+}
+
+export type StoreBackend = 'memory' | 'sqlite' | 'postgres';
 
 export interface GatewayStore {
   register(input: RegisterInput): { gateway: GatewayRecord; token: string };
@@ -2129,6 +2167,95 @@ export class InMemoryGatewayStore implements GatewayStore {
     return 'offline';
   }
 
+  exportSnapshot(): GatewayStoreSnapshot {
+    return {
+      version: 1,
+      gateways: [...this.gatewaysById.values()],
+      gatewayTokens: [...this.tokensToGatewayId.entries()].map(([token, gatewayId]) => ({ token, gatewayId })),
+      presenceHeartbeats: [...this.lastSeenAtByGatewayId.entries()].map(([gatewayId, lastSeenAt]) => ({
+        gatewayId,
+        lastSeenAt,
+      })),
+      friendRequests: [...this.friendRequestsById.values()],
+      friendships: [...this.friendshipsById.values()],
+      friendScopes: [...this.friendScopesByKey.values()],
+      blocks: [...this.blocksByKey.values()],
+      invites: [...this.invitesById.values()],
+      inviteClaims: [...this.inviteClaimsByKey.values()],
+      conversations: [...this.conversationsById.values()],
+      messages: [...this.messagesById.values()],
+      auditLog: [...this.auditLog],
+      seaEvents: [...this.seaEvents],
+      currents: [...this.currentsById.values()],
+      activeCurrentId: this.activeCurrentId,
+      encounters: [...this.encountersByPairKey.values()],
+      scenes: [...this.scenesById.values()],
+      sceneOrder: [...this.sceneIdsByGatewayId.entries()].map(([gatewayId, sceneIds]) => ({
+        gatewayId,
+        sceneIds: [...sceneIds],
+      })),
+    };
+  }
+
+  importSnapshot(snapshot: GatewayStoreSnapshot) {
+    if (snapshot.version !== 1) {
+      throw new Error('unsupported gateway store snapshot version');
+    }
+
+    this.reset();
+
+    for (const gateway of snapshot.gateways) {
+      this.gatewaysById.set(gateway.id, gateway);
+      this.gatewaysByHandle.set(gateway.handle, gateway);
+    }
+    for (const tokenRecord of snapshot.gatewayTokens) {
+      this.tokensToGatewayId.set(tokenRecord.token, tokenRecord.gatewayId);
+    }
+    for (const presenceRecord of snapshot.presenceHeartbeats) {
+      this.lastSeenAtByGatewayId.set(presenceRecord.gatewayId, presenceRecord.lastSeenAt);
+    }
+    for (const request of snapshot.friendRequests) {
+      this.friendRequestsById.set(request.id, request);
+    }
+    for (const friendship of snapshot.friendships) {
+      this.friendshipsById.set(friendship.id, friendship);
+    }
+    for (const scope of snapshot.friendScopes) {
+      this.friendScopesByKey.set(this.scopeKey(scope.fromGatewayId, scope.toGatewayId, scope.scopeName), scope);
+    }
+    for (const block of snapshot.blocks) {
+      this.blocksByKey.set(this.blockKey(block.blockerGatewayId, block.blockedGatewayId), block);
+    }
+    for (const invite of snapshot.invites) {
+      this.invitesById.set(invite.id, invite);
+      this.invitesByCode.set(invite.code, invite);
+    }
+    for (const claim of snapshot.inviteClaims) {
+      this.inviteClaimsByKey.set(`${claim.inviteId}:${claim.claimedByGatewayId}`, claim);
+    }
+    for (const conversation of snapshot.conversations) {
+      this.conversationsById.set(conversation.id, conversation);
+    }
+    for (const message of snapshot.messages) {
+      this.messagesById.set(message.id, message);
+    }
+    this.auditLog.push(...snapshot.auditLog);
+    this.seaEvents.push(...snapshot.seaEvents);
+    for (const current of snapshot.currents) {
+      this.currentsById.set(current.id, current);
+    }
+    this.activeCurrentId = snapshot.activeCurrentId;
+    for (const encounter of snapshot.encounters) {
+      this.encountersByPairKey.set(this.encounterPairKey(encounter.gatewayAId, encounter.gatewayBId), encounter);
+    }
+    for (const scene of snapshot.scenes) {
+      this.scenesById.set(scene.id, scene);
+    }
+    for (const sceneOrder of snapshot.sceneOrder) {
+      this.sceneIdsByGatewayId.set(sceneOrder.gatewayId, [...sceneOrder.sceneIds]);
+    }
+  }
+
   reset() {
     this.gatewaysById.clear();
     this.gatewaysByHandle.clear();
@@ -2160,6 +2287,12 @@ interface CreateGatewayStoreOptions {
 
 export function createGatewayStore(options: CreateGatewayStoreOptions = {}): GatewayStore {
   const backend = options.backend ?? 'memory';
+  if (backend === 'sqlite') {
+    if (!options.databaseUrl) {
+      throw new Error('databaseUrl is required for sqlite store backend');
+    }
+    return createSqliteGatewayStore({ databaseUrl: options.databaseUrl });
+  }
   if (backend === 'postgres') {
     if (!options.databaseUrl) {
       throw new Error('databaseUrl is required for postgres store backend');

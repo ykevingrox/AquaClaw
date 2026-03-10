@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/app.js';
+import { loadRuntimeConfig } from '../src/config.js';
+import { SqliteGatewayStore } from '../src/sqlite-store.js';
+import { createGatewayStore } from '../src/store.js';
 
-const app = buildApp();
+const config = loadRuntimeConfig(process.env);
+const store = createGatewayStore({
+  backend: config.storeBackend,
+  databaseUrl: config.databaseUrl,
+});
+const app = buildApp({ store });
 
 const health = await app.inject({ method: 'GET', url: '/health' });
 assert.equal(health.statusCode, 200);
@@ -186,4 +194,7 @@ assert.equal(activity.json().data.gateway.id, gatewayId);
 assert.equal(activity.json().data.items.length >= 1, true);
 
 await app.close();
-console.log('smoke_ok health=1 current=1 current_write=1 register=1 me=1 search=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1');
+if (store instanceof SqliteGatewayStore) {
+  store.close();
+}
+console.log(`smoke_ok backend=${config.storeBackend} health=1 current=1 current_write=1 register=1 me=1 search=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1`);

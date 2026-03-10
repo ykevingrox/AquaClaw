@@ -44,7 +44,7 @@ The service is intentionally:
 - REST-first
 - in-memory by default
 - local-first friendly
-- durable storage decided: **SQLite-first** (Milestone 5 completed, implementation in Milestone 6A)
+- durable storage implemented: **SQLite-first** (Milestone 6A completed, default backend still `memory`)
 
 ## Current Runnable Surface
 
@@ -107,6 +107,12 @@ Default server URL:
 http://127.0.0.1:8787
 ```
 
+SQLite-backed local durability:
+
+```bash
+GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=./.data/gateway-hub.sqlite npm run dev
+```
+
 ## Validation
 
 ```bash
@@ -119,21 +125,24 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 
 ## Important Notes
 
-- Current auth is in-memory bearer tokens only.
-- Current persistence is in-memory only. SQLite-first durable backend is the confirmed next step (Milestone 6A).
+- Current auth is still simple local bearer-token auth; there is no separate login/session service yet.
+- Current persistence now supports both `memory` and `sqlite`.
+- `memory` remains the default backend for the local prototype.
+- `sqlite` is the current durable backend and persists the full `GatewayStore` state across restarts.
 - `GATEWAY_STORE_BACKEND` exists as a runtime seam.
-- `memory` is the active backend.
+- `DATABASE_URL` is required when `GATEWAY_STORE_BACKEND=sqlite` or `postgres`.
+- `memory` and `sqlite` are implemented backends.
 - `postgres` is **not implemented yet**; it has been demoted to a candidate/reference option after the Milestone 5 durability decision gate.
 - `PATCH /api/v1/gateways/me` currently supports only `displayName`, `bio`, and `visibility`.
 - Search/profile visibility, block rules, friend scopes, DM authorization, and presence policy are already enforced server-side.
-- `GatewayStore` now explicitly covers Current / Encounter / Scene persistence seams on the reference memory backend.
+- `GatewayStore` now explicitly covers Current / Encounter / Scene persistence seams, with `memory` as the reference rule engine and `sqlite` as the durable wrapper backend.
+- The first SQLite durable slice chooses whole-state snapshot persistence to preserve memory/sqlite parity with minimal business-rule drift.
 - `POST /api/v1/currents` is an auth-only, dev-oriented write path in the current local prototype.
 - `GET /api/v1/currents/current` now returns the active manual current when one is live, otherwise falls back to the seeded 6-hour current window.
 - Current changes emit `current.changed` as a system SeaEvent visible in `scope=system` and `scope=all`.
 
 ## What Is Intentionally Deferred
 
-- durable storage implementation (SQLite-first decided, Milestone 6A is next)
 - WebSocket live delivery
 - owner UI auth
 - attachments / media
@@ -141,4 +150,4 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - federation
 - recommender/feed ranking
 
-The next recommended slice is **Milestone 6A — SQLite-first durable slice**, which will give the sea restart-safe persistence with zero external dependencies.
+The next recommended slice is **Milestone 7 — Read-only aquarium console**, so the now-durable sea can be inspected without working directly through API calls.

@@ -15,13 +15,13 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
   }
 
   const rawBackend = (env.GATEWAY_STORE_BACKEND ?? 'memory').trim().toLowerCase();
-  if (rawBackend !== 'memory' && rawBackend !== 'postgres') {
-    throw new Error('GATEWAY_STORE_BACKEND must be one of: memory, postgres');
+  if (rawBackend !== 'memory' && rawBackend !== 'sqlite' && rawBackend !== 'postgres') {
+    throw new Error('GATEWAY_STORE_BACKEND must be one of: memory, sqlite, postgres');
   }
 
   const databaseUrl = env.DATABASE_URL?.trim() ? env.DATABASE_URL.trim() : null;
-  if (rawBackend === 'postgres' && !databaseUrl) {
-    throw new Error('DATABASE_URL is required when GATEWAY_STORE_BACKEND=postgres');
+  if ((rawBackend === 'sqlite' || rawBackend === 'postgres') && !databaseUrl) {
+    throw new Error(`DATABASE_URL is required when GATEWAY_STORE_BACKEND=${rawBackend}`);
   }
 
   return {

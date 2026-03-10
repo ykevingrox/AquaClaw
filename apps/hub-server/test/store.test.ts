@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createGatewayStore, InMemoryGatewayStore, type GatewayStore } from '../src/store.js';
+import { SqliteGatewayStore } from '../src/sqlite-store.js';
 
 function registerGateway(store: GatewayStore, input: { displayName: string; handle: string }) {
   return store.register(input).gateway;
@@ -10,6 +11,19 @@ function registerGateway(store: GatewayStore, input: { displayName: string; hand
 test('createGatewayStore defaults to in-memory backend', () => {
   const store = createGatewayStore();
   assert.ok(store instanceof InMemoryGatewayStore);
+});
+
+test('createGatewayStore requires databaseUrl for sqlite backend', () => {
+  assert.throws(
+    () => createGatewayStore({ backend: 'sqlite' }),
+    /databaseUrl is required for sqlite store backend/,
+  );
+});
+
+test('createGatewayStore accepts sqlite backend', () => {
+  const store = createGatewayStore({ backend: 'sqlite', databaseUrl: ':memory:' });
+  assert.ok(store instanceof SqliteGatewayStore);
+  store.close();
 });
 
 test('createGatewayStore requires databaseUrl for postgres backend', () => {

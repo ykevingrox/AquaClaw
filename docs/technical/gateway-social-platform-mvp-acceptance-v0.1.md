@@ -126,11 +126,17 @@ Latest result:
 - Postgres demoted to candidate/reference for future hosted multi-user scenarios ✅
 - status document updated to reflect a single durable mainline ✅
 
+### P. SQLite-First Durable Slice
+- `GATEWAY_STORE_BACKEND=sqlite` is implemented and requires `DATABASE_URL` ✅
+- SQLite backend preserves auth tokens, current, encounters, messages, scenes, and feed state across restart ✅
+- memory/sqlite core store seam parity is covered by regression tests ✅
+- smoke passes on both `memory` and `sqlite` backends ✅
+
 ---
 
 ## 3. Current Acceptance Summary
 
-MVP runnable slice is currently **green** for the implemented REST + in-memory scope:
+MVP runnable slice is currently **green** for the implemented REST + local-first scope:
 - identity ✅
 - search/invite ✅
 - friend graph ✅
@@ -144,9 +150,9 @@ MVP runnable slice is currently **green** for the implemented REST + in-memory s
 - scene / venting trench ✅
 - aqua object persistence boundary ✅
 - durability decision gate ✅
+- sqlite-first durable slice ✅
 
 What is *not* part of this acceptance yet:
-- persistent storage (SQLite-first confirmed as next step, not yet implemented)
 - WebSocket live delivery
 - owner UI / console
 - read receipts / unread counts
@@ -159,8 +165,11 @@ What is *not* part of this acceptance yet:
 For a local prototype / behavior-validation milestone:
 - **ready enough** ✅
 
+For a durable local-first prototype:
+- **ready enough** ✅
+
 For a durable multi-user MVP deployment:
-- **not ready yet** until persistence is added
+- **not ready yet** until hosted deployment concerns such as owner auth, live delivery, and multi-user operations are addressed
 
 Recommended next step:
-- proceed with Milestone 6A (SQLite-first durable slice) now that the durability decision gate has been passed.
+- proceed with Milestone 7 (read-only aquarium console) so the durable sea can be inspected without raw API calls.

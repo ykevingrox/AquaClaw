@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-10 16:30（Asia/Shanghai）
+更新时间：2026-03-10 16:49（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -127,8 +127,8 @@
 - 默认存储：in-memory
 - 运行入口：`apps/hub-server`
 - backend seam：`GATEWAY_STORE_BACKEND`
-- 当前可用 backend：`memory`
-- 已决策的 durable 主路线：`sqlite`（Milestone 5 决策，Milestone 6A 实施）
+- 当前可用 backend：`memory` / `sqlite`
+- 已决策的 durable 主路线：`sqlite`（Milestone 5 决策，Milestone 6A 已实现）
 - 当前保留但降级为候选的 backend：`postgres`
 
 在 Milestone 4 后，AquaClaw 新对象的 store 边界也已经明确：
@@ -137,7 +137,7 @@
 - `InMemoryGatewayStore` 是当前 reference implementation
 - app handler 继续只依赖 store contract，而不是 memory-only internals
 
-在 Milestone 5 决策后，durable storage 主路线已确认为 **SQLite-first**。
+在 Milestone 6A 落地后，durable storage 主路线已经是 **SQLite-first 已实现**。
 
 SQLite-first 决策依据：
 
@@ -153,6 +153,13 @@ SQLite-first 决策依据：
 - `apps/hub-server/src/postgres-store.ts` 仍是 placeholder
 - Postgres 降级为 **候选 / 参考方案**，适用于未来 hosted multi-user 场景
 - **Postgres 不是当前 durable 主路线**
+
+当前 `sqlite` 实现策略必须明确理解为：
+
+- `SqliteGatewayStore` 复用 `InMemoryGatewayStore` 作为规则引擎
+- durable v1 采用 whole-state snapshot 持久化到 SQLite 文件
+- 目标优先级是 **restart-safe durability + memory/sqlite parity**
+- 这对当前 local-first / single-process AquaClaw 是合理的第一刀
 
 ---
 
@@ -171,20 +178,22 @@ SQLite-first 决策依据：
 1. 把海里的事情变得可见
 2. 给 AquaClaw 加入真正的 world-state
 3. 让 Gateway 间形成 continuity / encounter memory
-4. **SQLite-first durable slice（已决策）**
-5. 在模型 durable 后，再考虑 hosted / multi-user deployment
+4. **SQLite-first durable slice（已完成）**
+5. 让这片海被人类直接看见（read-only aquarium console）
+6. 在模型 durable 后，再考虑 hosted / multi-user deployment
 
 ---
 
 ## 3.5 当前验证基线
 
-在 Milestone 5 持久化决策后，已再次验证当前 runnable baseline：
+在 Milestone 6A SQLite durable slice 落地后，已再次验证当前 runnable baseline：
 
-- `npm test` ✅ `58/58`
+- `npm test` ✅ `64/64`
 - `npm run build` ✅
-- `npm run smoke` ✅
+- `npm run smoke` ✅（`memory`）
+- `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅
 
-Milestone 5 没有代码变更，仅确认决策并更新文档；baseline 保持全绿。
+这说明在加入 sqlite durable backend、restart regression、以及 memory/sqlite parity 覆盖后，baseline 仍然保持全绿。
 
 ---
 
@@ -693,11 +702,11 @@ B 方案（Postgres-first）降级为 **候选 / 参考方案**：
 
 ## Milestone 6A — SQLite-first durable slice
 
-状态：**next active slice**
+状态：**completed**
 
 ### 何时选择
 
-Milestone 5 已确认 SQLite-first 为 durable 主路线。本 milestone 现在是下一个执行切面。
+Milestone 5 已确认 SQLite-first 为 durable 主路线。本 milestone 现已按最小复杂度落地完成。
 
 ### 目标
 
@@ -710,27 +719,35 @@ Milestone 5 已确认 SQLite-first 为 durable 主路线。本 milestone 现在�
 - 关键读写路径 durability
 - memory/sqlite parity verification
 
+### 完成结果（已落地并验证）
+
+- runtime config 现已支持 `GATEWAY_STORE_BACKEND=sqlite`
+- `DATABASE_URL` 现对 `sqlite` / `postgres` backend 都是必填
+- 新增 `SqliteGatewayStore`
+  - 复用 `InMemoryGatewayStore` 作为业务规则引擎
+  - 通过 SQLite 中的 `gateway_store_state` 快照表持久化完整 `GatewayStore` 状态
+  - 当前 durable v1 覆盖 gateways / tokens / presence heartbeat / friend graph / scopes / blocks / messages / audit / sea events / currents / encounters / scenes
+- 新增 SQLite migration/bootstrap 参考：`apps/hub-server/db/migrations/sqlite/0001_gateway_store_state.sql`
+- `smoke.ts` 现在可在 `memory` / `sqlite` backend 下共用
+- 新增两类关键回归：
+  - memory/sqlite core seam parity test
+  - sqlite restart-survival app-level regression
+
 ### 具体实现步骤
 
-1. 扩展 runtime config 支持 `sqlite`
-2. 添加 schema / migration bootstrap
-3. 先落：
-   - gateways
-   - friendships / scopes / blocks
-   - messages
-   - audit
-   - sea_events
-   - currents
-   - encounters
-   - scenes
-4. 保持 API 行为与 memory backend 一致
-5. 新增 backend parity 测试
+1. 扩展 runtime config 支持 `sqlite` ✅
+2. 添加 schema / migration bootstrap ✅
+3. 落 SQLite durable v1：
+   - whole-state snapshot persistence
+   - restart-safe continuity for the active Sea Core model
+4. 保持 API 行为与 memory backend 一致 ✅
+5. 新增 backend parity 测试 ✅
 
 ### 测试要求
 
-- memory backend 继续 green
-- sqlite backend 对核心行为 green
-- smoke 在 sqlite backend 下通过
+- memory backend 继续 green ✅
+- sqlite backend 对核心行为 green ✅
+- smoke 在 sqlite backend 下通过 ✅
 
 ### 必跑验证
 
@@ -742,8 +759,8 @@ npm run smoke
 
 ### Exit criteria
 
-- 重启后海不会被清空
-- feed / current / encounter continuity 保留下来
+- 重启后海不会被清空 ✅
+- feed / current / encounter continuity 保留下来 ✅
 
 ---
 
@@ -870,10 +887,10 @@ npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 5 已完成，durable 主路线确认为 SQLite-first。下一刀就做 Milestone 6A — SQLite-first durable slice。**
+**Milestone 6A 已完成，海已经具备 SQLite-first durability。下一刀转到 Milestone 7 — Read-only aquarium console。**
 
 原因很简单：
 
-- Current / Encounter / Scene 模型和 store seam 已经齐了（M1–M4）
-- Durable 主路线已经收敛为 SQLite-first（M5）
-- 下一步就是让海的记忆在重启后保留下来
+- Current / Encounter / Scene 模型和 durable seam 都已经齐了（M1–M6A）
+- 现在的主要缺口不再是“能不能记住”，而是“人能不能直观看见”
+- 所以下一步应该把已有世界模型接到可读的 aquarium surface

@@ -11,6 +11,15 @@ test('loadRuntimeConfig defaults to memory backend', () => {
   assert.equal(config.databaseUrl, null);
 });
 
+test('loadRuntimeConfig accepts sqlite backend', () => {
+  const config = loadRuntimeConfig({
+    GATEWAY_STORE_BACKEND: 'sqlite',
+    DATABASE_URL: './.data/gateway-hub.sqlite',
+  });
+  assert.equal(config.storeBackend, 'sqlite');
+  assert.equal(config.databaseUrl, './.data/gateway-hub.sqlite');
+});
+
 test('loadRuntimeConfig accepts postgres backend', () => {
   const config = loadRuntimeConfig({
     GATEWAY_STORE_BACKEND: 'postgres',
@@ -24,6 +33,13 @@ test('loadRuntimeConfig accepts postgres backend', () => {
   assert.equal(config.databaseUrl, 'postgres://postgres:postgres@127.0.0.1:5432/gateway_hub');
 });
 
+test('loadRuntimeConfig requires DATABASE_URL for sqlite backend', () => {
+  assert.throws(
+    () => loadRuntimeConfig({ GATEWAY_STORE_BACKEND: 'sqlite' }),
+    /DATABASE_URL is required when GATEWAY_STORE_BACKEND=sqlite/,
+  );
+});
+
 test('loadRuntimeConfig requires DATABASE_URL for postgres backend', () => {
   assert.throws(
     () => loadRuntimeConfig({ GATEWAY_STORE_BACKEND: 'postgres' }),
@@ -32,5 +48,5 @@ test('loadRuntimeConfig requires DATABASE_URL for postgres backend', () => {
 });
 
 test('loadRuntimeConfig rejects invalid backend values', () => {
-  assert.throws(() => loadRuntimeConfig({ GATEWAY_STORE_BACKEND: 'sqlite' }), /GATEWAY_STORE_BACKEND/);
+  assert.throws(() => loadRuntimeConfig({ GATEWAY_STORE_BACKEND: 'mysql' }), /GATEWAY_STORE_BACKEND/);
 });

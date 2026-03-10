@@ -1,0 +1,282 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import test from 'node:test';
+
+import { buildApp } from '../src/app.js';
+import { SqliteGatewayStore } from '../src/sqlite-store.js';
+import { createGatewayStore, type GatewayStore } from '../src/store.js';
+
+function registerGateway(store: GatewayStore, input: { displayName: string; handle: string }) {
+  return store.register(input).gateway;
+}
+
+function exerciseCoreSeam(store: GatewayStore) {
+  const alpha = registerGateway(store, { displayName: 'SQLite Alpha', handle: 'sqlite-alpha' });
+  const beta = registerGateway(store, { displayName: 'SQLite Beta', handle: 'sqlite-beta' });
+
+  const request = store.createFriendRequest({
+    fromGatewayId: alpha.id,
+    toGatewayId: beta.id,
+    message: 'reef hello',
+  });
+  const accepted = store.acceptFriendRequest(request.id, beta.id);
+
+  store.createMessage({
+    conversationId: accepted.conversation.id,
+    senderGatewayId: alpha.id,
+    body: 'shared coral maps',
+  });
+
+  store.setCurrent({
+    key: 'sqlite-parity',
+    label: 'SQLite Parity',
+    summary: 'The sea keeps the same shape across memory and sqlite.',
+    tone: 'reflective',
+    startsAt: '2026-03-10T00:00:00.000Z',
+    endsAt: '2026-03-10T06:00:00.000Z',
+    actorGatewayId: alpha.id,
+    metadata: {
+      source: 'parity-test',
+    },
+  });
+
+  store.createScene({
+    gatewayId: alpha.id,
+    type: 'vent',
+    summary: 'A direct scene write checks parity on the seam.',
+    tone: 'sharp',
+    metadata: {
+      source: 'parity-test',
+    },
+  });
+
+  return {
+    current: {
+      key: store.getCurrent().key,
+      label: store.getCurrent().label,
+      source: store.getCurrent().source,
+      tone: store.getCurrent().tone,
+    },
+    friends: store.listFriends(alpha.id).map((gateway) => gateway.handle),
+    messages: store.listMessages(accepted.conversation.id, beta.id).map((message) => ({
+      body: message.body,
+      messageType: message.messageType,
+    })),
+    encounters: store.listEncounters({
+      viewerGatewayId: alpha.id,
+      gatewayId: alpha.id,
+    }).items.map((encounter) => ({
+      encounterCount: encounter.encounterCount,
+      lastSummary: encounter.lastSummary,
+      recentTopics: encounter.recentTopics,
+      notes: encounter.notes,
+    })),
+    scenes: store.listScenes({ gatewayId: alpha.id }).items.map((scene) => ({
+      type: scene.type,
+      visibility: scene.visibility,
+      summary: scene.summary,
+      tone: scene.tone,
+    })),
+    mineEventTypes: store.listSeaFeed({
+      viewerGatewayId: alpha.id,
+      scope: 'mine',
+    }).items.map((event) => event.type),
+    systemEventTypes: store.listSeaFeed({
+      viewerGatewayId: alpha.id,
+      scope: 'system',
+    }).items.map((event) => event.type),
+  };
+}
+
+async function registerGatewayViaApi(
+  app: ReturnType<typeof buildApp>,
+  payload: { displayName: string; handle: string },
+) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload,
+  });
+  assert.equal(response.statusCode, 201);
+  return response.json().data as {
+    gateway: {
+      id: string;
+      handle: string;
+    };
+    credential: {
+      token: string;
+    };
+  };
+}
+
+test('sqlite backend matches memory backend on the core store seam', () => {
+  const memoryStore = createGatewayStore();
+  const sqliteStore = createGatewayStore({ backend: 'sqlite', databaseUrl: ':memory:' });
+
+  try {
+    const memoryResult = exerciseCoreSeam(memoryStore);
+    const sqliteResult = exerciseCoreSeam(sqliteStore);
+    assert.deepEqual(sqliteResult, memoryResult);
+  } finally {
+    if (sqliteStore instanceof SqliteGatewayStore) {
+      sqliteStore.close();
+    }
+  }
+});
+
+test('sqlite backend survives restart for auth, current, encounters, messages, scenes, and feed', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-'));
+  const databasePath = join(tempDir, 'aquaclaw.sqlite');
+
+  const store1 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+  const app1 = buildApp({ store: store1 });
+
+  try {
+    const alpha = await registerGatewayViaApi(app1, {
+      displayName: 'Restart Alpha',
+      handle: 'restart-alpha',
+    });
+    const beta = await registerGatewayViaApi(app1, {
+      displayName: 'Restart Beta',
+      handle: 'restart-beta',
+    });
+
+    const currentWrite = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/currents',
+      headers: { authorization: `Bearer ${alpha.credential.token}` },
+      payload: {
+        key: 'restart-current',
+        label: 'Restart Current',
+        summary: 'A durable current should remain after restart.',
+        tone: 'calm',
+        startsAt: new Date(Date.now() - 60_000).toISOString(),
+        endsAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+      },
+    });
+    assert.equal(currentWrite.statusCode, 201);
+    const currentId = currentWrite.json().data.current.id as string;
+
+    const friendRequest = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/friend-requests',
+      headers: { authorization: `Bearer ${alpha.credential.token}` },
+      payload: { toGatewayId: beta.gateway.id },
+    });
+    assert.equal(friendRequest.statusCode, 201);
+    const requestId = friendRequest.json().data.request.id as string;
+
+    const accept = await app1.inject({
+      method: 'POST',
+      url: `/api/v1/friend-requests/${requestId}/accept`,
+      headers: { authorization: `Bearer ${beta.credential.token}` },
+    });
+    assert.equal(accept.statusCode, 200);
+    const conversationId = accept.json().data.conversation.id as string;
+
+    const message = await app1.inject({
+      method: 'POST',
+      url: `/api/v1/conversations/${conversationId}/messages`,
+      headers: { authorization: `Bearer ${alpha.credential.token}` },
+      payload: { body: 'durable coral memory' },
+    });
+    assert.equal(message.statusCode, 201);
+
+    const scene = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/scenes/generate',
+      headers: { authorization: `Bearer ${alpha.credential.token}` },
+      payload: { type: 'vent' },
+    });
+    assert.equal(scene.statusCode, 201);
+    const sceneId = scene.json().data.scene.id as string;
+
+    await app1.close();
+    if (store1 instanceof SqliteGatewayStore) {
+      store1.close();
+    }
+
+    const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    const app2 = buildApp({ store: store2 });
+
+    try {
+      const me = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/gateways/me',
+        headers: { authorization: `Bearer ${alpha.credential.token}` },
+      });
+      assert.equal(me.statusCode, 200);
+      assert.equal(me.json().data.gateway.handle, 'restart-alpha');
+
+      const current = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/currents/current',
+      });
+      assert.equal(current.statusCode, 200);
+      assert.equal(current.json().data.current.id, currentId);
+      assert.equal(current.json().data.current.label, 'Restart Current');
+
+      const messages = await app2.inject({
+        method: 'GET',
+        url: `/api/v1/conversations/${conversationId}/messages`,
+        headers: { authorization: `Bearer ${beta.credential.token}` },
+      });
+      assert.equal(messages.statusCode, 200);
+      assert.equal(messages.json().data.items.length, 1);
+      assert.equal(messages.json().data.items[0].body, 'durable coral memory');
+
+      const encounters = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/encounters',
+        headers: { authorization: `Bearer ${alpha.credential.token}` },
+      });
+      assert.equal(encounters.statusCode, 200);
+      assert.equal(encounters.json().data.items.length, 1);
+      assert.equal(encounters.json().data.items[0].encounterCount, 2);
+      assert.equal(encounters.json().data.items[0].peer.handle, 'restart-beta');
+
+      const scenes = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/scenes/mine',
+        headers: { authorization: `Bearer ${alpha.credential.token}` },
+      });
+      assert.equal(scenes.statusCode, 200);
+      assert.equal((scenes.json().data.items as Array<{ id: string }>).some((item) => item.id === sceneId), true);
+
+      const mineFeed = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/sea/feed?scope=mine',
+        headers: { authorization: `Bearer ${alpha.credential.token}` },
+      });
+      assert.equal(mineFeed.statusCode, 200);
+      assert.equal(
+        (mineFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'scene.vent_generated'),
+        true,
+      );
+      assert.equal(
+        (mineFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'encounter.updated'),
+        true,
+      );
+
+      const systemFeed = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/sea/feed?scope=system',
+        headers: { authorization: `Bearer ${alpha.credential.token}` },
+      });
+      assert.equal(systemFeed.statusCode, 200);
+      assert.equal(
+        (systemFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'current.changed'),
+        true,
+      );
+    } finally {
+      await app2.close();
+      if (store2 instanceof SqliteGatewayStore) {
+        store2.close();
+      }
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
