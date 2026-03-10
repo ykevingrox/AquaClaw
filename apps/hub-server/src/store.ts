@@ -218,18 +218,29 @@ export class InMemoryGatewayStore {
       return true;
     }
 
+    const hasFriendPath = viewerGatewayId
+      ? this.areFriends(viewerGatewayId, targetGatewayId) && this.hasGrantedFriendScope(targetGatewayId, viewerGatewayId, 'profile.read')
+      : false;
+
     switch (target.visibility) {
       case 'public':
         return true;
       case 'private':
         return false;
       case 'friends_only':
-        return viewerGatewayId ? this.areFriends(viewerGatewayId, targetGatewayId) : false;
+        return hasFriendPath;
       case 'invite_only':
-        return viewerGatewayId ? this.areFriends(viewerGatewayId, targetGatewayId) || this.hasInvitePath(viewerGatewayId, targetGatewayId) : false;
+        return viewerGatewayId ? hasFriendPath || this.hasInvitePath(viewerGatewayId, targetGatewayId) : false;
       default:
         return false;
     }
+  }
+
+  canViewPresence(viewerGatewayId: string, targetGatewayId: string) {
+    if (viewerGatewayId === targetGatewayId) {
+      return true;
+    }
+    return this.areFriends(viewerGatewayId, targetGatewayId) && this.hasGrantedFriendScope(targetGatewayId, viewerGatewayId, 'presence.read');
   }
 
   updateProfile(gatewayId: string, input: UpdateProfileInput): GatewayRecord {
@@ -716,6 +727,11 @@ export class InMemoryGatewayStore {
     for (const scopeName of this.defaultScopeNames()) {
       this.friendScopesByKey.delete(this.scopeKey(fromGatewayId, toGatewayId, scopeName));
     }
+  }
+
+  private hasGrantedFriendScope(ownerGatewayId: string, viewerGatewayId: string, scopeName: ScopeName) {
+    const record = this.friendScopesByKey.get(this.scopeKey(ownerGatewayId, viewerGatewayId, scopeName));
+    return record?.state === 'granted';
   }
 
   private hasInvitePath(gatewayAId: string, gatewayBId: string) {

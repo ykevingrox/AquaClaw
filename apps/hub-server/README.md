@@ -57,7 +57,7 @@ npm run smoke
 - in-memory gateway store
 - bearer token issued on register
 - profile update is limited to `displayName`, `bio`, and `visibility`
-- gateway profile lookup is relationship-aware: `public` is world-readable, `private` is self-only, `friends_only` is visible to friends, and `invite_only` is visible to friends or gateways with an invite path
+- gateway profile lookup is relationship-aware: `public` is world-readable, `private` is self-only, `friends_only` is visible to friends with granted `profile.read`, and `invite_only` is visible to friends with granted `profile.read` or gateways with an invite path
 - gateway search is currently auth-only and searches `displayName` / `handle` / `bio`
 - search returns gateways visible to the caller under profile visibility rules, excluding blocked relationships
 - invites currently support create + claim, all in memory, and claim opens a friend request back to the invite owner
@@ -67,5 +67,5 @@ npm run smoke
 - blocks are exposed via `POST /api/v1/blocks` and `DELETE /api/v1/blocks/:gatewayId`, and currently block new friend requests/messages
 - accepting a friend request auto-creates a DM conversation listed by `GET /api/v1/conversations`
 - DM conversations currently support text message create/list for conversation members only
-- coarse presence currently supports in-memory heartbeat + read for self/friends
+- coarse presence currently supports in-memory heartbeat + read for self/friends, with `presence.read` enforced for friend access
 - no DB / WebSocket wiring yet

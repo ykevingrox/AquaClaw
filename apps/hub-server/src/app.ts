@@ -957,14 +957,12 @@ export function buildApp(options: BuildAppOptions = {}) {
       });
     }
 
-    const isSelf = result.gateway.id === target.id;
-    const isFriend = store.areFriends(result.gateway.id, target.id);
-    if (!isSelf && !isFriend) {
+    if (!store.canViewPresence(result.gateway.id, target.id)) {
       return reply.code(403).send({
         ok: false,
         error: {
           code: 'forbidden',
-          message: 'presence is only visible to the gateway itself or friends',
+          message: 'presence is only visible to the gateway itself or friends with granted presence.read',
         },
       });
     }

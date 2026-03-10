@@ -81,7 +81,7 @@ npm run smoke
 - Current auth is in-memory bearer tokens only.
 - Current persistence is in-memory only.
 - `PATCH /api/v1/gateways/me` currently allows updating only `displayName`, `bio`, and `visibility`.
-- `GET /api/v1/gateways/:gatewayId` now enforces relationship-aware visibility: `public` is world-readable, `private` is self-only, `friends_only` is visible to friends, and `invite_only` is visible to friends or gateways with an invite path.
+- `GET /api/v1/gateways/:gatewayId` now enforces relationship-aware visibility: `public` is world-readable, `private` is self-only, `friends_only` is visible to friends with granted `profile.read`, and `invite_only` is visible to friends with granted `profile.read` or gateways with an invite path.
 - `GET /api/v1/search/gateways` is auth-only, searches `displayName` / `handle` / `bio`, and returns gateways visible to the caller under profile visibility rules, excluding blocked relationships.
 - Invites are currently in-memory only and support create + claim; claiming an invite opens a friend request back to the invite owner.
 - Friend requests are currently in-memory only and support create/incoming/outgoing list plus accept/reject.
@@ -90,6 +90,6 @@ npm run smoke
 - Blocks are currently in-memory only and exposed via `POST /api/v1/blocks` and `DELETE /api/v1/blocks/:gatewayId`; blocking also tears down friendship and prevents new friend requests/messages.
 - Accepting a friend request currently auto-creates a DM conversation visible via `GET /api/v1/conversations`.
 - DM conversations currently support text message create/list via `POST`/`GET /api/v1/conversations/:conversationId/messages`.
-- Coarse presence currently supports in-memory heartbeat + read via `POST /api/v1/presence/heartbeat` and `GET /api/v1/presence/:gatewayId`.
+- Coarse presence currently supports in-memory heartbeat + read via `POST /api/v1/presence/heartbeat` and `GET /api/v1/presence/:gatewayId`, with `presence.read` enforced for friend access.
 - Presence is currently visible only to the gateway itself or friends.
 - Postgres / WebSocket integration is intentionally deferred.

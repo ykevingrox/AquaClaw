@@ -365,6 +365,90 @@ test('invite_only gateway profile is visible after an invite path exists', async
   await app.close();
 });
 
+test('denied profile.read scope hides friend-visible profiles and search results', async () => {
+  const app = buildApp();
+
+  const owner = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Owner Profile Scope',
+      handle: 'owner-profile-scope',
+      visibility: 'friends_only',
+    },
+  });
+  const ownerId = owner.json().data.gateway.id as string;
+  const ownerToken = owner.json().data.credential.token as string;
+
+  const viewer = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Viewer Profile Scope',
+      handle: 'viewer-profile-scope',
+      visibility: 'public',
+    },
+  });
+  const viewerId = viewer.json().data.gateway.id as string;
+  const viewerToken = viewer.json().data.credential.token as string;
+
+  const request = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${viewerToken}` },
+    payload: { toGatewayId: ownerId },
+  });
+  const requestId = request.json().data.request.id as string;
+  await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+
+  const beforeDeny = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${ownerId}`,
+    headers: { authorization: `Bearer ${viewerToken}` },
+  });
+  assert.equal(beforeDeny.statusCode, 200);
+
+  const searchBeforeDeny = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=owner-profile',
+    headers: { authorization: `Bearer ${viewerToken}` },
+  });
+  assert.deepEqual(
+    searchBeforeDeny.json().data.items.map((item: { handle: string }) => item.handle),
+    ['owner-profile-scope'],
+  );
+
+  const deny = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/friends/${viewerId}/scopes`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: {
+      updates: [{ scopeName: 'profile.read', state: 'denied' }],
+    },
+  });
+  assert.equal(deny.statusCode, 200);
+
+  const afterDeny = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${ownerId}`,
+    headers: { authorization: `Bearer ${viewerToken}` },
+  });
+  assert.equal(afterDeny.statusCode, 403);
+
+  const searchAfterDeny = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=owner-profile',
+    headers: { authorization: `Bearer ${viewerToken}` },
+  });
+  assert.deepEqual(searchAfterDeny.json().data.items, []);
+
+  await app.close();
+});
+
 test('search returns public gateways and self only, with query filtering', async () => {
   const app = buildApp();
 
@@ -1007,6 +1091,87 @@ test('presence heartbeat marks gateway online and friends can read it', async ()
   assert.equal(conversations.statusCode, 200);
   assert.equal(conversations.json().data.items[0].peer.handle, 'alpha-presence');
   assert.equal(conversations.json().data.items[0].peer.status, 'online');
+
+  await app.close();
+});
+
+test('denied presence.read scope hides friend presence', async () => {
+  const app = buildApp();
+
+  const alpha = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Alpha Presence Scope',
+      handle: 'alpha-presence-scope',
+      visibility: 'public',
+    },
+  });
+  const alphaId = alpha.json().data.gateway.id as string;
+  const alphaToken = alpha.json().data.credential.token as string;
+
+  const beta = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Beta Presence Scope',
+      handle: 'beta-presence-scope',
+      visibility: 'public',
+    },
+  });
+  const betaId = beta.json().data.gateway.id as string;
+  const betaToken = beta.json().data.credential.token as string;
+
+  const request = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${betaToken}` },
+    payload: { toGatewayId: alphaId },
+  });
+  const requestId = request.json().data.request.id as string;
+  await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+
+  await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+
+  const beforeDeny = await app.inject({
+    method: 'GET',
+    url: `/api/v1/presence/${alphaId}`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(beforeDeny.statusCode, 200);
+
+  const deny = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/friends/${betaId}/scopes`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: {
+      updates: [{ scopeName: 'presence.read', state: 'denied' }],
+    },
+  });
+  assert.equal(deny.statusCode, 200);
+
+  const afterDeny = await app.inject({
+    method: 'GET',
+    url: `/api/v1/presence/${alphaId}`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(afterDeny.statusCode, 403);
+
+  const selfView = await app.inject({
+    method: 'GET',
+    url: `/api/v1/presence/${alphaId}`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(selfView.statusCode, 200);
+  assert.equal(selfView.json().data.status, 'online');
 
   await app.close();
 });
