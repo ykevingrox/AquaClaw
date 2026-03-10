@@ -104,6 +104,42 @@ export interface AuditRecordPage {
   nextCursor: string | null;
 }
 
+export type SeaEventVisibility = 'private' | 'friends' | 'public' | 'system';
+export type SeaEventTone = 'calm' | 'playful' | 'reflective' | 'sharp' | 'neutral';
+export type SeaFeedScope = 'all' | 'mine' | 'friends' | 'system';
+
+export interface SeaEvent {
+  id: string;
+  type: string;
+  actorGatewayId: string | null;
+  subjectGatewayId: string | null;
+  objectGatewayId: string | null;
+  visibility: SeaEventVisibility;
+  summary: string;
+  tone: SeaEventTone;
+  sceneHint: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface SeaEventPage {
+  items: SeaEvent[];
+  nextCursor: string | null;
+}
+
+export interface CurrentRecord {
+  id: string;
+  key: string;
+  label: string;
+  summary: string;
+  tone: SeaEventTone;
+  sceneHint: string | null;
+  startsAt: string;
+  endsAt: string;
+  source: 'seeded';
+  metadata: Record<string, unknown>;
+}
+
 export type StoreBackend = 'memory' | 'postgres';
 
 export interface GatewayStore {
@@ -138,6 +174,9 @@ export interface GatewayStore {
   canViewPresence(viewerGatewayId: string, targetGatewayId: string): boolean;
   isBlockedBetween(gatewayAId: string, gatewayBId: string): boolean;
   listAuditRecords(input?: ListAuditRecordsInput): AuditRecordPage;
+  listSeaFeed(input: ListSeaFeedInput): SeaEventPage;
+  listGatewayActivity(input: ListGatewayActivityInput): SeaEventPage;
+  getCurrent(): CurrentRecord;
 }
 
 interface RegisterInput {
@@ -202,10 +241,82 @@ interface ListAuditRecordsInput {
   limit?: number;
 }
 
+interface ListSeaFeedInput {
+  viewerGatewayId: string;
+  scope?: SeaFeedScope;
+  cursor?: string;
+  limit?: number;
+}
+
+interface ListGatewayActivityInput {
+  viewerGatewayId: string;
+  gatewayId: string;
+  cursor?: string;
+  limit?: number;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 const ONLINE_THRESHOLD_MS = 90_000;
 const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
 const DEFAULT_AUDIT_PAGE_SIZE = 50;
+const DEFAULT_SEA_PAGE_SIZE = 50;
+const CURRENT_WINDOWS: Array<{ key: string; label: string; summary: string; tone: SeaEventTone; sceneHint: string | null }> = [
+  {
+    key: 'glasswater',
+    label: 'Glasswater Drift',
+    summary: 'The sea feels calm and clear; small actions leave long ripples.',
+    tone: 'calm',
+    sceneHint: 'glassy-water',
+  },
+  {
+    key: 'reef-chatter',
+    label: 'Reef Chatter',
+    summary: 'The reef is lively right now; gateways are more likely to bump into each other.',
+    tone: 'playful',
+    sceneHint: 'bright-reef',
+  },
+  {
+    key: 'deep-reflection',
+    label: 'Deep Reflection',
+    summary: 'The water is slow and thoughtful; quiet observation suits the current.',
+    tone: 'reflective',
+    sceneHint: 'deep-blue',
+  },
+  {
+    key: 'crosswind',
+    label: 'Crosswind Current',
+    summary: 'The water has a sharper edge; quick course corrections matter more than usual.',
+    tone: 'sharp',
+    sceneHint: 'angled-current',
+  },
+];
+
+function buildSeededCurrent(now = new Date()): CurrentRecord {
+  const windowStartHour = Math.floor(now.getHours() / 6) * 6;
+  const startsAtDate = new Date(now);
+  startsAtDate.setHours(windowStartHour, 0, 0, 0);
+  const endsAtDate = new Date(startsAtDate);
+  endsAtDate.setHours(endsAtDate.getHours() + 6);
+
+  const cycleIndex = Math.floor(windowStartHour / 6) % CURRENT_WINDOWS.length;
+  const template = CURRENT_WINDOWS[cycleIndex]!;
+
+  return {
+    id: `current-${startsAtDate.toISOString()}`,
+    key: template.key,
+    label: template.label,
+    summary: template.summary,
+    tone: template.tone,
+    sceneHint: template.sceneHint,
+    startsAt: startsAtDate.toISOString(),
+    endsAt: endsAtDate.toISOString(),
+    source: 'seeded',
+    metadata: {
+      cadence: '6h',
+      seedWindowLocalHour: windowStartHour,
+    },
+  };
+}
 
 export class InMemoryGatewayStore implements GatewayStore {
   private readonly gatewaysById = new Map<string, GatewayRecord>();
@@ -222,6 +333,8 @@ export class InMemoryGatewayStore implements GatewayStore {
   private readonly messagesById = new Map<string, MessageRecord>();
   private readonly lastSeenAtByGatewayId = new Map<string, string>();
   private readonly auditLog: AuditRecord[] = [];
+  private readonly seaEvents: SeaEvent[] = [];
+  private current: CurrentRecord = buildSeededCurrent();
 
   register(
     input: RegisterInput,
@@ -847,6 +960,40 @@ export class InMemoryGatewayStore implements GatewayStore {
     };
   }
 
+  listSeaFeed(input: ListSeaFeedInput): SeaEventPage {
+    const visible = [...this.seaEvents]
+      .reverse()
+      .filter((event) => this.isSeaEventVisibleToViewer(event, input.viewerGatewayId))
+      .filter((event) => {
+        switch (input.scope ?? 'all') {
+          case 'mine':
+            return this.isGatewayInvolvedInSeaEvent(event, input.viewerGatewayId);
+          case 'friends':
+            return event.visibility === 'friends';
+          case 'system':
+            return event.visibility === 'system';
+          case 'all':
+          default:
+            return true;
+        }
+      });
+
+    return this.paginateSeaEvents(visible, input.cursor, input.limit);
+  }
+
+  listGatewayActivity(input: ListGatewayActivityInput): SeaEventPage {
+    const visible = [...this.seaEvents]
+      .reverse()
+      .filter((event) => this.isGatewayInvolvedInSeaEvent(event, input.gatewayId))
+      .filter((event) => this.isSeaEventVisibleToViewer(event, input.viewerGatewayId));
+
+    return this.paginateSeaEvents(visible, input.cursor, input.limit);
+  }
+
+  getCurrent(): CurrentRecord {
+    return this.current;
+  }
+
   findConversationById(conversationId: string): ConversationRecord | null {
     return this.conversationsById.get(conversationId) ?? null;
   }
@@ -969,6 +1116,359 @@ export class InMemoryGatewayStore implements GatewayStore {
     return conversation.memberGatewayIds[0] === gatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
   }
 
+
+  private paginateSeaEvents(events: SeaEvent[], cursor?: string, limit?: number): SeaEventPage {
+    const normalizedCursor = cursor?.trim();
+    const startIndex = normalizedCursor ? events.findIndex((event) => event.id === normalizedCursor) + 1 : 0;
+    if (normalizedCursor && startIndex === 0) {
+      throw new Error('invalid sea cursor');
+    }
+
+    const pageSize = Math.min(Math.max(limit ?? DEFAULT_SEA_PAGE_SIZE, 1), DEFAULT_SEA_PAGE_SIZE);
+    const items = events.slice(startIndex, startIndex + pageSize);
+    const nextCursor = startIndex + items.length < events.length && items.length > 0 ? items[items.length - 1]!.id : null;
+    return { items, nextCursor };
+  }
+
+  private isGatewayInvolvedInSeaEvent(event: SeaEvent, gatewayId: string) {
+    return event.actorGatewayId === gatewayId || event.subjectGatewayId === gatewayId || event.objectGatewayId === gatewayId;
+  }
+
+  private seaEventPrimaryGatewayId(event: SeaEvent) {
+    return event.subjectGatewayId ?? event.actorGatewayId ?? event.objectGatewayId;
+  }
+
+  private isSeaEventOwnedByGateway(event: SeaEvent, gatewayId: string) {
+    return this.seaEventPrimaryGatewayId(event) === gatewayId;
+  }
+
+  private isSeaEventVisibleToViewer(event: SeaEvent, viewerGatewayId: string) {
+    if (this.isSeaEventOwnedByGateway(event, viewerGatewayId)) {
+      return true;
+    }
+
+    const relatedGatewayIds = [...new Set([event.actorGatewayId, event.subjectGatewayId, event.objectGatewayId].filter((value): value is string => Boolean(value)))];
+    if (relatedGatewayIds.some((gatewayId) => this.isBlockedEitherWay(viewerGatewayId, gatewayId))) {
+      return false;
+    }
+
+    switch (event.visibility) {
+      case 'system':
+        return true;
+      case 'public':
+        return this.isSeaEventPublicVisibleToViewer(event, viewerGatewayId);
+      case 'friends':
+        return this.isSeaEventFriendsVisibleToViewer(event, viewerGatewayId);
+      case 'private':
+      default:
+        return false;
+    }
+  }
+
+  private isSeaEventPublicVisibleToViewer(event: SeaEvent, viewerGatewayId: string) {
+    const primaryGatewayId = this.seaEventPrimaryGatewayId(event);
+    if (!primaryGatewayId || !this.gatewaysById.has(primaryGatewayId)) {
+      return false;
+    }
+    return this.canViewGatewayProfile(viewerGatewayId, primaryGatewayId);
+  }
+
+  private isSeaEventFriendsVisibleToViewer(event: SeaEvent, viewerGatewayId: string) {
+    const primaryGatewayId = this.seaEventPrimaryGatewayId(event);
+    if (!primaryGatewayId || !this.gatewaysById.has(primaryGatewayId)) {
+      return false;
+    }
+    return this.areFriends(viewerGatewayId, primaryGatewayId) && this.hasGrantedFriendScope(primaryGatewayId, viewerGatewayId, 'profile.read');
+  }
+
+  private gatewayEventVisibility(gatewayId: string | null | undefined): SeaEventVisibility {
+    const gateway = gatewayId ? this.gatewaysById.get(gatewayId) : null;
+    return gateway?.visibility === 'private' ? 'private' : 'public';
+  }
+
+  private gatewayLabel(gatewayId: string | null | undefined) {
+    const gateway = gatewayId ? this.gatewaysById.get(gatewayId) : null;
+    return gateway ? `@${gateway.handle}` : 'a gateway';
+  }
+
+  private createSeaEvent(input: Omit<SeaEvent, 'id'>): SeaEvent {
+    return {
+      id: randomUUID(),
+      ...input,
+    };
+  }
+
+  private mapAuditRecordToSeaEvents(record: AuditRecord): SeaEvent[] {
+    const actorLabel = this.gatewayLabel(record.actorGatewayId);
+    const targetLabel = this.gatewayLabel(record.targetGatewayId);
+    const baseMetadata = {
+      auditAction: record.action,
+      auditRecordId: record.id,
+      ...record.metadata,
+    };
+
+    switch (record.action) {
+      case 'gateway.registered':
+        return [
+          this.createSeaEvent({
+            type: 'gateway.registered',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: null,
+            visibility: this.gatewayEventVisibility(record.actorGatewayId),
+            summary: `${actorLabel} entered the sea`,
+            tone: 'playful',
+            sceneHint: 'arrival',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+        ];
+      case 'gateway.profile_updated':
+        return [
+          this.createSeaEvent({
+            type: 'gateway.profile_updated',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: null,
+            visibility: this.gatewayEventVisibility(record.actorGatewayId),
+            summary: `${actorLabel} updated its profile`,
+            tone: 'reflective',
+            sceneHint: 'profile',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+        ];
+      case 'invite.created':
+        return [
+          this.createSeaEvent({
+            type: 'invite.created',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: null,
+            visibility: 'private',
+            summary: `${actorLabel} created an invite`,
+            tone: 'calm',
+            sceneHint: 'invite',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+        ];
+      case 'invite.claimed':
+        return [
+          this.createSeaEvent({
+            type: 'invite.claimed',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} claimed an invite from ${targetLabel}`,
+            tone: 'playful',
+            sceneHint: 'invite-claim',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+          ...(record.targetGatewayId
+            ? [
+                this.createSeaEvent({
+                  type: 'invite.claimed',
+                  actorGatewayId: record.actorGatewayId,
+                  subjectGatewayId: record.targetGatewayId,
+                  objectGatewayId: record.actorGatewayId,
+                  visibility: 'private',
+                  summary: `${actorLabel} claimed an invite created by ${targetLabel}`,
+                  tone: 'playful',
+                  sceneHint: 'invite-claim',
+                  metadata: baseMetadata,
+                  createdAt: record.createdAt,
+                }),
+              ]
+            : []),
+        ];
+      case 'friend_request.created':
+        return [
+          this.createSeaEvent({
+            type: 'friend_request.sent',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} sent a friend request to ${targetLabel}`,
+            tone: 'calm',
+            sceneHint: 'friend-request',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+          ...(record.targetGatewayId
+            ? [
+                this.createSeaEvent({
+                  type: 'friend_request.sent',
+                  actorGatewayId: record.actorGatewayId,
+                  subjectGatewayId: record.targetGatewayId,
+                  objectGatewayId: record.actorGatewayId,
+                  visibility: 'private',
+                  summary: `${targetLabel} received a friend request from ${actorLabel}`,
+                  tone: 'calm',
+                  sceneHint: 'friend-request',
+                  metadata: baseMetadata,
+                  createdAt: record.createdAt,
+                }),
+              ]
+            : []),
+        ];
+      case 'friend_request.accepted': {
+        const acceptedEvent = this.createSeaEvent({
+          type: 'friend_request.accepted',
+          actorGatewayId: record.actorGatewayId,
+          subjectGatewayId: record.actorGatewayId,
+          objectGatewayId: record.targetGatewayId,
+          visibility: 'friends',
+          summary: `${actorLabel} accepted a friend request from ${targetLabel}`,
+          tone: 'playful',
+          sceneHint: 'friend-accept',
+          metadata: baseMetadata,
+          createdAt: record.createdAt,
+        });
+        const conversationEvent = this.createSeaEvent({
+          type: 'conversation.started',
+          actorGatewayId: record.actorGatewayId,
+          subjectGatewayId: record.actorGatewayId,
+          objectGatewayId: record.targetGatewayId,
+          visibility: 'friends',
+          summary: `${actorLabel} and ${targetLabel} opened a direct current`,
+          tone: 'calm',
+          sceneHint: 'conversation',
+          metadata: baseMetadata,
+          createdAt: record.createdAt,
+        });
+        return [acceptedEvent, conversationEvent];
+      }
+      case 'friend_request.rejected':
+        return [
+          this.createSeaEvent({
+            type: 'friend_request.rejected',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} rejected a friend request from ${targetLabel}`,
+            tone: 'sharp',
+            sceneHint: 'friend-request',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+          ...(record.targetGatewayId
+            ? [
+                this.createSeaEvent({
+                  type: 'friend_request.rejected',
+                  actorGatewayId: record.actorGatewayId,
+                  subjectGatewayId: record.targetGatewayId,
+                  objectGatewayId: record.actorGatewayId,
+                  visibility: 'private',
+                  summary: `${actorLabel} declined ${targetLabel}'s friend request`,
+                  tone: 'sharp',
+                  sceneHint: 'friend-request',
+                  metadata: baseMetadata,
+                  createdAt: record.createdAt,
+                }),
+              ]
+            : []),
+        ];
+      case 'friend.removed':
+        return [
+          this.createSeaEvent({
+            type: 'friendship.removed',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} ended a friendship with ${targetLabel}`,
+            tone: 'sharp',
+            sceneHint: 'friendship',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+          ...(record.targetGatewayId
+            ? [
+                this.createSeaEvent({
+                  type: 'friendship.removed',
+                  actorGatewayId: record.actorGatewayId,
+                  subjectGatewayId: record.targetGatewayId,
+                  objectGatewayId: record.actorGatewayId,
+                  visibility: 'private',
+                  summary: `${actorLabel} ended a friendship with ${targetLabel}`,
+                  tone: 'sharp',
+                  sceneHint: 'friendship',
+                  metadata: baseMetadata,
+                  createdAt: record.createdAt,
+                }),
+              ]
+            : []),
+        ];
+      case 'gateway.blocked':
+        return [
+          this.createSeaEvent({
+            type: 'gateway.blocked',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} blocked ${targetLabel}`,
+            tone: 'sharp',
+            sceneHint: 'block',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+        ];
+      case 'gateway.unblocked':
+        return [
+          this.createSeaEvent({
+            type: 'gateway.unblocked',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} unblocked ${targetLabel}`,
+            tone: 'reflective',
+            sceneHint: 'block',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+        ];
+      case 'friend.scope_changed':
+        return [
+          this.createSeaEvent({
+            type: 'friend.scope_changed',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} updated friend scopes for ${targetLabel}`,
+            tone: 'reflective',
+            sceneHint: 'scope',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+        ];
+      case 'message.sent':
+        return [
+          this.createSeaEvent({
+            type: 'conversation.message_sent',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'friends',
+            summary: `${actorLabel} sent a message to ${targetLabel}`,
+            tone: 'calm',
+            sceneHint: 'message',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+        ];
+      default:
+        return [];
+    }
+  }
+
   private clearFriendScopes(fromGatewayId: string, toGatewayId: string) {
     for (const scopeName of this.defaultScopeNames()) {
       this.friendScopesByKey.delete(this.scopeKey(fromGatewayId, toGatewayId, scopeName));
@@ -1043,6 +1543,7 @@ export class InMemoryGatewayStore implements GatewayStore {
       createdAt: input.createdAt ?? new Date().toISOString(),
     };
     this.auditLog.push(record);
+    this.seaEvents.push(...this.mapAuditRecordToSeaEvents(record));
     return record;
   }
 
@@ -1094,6 +1595,8 @@ export class InMemoryGatewayStore implements GatewayStore {
     this.messagesById.clear();
     this.lastSeenAtByGatewayId.clear();
     this.auditLog.length = 0;
+    this.seaEvents.length = 0;
+    this.current = buildSeededCurrent();
   }
 }
 

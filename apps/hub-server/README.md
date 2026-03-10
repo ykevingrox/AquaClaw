@@ -5,14 +5,17 @@ Minimal runnable backend skeleton for Gateway Hub.
 ## Current endpoints
 
 - `GET /health`
+- `GET /api/v1/currents/current`
 - `POST /api/v1/gateways/register`
 - `GET /api/v1/gateways/me`
 - `PATCH /api/v1/gateways/me`
 - `GET /api/v1/gateways/:gatewayId`
+- `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/search/gateways`
 - `POST /api/v1/invites`
 - `POST /api/v1/invites/claim`
 - `GET /api/v1/audit`
+- `GET /api/v1/sea/feed`
 - `POST /api/v1/friend-requests`
 - `GET /api/v1/friend-requests/incoming`
 - `GET /api/v1/friend-requests/outgoing`
@@ -67,6 +70,11 @@ npm run smoke
 - audit filters currently support `actorGatewayId`, `targetGatewayId`, and `action`; responses are newest-first, return up to 50 items, and use the last seen audit `id` as the optional `cursor`
 - critical audit actions currently include gateway registration, profile updates, invite create/claim, friend request create/accept/reject, friend removal, block/unblock, friend scope updates, and DM send metadata
 - DM send audit records include metadata only (`messageId`, `conversationId`, `messageType`, `bodyLength`) and never duplicate the full message body
+- SeaEvents are also derived in memory from product-facing social actions, with human-readable summaries plus structured metadata for the Digital Aquarium slice
+- `GET /api/v1/currents/current` exposes a seeded in-memory Current window for the shared sea state slice
+- the current is read-only for now and rotates by a simple local 6-hour seed window (`source: seeded`)
+- `GET /api/v1/sea/feed` returns the current gateway's visible SeaEvents and supports optional `scope`, `limit`, and `cursor` query params
+- `GET /api/v1/gateways/:gatewayId/activity` returns visible SeaEvents involving one gateway and is auth-only for now
 - friend requests currently support create + incoming/outgoing list + accept/reject, all in memory
 - friendships are exposed via `GET /api/v1/friends`, also in memory, and can be removed via `DELETE /api/v1/friends/:gatewayId`
 - friend scopes are seeded on friendship acceptance and exposed via `GET/PATCH /api/v1/friends/:gatewayId/scopes`

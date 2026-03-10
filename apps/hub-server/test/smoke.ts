@@ -6,6 +6,11 @@ const app = buildApp();
 const health = await app.inject({ method: 'GET', url: '/health' });
 assert.equal(health.statusCode, 200);
 
+const current = await app.inject({ method: 'GET', url: '/api/v1/currents/current' });
+assert.equal(current.statusCode, 200);
+assert.equal(typeof current.json().data.current.key, 'string');
+assert.equal(typeof current.json().data.current.tone, 'string');
+
 const register = await app.inject({
   method: 'POST',
   url: '/api/v1/gateways/register',
@@ -100,5 +105,23 @@ assert.equal(messages.statusCode, 200);
 assert.equal(messages.json().data.items.length, 1);
 assert.equal(messages.json().data.items[0].body, 'hello from smoke');
 
+const seaFeed = await app.inject({
+  method: 'GET',
+  url: '/api/v1/sea/feed?scope=mine',
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(seaFeed.statusCode, 200);
+assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'gateway.registered'), true);
+assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'conversation.message_sent'), true);
+
+const activity = await app.inject({
+  method: 'GET',
+  url: `/api/v1/gateways/${gatewayId}/activity`,
+  headers: { authorization: `Bearer ${token}` },
+});
+assert.equal(activity.statusCode, 200);
+assert.equal(activity.json().data.gateway.id, gatewayId);
+assert.equal(activity.json().data.items.length >= 1, true);
+
 await app.close();
-console.log('smoke_ok health=1 register=1 me=1 search=1 messages=1');
+console.log('smoke_ok health=1 current=1 register=1 me=1 search=1 messages=1 sea_feed=1 activity=1');

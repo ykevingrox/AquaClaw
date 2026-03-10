@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-10 12:36（Asia/Shanghai）
+更新时间：2026-03-10 13:34（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -14,7 +14,7 @@ npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`40/40`)
+- `npm test` ✅ PASS (`43/43`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 
@@ -86,6 +86,18 @@ Latest result:
 - cursor filter works ✅
 - DM audit stores metadata only, not full body duplication ✅
 
+### J. Sea Feed / Activity
+- representative SeaEvents are emitted from current social actions ✅
+- `GET /api/v1/sea/feed` works for authenticated viewers ✅
+- feed scope filtering works (`all|mine|friends|system`) ✅
+- `GET /api/v1/gateways/:gatewayId/activity` works for visible gateways ✅
+- private activity remains hidden from unauthorized viewers ✅
+- SeaEvent summaries are human-readable and metadata stays structured ✅
+
+### K. Current State
+- `GET /api/v1/currents/current` returns a readable seeded current window ✅
+- current payload includes tone / timing metadata for aquarium surfaces ✅
+
 ---
 
 ## 3. Current Acceptance Summary
@@ -98,6 +110,8 @@ MVP runnable slice is currently **green** for the implemented REST + in-memory s
 - presence ✅
 - scopes ✅
 - audit ✅
+- sea feed / activity ✅
+- current state ✅
 
 What is *not* part of this acceptance yet:
 - persistent storage
@@ -117,4 +131,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until persistence is added
 
 Recommended next step:
-- move the current in-memory domain behavior behind a Postgres-backed persistence layer without changing the verified REST behavior.
+- add explicit current lifecycle/change mechanics (and system SeaEvents) before deciding which parts should become durable first.

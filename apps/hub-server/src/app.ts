@@ -35,6 +35,17 @@ interface AuditQuerystring {
   cursor?: string;
 }
 
+interface SeaFeedQuerystring {
+  limit?: string;
+  cursor?: string;
+  scope?: string;
+}
+
+interface GatewayActivityQuerystring {
+  limit?: string;
+  cursor?: string;
+}
+
 interface FriendRequestParams {
   requestId: string;
 }
@@ -160,6 +171,19 @@ function toFriendSummary(store: GatewayStore, gateway: { id: string; handle: str
   };
 }
 
+function parsePositiveIntegerQuery(value: string | undefined) {
+  if (value === undefined) {
+    return { value: undefined } as const;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return { error: 'limit must be a positive integer' } as const;
+  }
+
+  return { value: parsed } as const;
+}
+
 function friendRequestErrorToHttp(message: string) {
   if (message === 'pending request already exists') {
     return { statusCode: 409, code: 'pending_request_exists' };
@@ -248,11 +272,25 @@ function auditErrorToHttp(message: string) {
   return { statusCode: 400, code: 'validation_failed' };
 }
 
+function seaEventErrorToHttp(message: string) {
+  if (message === 'invalid sea cursor') {
+    return { statusCode: 400, code: 'invalid_cursor' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
 export function buildApp(options: BuildAppOptions = {}) {
   const store = options.store ?? createGatewayStore();
   const app = Fastify({ logger: true });
 
   app.get('/health', async () => ({ ok: true, data: { status: 'ok' } }));
+
+  app.get('/api/v1/currents/current', async () => ({
+    ok: true,
+    data: {
+      current: store.getCurrent(),
+    },
+  }));
 
   app.post<{ Body: RegisterBody }>('/api/v1/gateways/register', async (request, reply) => {
     const { displayName, handle, bio, visibility } = request.body ?? {};
@@ -383,19 +421,96 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
   });
 
+
+  app.get<{ Params: PresenceParams; Querystring: GatewayActivityQuerystring }>('/api/v1/gateways/:gatewayId/activity', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const gateway = store.findById(request.params.gatewayId);
+    if (!gateway) {
+      return reply.code(404).send({
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: 'gateway not found',
+        },
+      });
+    }
+
+    if (result.gateway.id !== gateway.id && store.isBlockedBetween(result.gateway.id, gateway.id)) {
+      return reply.code(403).send({
+        ok: false,
+        error: {
+          code: 'blocked',
+          message: 'blocked relationship',
+        },
+      });
+    }
+
+    if (result.gateway.id !== gateway.id && !store.canViewGatewayProfile(result.gateway.id, gateway.id)) {
+      return reply.code(403).send({
+        ok: false,
+        error: {
+          code: 'forbidden',
+          message: 'gateway activity is not visible to the current viewer',
+        },
+      });
+    }
+
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+
+    try {
+      const activity = store.listGatewayActivity({
+        viewerGatewayId: result.gateway.id,
+        gatewayId: gateway.id,
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+      });
+
+      return {
+        ok: true,
+        data: {
+          gateway: toGatewaySummary(gateway),
+          ...activity,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list gateway activity';
+      const mapped = seaEventErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
   app.get<{ Querystring: SearchGatewaysQuerystring }>('/api/v1/search/gateways', async (request, reply) => {
     const result = getAuthedGateway(store, request.headers.authorization);
     if ('error' in result) {
       return reply.code(401).send({ ok: false, error: result.error });
     }
 
-    const parsedLimit = request.query.limit === undefined ? undefined : Number.parseInt(request.query.limit, 10);
-    if (request.query.limit !== undefined && (!Number.isFinite(parsedLimit ?? Number.NaN) || (parsedLimit ?? 0) < 1)) {
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
       return reply.code(400).send({
         ok: false,
         error: {
           code: 'validation_failed',
-          message: 'limit must be a positive integer',
+          message: parsedLimit.error,
         },
       });
     }
@@ -404,7 +519,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       .searchGateways({
         viewerGatewayId: result.gateway.id,
         q: request.query.q,
-        limit: parsedLimit,
+        limit: parsedLimit.value,
       })
       .map((gateway) => toSearchResult(store, gateway));
 
@@ -437,6 +552,60 @@ export function buildApp(options: BuildAppOptions = {}) {
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'failed to list audit records';
       const mapped = auditErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+
+  app.get<{ Querystring: SeaFeedQuerystring }>('/api/v1/sea/feed', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+
+    const scope = request.query.scope?.trim();
+    if (scope && !['all', 'mine', 'friends', 'system'].includes(scope)) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'scope must be one of all, mine, friends, system',
+        },
+      });
+    }
+
+    try {
+      const feed = store.listSeaFeed({
+        viewerGatewayId: result.gateway.id,
+        scope: (scope as 'all' | 'mine' | 'friends' | 'system' | undefined) ?? undefined,
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+      });
+
+      return {
+        ok: true,
+        data: feed,
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list sea feed';
+      const mapped = seaEventErrorToHttp(messageText);
       return reply.code(mapped.statusCode).send({
         ok: false,
         error: {
