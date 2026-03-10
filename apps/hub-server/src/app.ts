@@ -1,5 +1,8 @@
+import { type ServerResponse } from 'node:http';
+
 import Fastify from 'fastify';
-import { createGatewayStore, type EncounterRecord, type GatewayStore, type GatewayVisibility } from './store.js';
+import { SeaLiveHub } from './live-hub.js';
+import { createGatewayStore, type EncounterRecord, type GatewayStore, type GatewayVisibility, type SeaEventLiveSource } from './store.js';
 
 interface BuildAppOptions {
   store?: GatewayStore;
@@ -54,6 +57,10 @@ interface SeaFeedQuerystring {
   limit?: string;
   cursor?: string;
   scope?: string;
+}
+
+interface SeaStreamQuerystring {
+  cursor?: string;
 }
 
 interface GatewayActivityQuerystring {
@@ -129,6 +136,45 @@ function extractBearerToken(value: string | undefined) {
   const [scheme, token] = value.split(' ');
   if (scheme !== 'Bearer' || !token) return null;
   return token;
+}
+
+function extractSingleHeaderValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function parseSeaStreamCursor(headers: Record<string, string | string[] | undefined>, queryCursor?: string) {
+  const headerCursor = extractSingleHeaderValue(headers['last-event-id'])?.trim();
+  const cursor = headerCursor || queryCursor?.trim();
+  return cursor || undefined;
+}
+
+function writeSseEvent(
+  response: ServerResponse,
+  input: {
+    event: string;
+    id?: string;
+    data?: unknown;
+  },
+) {
+  if (response.destroyed || response.writableEnded) {
+    return;
+  }
+
+  if (input.id) {
+    response.write(`id: ${input.id}\n`);
+  }
+  response.write(`event: ${input.event}\n`);
+  if (input.data !== undefined) {
+    const payload = JSON.stringify(input.data);
+    for (const line of payload.split('\n')) {
+      response.write(`data: ${line}\n`);
+    }
+  }
+  response.write('\n');
+}
+
+function isSeaEventLiveSource(store: GatewayStore): store is GatewayStore & SeaEventLiveSource {
+  return 'addSeaEventListener' in store && typeof store.addSeaEventListener === 'function';
 }
 
 function getAuthedGateway(store: GatewayStore, authorization: string | undefined) {
@@ -451,6 +497,12 @@ function localRuntimeErrorToHttp(message: string) {
 export function buildApp(options: BuildAppOptions = {}) {
   const store = options.store ?? createGatewayStore();
   const app = Fastify({ logger: true });
+  const liveHub = new SeaLiveHub(store);
+  const detachLiveSource = isSeaEventLiveSource(store) ? liveHub.attach(store) : null;
+
+  app.addHook('onClose', async () => {
+    detachLiveSource?.();
+  });
 
   app.get('/health', async () => ({ ok: true, data: { status: 'ok' } }));
 
@@ -1351,6 +1403,105 @@ export function buildApp(options: BuildAppOptions = {}) {
         },
       });
     }
+  });
+
+  app.get<{ Querystring: SeaStreamQuerystring }>('/api/v1/stream/sea', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const cursor = parseSeaStreamCursor(request.headers, request.query.cursor);
+    let cleanedUp = false;
+    let unsubscribe = () => {};
+    let keepAliveTimer: NodeJS.Timeout | null = null;
+
+    const cleanup = () => {
+      if (cleanedUp) {
+        return;
+      }
+      cleanedUp = true;
+      if (keepAliveTimer) {
+        clearInterval(keepAliveTimer);
+        keepAliveTimer = null;
+      }
+      unsubscribe();
+      if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+        reply.raw.end();
+      }
+    };
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'cache-control': 'no-store',
+      connection: 'keep-alive',
+      'content-type': 'text/event-stream; charset=utf-8',
+      'x-accel-buffering': 'no',
+    });
+    reply.raw.flushHeaders();
+
+    const subscription = liveHub.subscribe({
+      viewerGatewayId: result.gateway.id,
+      cursor,
+      push: (delivery) => {
+        try {
+          writeSseEvent(reply.raw, {
+            event: 'sea.invalidate',
+            id: delivery.id,
+            data: delivery,
+          });
+        } catch {
+          cleanup();
+        }
+      },
+    });
+    unsubscribe = subscription.unsubscribe;
+
+    request.raw.on('close', cleanup);
+    reply.raw.on('close', cleanup);
+    reply.raw.on('error', cleanup);
+
+    writeSseEvent(reply.raw, {
+      event: 'hello',
+      data: {
+        connectedAt: new Date().toISOString(),
+        cursor: subscription.latestVisibleDeliveryId,
+        replayedCount: subscription.backlog.length,
+        viewerGatewayId: result.gateway.id,
+      },
+    });
+
+    if (subscription.resyncRequired) {
+      writeSseEvent(reply.raw, {
+        event: 'resync_required',
+        data: {
+          reason: 'cursor_not_available',
+          cursor: cursor ?? null,
+        },
+      });
+    }
+
+    for (const delivery of subscription.backlog) {
+      writeSseEvent(reply.raw, {
+        event: 'sea.invalidate',
+        id: delivery.id,
+        data: delivery,
+      });
+    }
+
+    keepAliveTimer = setInterval(() => {
+      try {
+        writeSseEvent(reply.raw, {
+          event: 'ping',
+          data: {
+            at: new Date().toISOString(),
+          },
+        });
+      } catch {
+        cleanup();
+      }
+    }, 15_000);
+    keepAliveTimer.unref?.();
   });
 
   app.post<{ Body: CreateInviteBody }>('/api/v1/invites', async (request, reply) => {

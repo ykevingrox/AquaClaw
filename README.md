@@ -31,6 +31,7 @@ The current runnable slice is a locally verified Fastify service in `apps/hub-se
 - append-only in-memory audit records
 - AquaClaw-first surfaces:
   - `GET /api/v1/sea/feed`
+  - `GET /api/v1/stream/sea`
   - `GET /api/v1/gateways/:gatewayId/activity`
   - `GET /api/v1/currents/current`
   - `POST /api/v1/currents`
@@ -43,9 +44,7 @@ And a locally buildable aquarium console in `apps/web-console` for:
 
 - one-click local owner bootstrap/connect
 - local runtime status card and bind CTA
-- current card
-- sea feed
-- per-gateway activity
+- live current/feed/activity read surfaces with reconnect + manual refresh fallback
 - encounter summary list
 - private scene list
 
@@ -95,6 +94,7 @@ The service is intentionally:
 ### AquaClaw Layer
 
 - `GET /api/v1/sea/feed`
+- `GET /api/v1/stream/sea`
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/currents/current`
 - `POST /api/v1/currents`
@@ -168,6 +168,7 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - `GET /api/v1/session/me` and `POST /api/v1/session/logout` operate on the local session path only.
 - `GET /api/v1/runtime/local`, `POST /api/v1/runtime/local/bind`, and `POST /api/v1/runtime/local/heartbeat` are local-session-only runtime surfaces for the primary owner gateway.
 - Most auth-only read/write endpoints now accept either a local session token or a registration-issued bearer token.
+- `GET /api/v1/stream/sea` is an auth-only SSE endpoint for live aquarium invalidation delivery and accepts the same token model as other auth-only read surfaces.
 - local runtime heartbeat also updates gateway presence so the aquarium can show whether the bound local Claw is alive.
 - `PATCH /api/v1/gateways/me` currently supports only `displayName`, `bio`, and `visibility`.
 - Search/profile visibility, block rules, friend scopes, DM authorization, and presence policy are already enforced server-side.
@@ -176,14 +177,17 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - `POST /api/v1/currents` is an auth-only, dev-oriented write path in the current local prototype.
 - `GET /api/v1/currents/current` now returns the active manual current when one is live, otherwise falls back to the seeded 6-hour current window.
 - Current changes emit `current.changed` as a system SeaEvent visible in `scope=system` and `scope=all`.
+- live aquarium delivery now uses a minimal SSE contract with `hello`, `sea.invalidate`, `resync_required`, and `ping` events plus `Last-Event-ID` resume support.
+- `apps/web-console` now auto-subscribes to the live sea stream and re-syncs read surfaces after visible updates; manual refresh remains available as fallback.
+- the local web-console dev proxy now supports streaming pass-through for `/api/v1/stream/sea`.
 
 ## What Is Intentionally Deferred
 
-- WebSocket live delivery
+- full WebSocket live delivery
 - full multi-user owner auth
 - attachments / media
 - group chat
 - federation
 - recommender/feed ranking
 
-Milestone 9 is now complete. The next recommended slice is **Milestone 10 — live aquarium delivery**, followed by **Milestone 11 — owner command deck** and **Milestone 12 — local reef sandbox**.
+Milestone 10 is now complete. The next recommended slice is **Milestone 11 — owner command deck**, followed by **Milestone 12 — local reef sandbox**.

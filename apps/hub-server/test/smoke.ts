@@ -4,12 +4,95 @@ import { loadRuntimeConfig } from '../src/config.js';
 import { SqliteGatewayStore } from '../src/sqlite-store.js';
 import { createGatewayStore } from '../src/store.js';
 
+function parseSseFrame(chunk: string) {
+  const lines = chunk.split('\n');
+  let event = 'message';
+  let id: string | null = null;
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (!line || line.startsWith(':')) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf(':');
+    const field = separatorIndex >= 0 ? line.slice(0, separatorIndex) : line;
+    const rawValue = separatorIndex >= 0 ? line.slice(separatorIndex + 1).trimStart() : '';
+
+    if (field === 'event') {
+      event = rawValue;
+    } else if (field === 'id') {
+      id = rawValue;
+    } else if (field === 'data') {
+      dataLines.push(rawValue);
+    }
+  }
+
+  return {
+    event,
+    id,
+    data: dataLines.length ? JSON.parse(dataLines.join('\n')) : null,
+  };
+}
+
+async function openSeaStream(baseUrl: string, token: string) {
+  const controller = new AbortController();
+  const response = await fetch(`${baseUrl}/api/v1/stream/sea`, {
+    headers: {
+      accept: 'text/event-stream',
+      authorization: `Bearer ${token}`,
+    },
+    signal: controller.signal,
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(response.body);
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  return {
+    async nextEvent(timeoutMs = 5_000) {
+      const deadline = Date.now() + timeoutMs;
+
+      while (Date.now() < deadline) {
+        const delimiterIndex = buffer.indexOf('\n\n');
+        if (delimiterIndex >= 0) {
+          const chunk = buffer.slice(0, delimiterIndex);
+          buffer = buffer.slice(delimiterIndex + 2);
+          return parseSseFrame(chunk);
+        }
+
+        const { done, value } = await reader.read();
+        if (done) {
+          throw new Error('stream closed');
+        }
+        buffer += decoder.decode(value, { stream: true });
+      }
+
+      throw new Error(`timed out waiting for stream event after ${timeoutMs}ms`);
+    },
+    async close() {
+      controller.abort();
+      reader.releaseLock();
+      await new Promise((resolve) => {
+        setTimeout(resolve, 20);
+      });
+    },
+  };
+}
+
 const config = loadRuntimeConfig(process.env);
 const store = createGatewayStore({
   backend: config.storeBackend,
   databaseUrl: config.databaseUrl,
 });
 const app = buildApp({ store });
+const baseUrl = await app.listen({
+  host: '127.0.0.1',
+  port: 0,
+});
 
 const health = await app.inject({ method: 'GET', url: '/health' });
 assert.equal(health.statusCode, 200);
@@ -34,6 +117,11 @@ const sessionMe = await app.inject({
 });
 assert.equal(sessionMe.statusCode, 200);
 assert.equal(sessionMe.json().data.gateway.id, gatewayId);
+
+const liveStream = await openSeaStream(baseUrl, token);
+const liveHello = await liveStream.nextEvent();
+assert.equal(liveHello.event, 'hello');
+assert.equal((liveHello.data as { viewerGatewayId: string }).viewerGatewayId, gatewayId);
 
 const me = await app.inject({
   method: 'GET',
@@ -89,6 +177,10 @@ const writeCurrent = await app.inject({
   },
 });
 assert.equal(writeCurrent.statusCode, 201);
+
+const liveCurrent = await liveStream.nextEvent();
+assert.equal(liveCurrent.event, 'sea.invalidate');
+assert.equal((liveCurrent.data as { seaEvent: { type: string } }).seaEvent.type, 'current.changed');
 
 const currentAfterWrite = await app.inject({
   method: 'GET',
@@ -227,10 +319,11 @@ assert.equal(activity.statusCode, 200);
 assert.equal(activity.json().data.gateway.id, gatewayId);
 assert.equal(activity.json().data.items.length >= 1, true);
 
+await liveStream.close();
 await app.close();
 if (store instanceof SqliteGatewayStore) {
   store.close();
 }
 console.log(
-  `smoke_ok backend=${config.storeBackend} health=1 current=1 bootstrap=1 session_me=1 me=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 current_write=1 search=1 register=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1`,
+  `smoke_ok backend=${config.storeBackend} health=1 current=1 bootstrap=1 session_me=1 live_stream=1 me=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 current_write=1 search=1 register=1 messages=1 encounters=1 scenes=1 sea_feed=1 system_feed=1 activity=1`,
 );

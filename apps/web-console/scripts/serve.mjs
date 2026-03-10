@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { basename, dirname, extname, join, normalize, resolve } from 'node:path';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -40,6 +41,26 @@ function isProxyPath(pathname) {
   return pathname === '/health' || pathname.startsWith('/api/');
 }
 
+function buildProxyHeaders(headers) {
+  const forwarded = {
+    accept: headers.accept ?? 'application/json',
+  };
+
+  for (const [sourceKey, targetKey] of [
+    ['authorization', 'authorization'],
+    ['content-type', 'content-type'],
+    ['cache-control', 'cache-control'],
+    ['last-event-id', 'last-event-id'],
+  ]) {
+    const value = headers[sourceKey];
+    if (typeof value === 'string' && value) {
+      forwarded[targetKey] = value;
+    }
+  }
+
+  return forwarded;
+}
+
 function resolveStaticPath(pathname) {
   const candidate = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const normalizedPath = normalize(candidate).replace(/^(\.\.(\/|\\|$))+/, '');
@@ -60,14 +81,15 @@ const server = createServer(async (req, res) => {
 
     if (isProxyPath(url.pathname)) {
       const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await readRequestBody(req);
+      const controller = new AbortController();
+      req.on('close', () => {
+        controller.abort();
+      });
       const upstream = await fetch(`${backendOrigin}${url.pathname}${url.search}`, {
         method: req.method,
-        headers: {
-          accept: req.headers.accept ?? 'application/json',
-          authorization: req.headers.authorization ?? '',
-          'content-type': req.headers['content-type'] ?? '',
-        },
+        headers: buildProxyHeaders(req.headers),
         body,
+        signal: controller.signal,
       });
 
       const headers = {};
@@ -75,7 +97,21 @@ const server = createServer(async (req, res) => {
         headers[key] = value;
       });
       res.writeHead(upstream.status, headers);
-      res.end(Buffer.from(await upstream.arrayBuffer()));
+      if (req.method === 'HEAD' || !upstream.body) {
+        res.end();
+        return;
+      }
+
+      const upstreamStream = Readable.fromWeb(upstream.body);
+      upstreamStream.on('error', (error) => {
+        if (!res.writableEnded) {
+          res.destroy(error);
+        }
+      });
+      res.on('close', () => {
+        upstreamStream.destroy();
+      });
+      upstreamStream.pipe(res);
       return;
     }
 

@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
-import { InMemoryGatewayStore, type GatewayStore, type GatewayStoreSnapshot } from './store.js';
+import { InMemoryGatewayStore, type GatewayStore, type GatewayStoreSnapshot, type SeaEvent, type SeaEventListener, type SeaEventLiveSource } from './store.js';
 
 const SQLITE_SCHEMA_SQL = `
 create table if not exists gateway_store_state (
@@ -31,7 +31,7 @@ function resolveSqliteDatabasePath(databaseUrl: string) {
   return resolve(normalized);
 }
 
-export class SqliteGatewayStore implements GatewayStore {
+export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly inner = new InMemoryGatewayStore();
   private readonly db: DatabaseSync;
 
@@ -257,6 +257,14 @@ export class SqliteGatewayStore implements GatewayStore {
     ...args: Parameters<GatewayStore['listGatewayActivity']>
   ): ReturnType<GatewayStore['listGatewayActivity']> {
     return this.inner.listGatewayActivity(...args);
+  }
+
+  canViewSeaEvent(...args: [viewerGatewayId: string, event: SeaEvent]): boolean {
+    return this.inner.canViewSeaEvent(...args);
+  }
+
+  addSeaEventListener(listener: SeaEventListener) {
+    return this.inner.addSeaEventListener(listener);
   }
 
   getCurrent(...args: Parameters<GatewayStore['getCurrent']>): ReturnType<GatewayStore['getCurrent']> {

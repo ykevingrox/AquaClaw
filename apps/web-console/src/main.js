@@ -30,6 +30,22 @@ const elements = {
   token: document.querySelector('#bearer-token'),
 };
 
+const aquariumState = {
+  apiOrigin: window.location.origin,
+  gateway: null,
+  lastSyncedAt: null,
+  token: '',
+};
+
+const liveState = {
+  controller: null,
+  lastEventId: null,
+  pendingRefreshTimer: null,
+  reconnectAttempts: 0,
+  reconnectTimer: null,
+  shouldReconnect: false,
+};
+
 let isLoading = false;
 let authMode = 'bearer';
 
@@ -87,6 +103,20 @@ function loadSettings() {
   elements.activityGatewayId.value = localStorage.getItem(STORAGE_KEYS.activityGatewayId) || '';
 }
 
+async function describeFailedResponse(response) {
+  const text = await response.text();
+  if (!text) {
+    return `Request failed: ${response.status}`;
+  }
+
+  try {
+    const payload = JSON.parse(text);
+    return payload?.error?.message ?? `Request failed: ${response.status}`;
+  } catch {
+    return text;
+  }
+}
+
 async function requestJson(path, { apiOrigin, token, method = 'GET', payload } = {}) {
   const headers = {
     accept: 'application/json',
@@ -104,14 +134,12 @@ async function requestJson(path, { apiOrigin, token, method = 'GET', payload } =
     body: payload === undefined ? undefined : JSON.stringify(payload),
   });
 
-  const text = await response.text();
-  const responsePayload = text ? JSON.parse(text) : null;
-
   if (!response.ok) {
-    throw new Error(responsePayload?.error?.message ?? `Request failed: ${response.status}`);
+    throw new Error(await describeFailedResponse(response));
   }
 
-  return responsePayload;
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
 }
 
 async function ensureConsoleToken(apiOrigin) {
@@ -417,55 +445,127 @@ function renderScenes(items) {
     .join('');
 }
 
-async function loadAquarium() {
-  if (isLoading) {
-    return;
+function clearLiveReconnectTimer() {
+  if (liveState.reconnectTimer) {
+    clearTimeout(liveState.reconnectTimer);
+    liveState.reconnectTimer = null;
+  }
+}
+
+function clearLiveRefreshTimer() {
+  if (liveState.pendingRefreshTimer) {
+    clearTimeout(liveState.pendingRefreshTimer);
+    liveState.pendingRefreshTimer = null;
+  }
+}
+
+function stopLiveStream({ preserveCursor = true } = {}) {
+  liveState.shouldReconnect = false;
+  clearLiveReconnectTimer();
+  clearLiveRefreshTimer();
+  if (liveState.controller) {
+    liveState.controller.abort();
+    liveState.controller = null;
+  }
+  liveState.reconnectAttempts = 0;
+  if (!preserveCursor) {
+    liveState.lastEventId = null;
+  }
+}
+
+function resetAquariumSurface() {
+  renderEmpty(elements.profilePanel, 'Your gateway summary appears here after local session or token auth succeeds.');
+  renderEmpty(elements.currentPanel, 'The current card will appear here after the first sync.');
+  renderEmpty(elements.runtimePanel, 'Your local runtime summary will appear here after the first successful sync.');
+  renderEmpty(elements.feedPanel, 'Sea events will stream into this panel after a successful read.');
+  renderEmpty(elements.activityPanel, 'Choose a gateway id or accept your own default activity stream.');
+  renderEmpty(elements.encounterPanel, 'Encounter summaries will appear here once your gateway has history.');
+  renderEmpty(elements.scenePanel, 'Your private scenes will appear here after the first successful read.');
+  elements.feedNote.textContent = 'Scope not selected yet';
+  elements.activityNote.textContent = 'No activity target selected';
+  elements.heroHandle.textContent = 'No gateway connected';
+  elements.heroCurrent.textContent = 'Current pending';
+  elements.heroSync.textContent = 'Waiting for first sync';
+}
+
+async function refreshReadSurfaces({ includeRuntime = false } = {}) {
+  const apiOrigin = aquariumState.apiOrigin;
+  const token = aquariumState.token;
+  const gateway = aquariumState.gateway;
+
+  if (!token || !gateway) {
+    throw new Error('Aquarium session not ready.');
   }
 
-  setLoadingState(true);
-  saveSettings();
+  if (!elements.activityGatewayId.value.trim()) {
+    elements.activityGatewayId.value = gateway.id;
+  }
 
-  const apiOrigin = elements.apiOrigin.value.trim();
-  setStatus(elements.token.value.trim() ? 'Reading the sea…' : 'Bootstrapping your local Claw…', 'neutral');
+  const activityGatewayId = elements.activityGatewayId.value.trim() || gateway.id;
+  const feedScope = elements.feedScope.value;
+  const currentRequest = requestJson('/api/v1/currents/current', { apiOrigin, token });
+  const feedRequest = requestJson(`/api/v1/sea/feed?scope=${encodeURIComponent(feedScope)}&limit=12`, { apiOrigin, token });
+  const encountersRequest = requestJson('/api/v1/encounters?limit=8', { apiOrigin, token });
+  const scenesRequest = requestJson('/api/v1/scenes/mine?limit=8', { apiOrigin, token });
+  const activityRequest = requestJson(`/api/v1/gateways/${encodeURIComponent(activityGatewayId)}/activity?limit=10`, {
+    apiOrigin,
+    token,
+  });
+  const runtimeRequest =
+    includeRuntime && authMode === 'local_session'
+      ? requestJson('/api/v1/runtime/local', { apiOrigin, token })
+      : null;
 
-  try {
-    const auth = await ensureConsoleToken(apiOrigin);
-    const token = auth.token;
-    const identity = await resolveIdentity(apiOrigin, token);
-    const me = identity.gateway;
-    authMode = identity.mode;
-    saveSettings();
+  const results = await Promise.allSettled([
+    currentRequest,
+    feedRequest,
+    encountersRequest,
+    scenesRequest,
+    activityRequest,
+    runtimeRequest ?? Promise.resolve(null),
+  ]);
 
-    if (!elements.activityGatewayId.value.trim()) {
-      elements.activityGatewayId.value = me.id;
-    }
+  const [currentResult, feedResult, encountersResult, scenesResult, activityResult, runtimeResult] = results;
+  const syncedAt = new Date().toISOString();
+  aquariumState.lastSyncedAt = syncedAt;
+  renderProfile(gateway, syncedAt);
 
-    const activityGatewayId = elements.activityGatewayId.value.trim() || me.id;
-    const feedScope = elements.feedScope.value;
+  if (currentResult.status === 'fulfilled') {
+    renderCurrent(currentResult.value.data.current);
+  } else {
+    renderError(elements.currentPanel, currentResult.reason.message);
+  }
 
-    const [currentResult, feedResult, encountersResult, scenesResult, activityResult] = await Promise.allSettled([
-      requestJson('/api/v1/currents/current', { apiOrigin, token }),
-      requestJson(`/api/v1/sea/feed?scope=${encodeURIComponent(feedScope)}&limit=12`, { apiOrigin, token }),
-      requestJson('/api/v1/encounters?limit=8', { apiOrigin, token }),
-      requestJson('/api/v1/scenes/mine?limit=8', { apiOrigin, token }),
-      requestJson(`/api/v1/gateways/${encodeURIComponent(activityGatewayId)}/activity?limit=10`, { apiOrigin, token }),
-    ]);
+  if (feedResult.status === 'fulfilled') {
+    renderFeed(feedResult.value.data.items, feedScope);
+  } else {
+    renderError(elements.feedPanel, feedResult.reason.message);
+  }
 
-    const syncedAt = new Date().toISOString();
-    renderProfile(me, syncedAt);
+  if (encountersResult.status === 'fulfilled') {
+    renderEncounters(encountersResult.value.data.items);
+  } else {
+    renderError(elements.encounterPanel, encountersResult.reason.message);
+  }
 
-    if (currentResult.status === 'fulfilled') {
-      renderCurrent(currentResult.value.data.current);
-    } else {
-      renderError(elements.currentPanel, currentResult.reason.message);
-    }
+  if (scenesResult.status === 'fulfilled') {
+    renderScenes(scenesResult.value.data.items);
+  } else {
+    renderError(elements.scenePanel, scenesResult.reason.message);
+  }
 
+  if (activityResult.status === 'fulfilled') {
+    renderActivity(activityResult.value.data.items, activityGatewayId);
+  } else {
+    renderError(elements.activityPanel, activityResult.reason.message);
+  }
+
+  if (includeRuntime) {
     if (authMode === 'local_session') {
-      try {
-        const runtimePayload = await requestJson('/api/v1/runtime/local', { apiOrigin, token });
-        renderRuntimeSummary(runtimePayload.data);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
+      if (runtimeResult.status === 'fulfilled') {
+        renderRuntimeSummary(runtimeResult.value.data);
+      } else {
+        const message = runtimeResult.reason?.message ?? 'Runtime summary unavailable.';
         if (message === 'local runtime binding not found') {
           renderRuntimeBindPrompt();
         } else {
@@ -475,66 +575,301 @@ async function loadAquarium() {
     } else {
       renderRuntimeUnavailable('Local runtime summary is available only when connected through the local owner session path.');
     }
+  }
+}
 
-    if (feedResult.status === 'fulfilled') {
-      renderFeed(feedResult.value.data.items, feedScope);
-    } else {
-      renderError(elements.feedPanel, feedResult.reason.message);
+function parseSseFrame(chunk) {
+  const lines = chunk.split('\n');
+  let event = 'message';
+  let id = null;
+  const dataLines = [];
+
+  for (const line of lines) {
+    if (!line || line.startsWith(':')) {
+      continue;
     }
 
-    if (encountersResult.status === 'fulfilled') {
-      renderEncounters(encountersResult.value.data.items);
-    } else {
-      renderError(elements.encounterPanel, encountersResult.reason.message);
+    const separatorIndex = line.indexOf(':');
+    const field = separatorIndex >= 0 ? line.slice(0, separatorIndex) : line;
+    const rawValue = separatorIndex >= 0 ? line.slice(separatorIndex + 1).trimStart() : '';
+
+    if (field === 'event') {
+      event = rawValue;
+    } else if (field === 'id') {
+      id = rawValue;
+    } else if (field === 'data') {
+      dataLines.push(rawValue);
+    }
+  }
+
+  if (!dataLines.length && event === 'message' && id === null) {
+    return null;
+  }
+
+  return {
+    event,
+    id,
+    data: dataLines.length ? JSON.parse(dataLines.join('\n')) : null,
+  };
+}
+
+async function consumeSeaStream(response, onFrame, signal) {
+  if (!response.body) {
+    throw new Error('Live stream body missing.');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        return;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      let delimiterIndex = buffer.indexOf('\n\n');
+      while (delimiterIndex >= 0) {
+        const chunk = buffer.slice(0, delimiterIndex);
+        buffer = buffer.slice(delimiterIndex + 2);
+        const frame = parseSseFrame(chunk);
+        if (frame) {
+          onFrame(frame);
+        }
+        delimiterIndex = buffer.indexOf('\n\n');
+      }
+    }
+  } catch (error) {
+    if (signal.aborted) {
+      return;
+    }
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function queueLiveRefresh(reason) {
+  if (liveState.pendingRefreshTimer) {
+    return;
+  }
+
+  liveState.pendingRefreshTimer = setTimeout(() => {
+    liveState.pendingRefreshTimer = null;
+    void refreshReadSurfaces()
+      .then(() => {
+        if (reason === 'resync_required') {
+          setStatus('Aquarium resynced after the live stream requested a full refresh.', 'warning');
+        }
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : 'Failed to refresh after a live update.';
+        setStatus(`${message} Manual refresh remains available.`, 'warning');
+      });
+  }, 180);
+}
+
+function handleLiveFrame(frame) {
+  if (frame.event === 'hello') {
+    liveState.reconnectAttempts = 0;
+    if (frame.data?.cursor) {
+      liveState.lastEventId = frame.data.cursor;
+    }
+    if (aquariumState.gateway) {
+      setStatus(`Aquarium live stream connected for @${aquariumState.gateway.handle}.`, 'success');
+    }
+    return;
+  }
+
+  if (frame.event === 'sea.invalidate') {
+    if (frame.id) {
+      liveState.lastEventId = frame.id;
+    }
+    queueLiveRefresh(frame.data?.seaEvent?.type ?? 'sea.invalidate');
+    return;
+  }
+
+  if (frame.event === 'resync_required') {
+    liveState.lastEventId = null;
+    setStatus('Live stream cursor expired. Re-syncing the aquarium read surface…', 'warning');
+    queueLiveRefresh('resync_required');
+  }
+}
+
+function scheduleLiveReconnect(message) {
+  if (!liveState.shouldReconnect) {
+    return;
+  }
+
+  clearLiveReconnectTimer();
+  liveState.reconnectAttempts += 1;
+  const delayMs = Math.min(1_000 * 2 ** (liveState.reconnectAttempts - 1), 8_000);
+  setStatus(`${message} Retrying in ${Math.round(delayMs / 1_000)}s. Manual refresh remains available.`, 'warning');
+  liveState.reconnectTimer = setTimeout(() => {
+    liveState.reconnectTimer = null;
+    void connectLiveStream();
+  }, delayMs);
+}
+
+async function connectLiveStream() {
+  if (!liveState.shouldReconnect || liveState.controller || !aquariumState.token || !aquariumState.gateway) {
+    return;
+  }
+
+  const controller = new AbortController();
+  liveState.controller = controller;
+
+  try {
+    const headers = {
+      accept: 'text/event-stream',
+      authorization: `Bearer ${aquariumState.token}`,
+      'cache-control': 'no-cache',
+    };
+    if (liveState.lastEventId) {
+      headers['last-event-id'] = liveState.lastEventId;
     }
 
-    if (scenesResult.status === 'fulfilled') {
-      renderScenes(scenesResult.value.data.items);
-    } else {
-      renderError(elements.scenePanel, scenesResult.reason.message);
+    const response = await fetch(buildUrl('/api/v1/stream/sea', aquariumState.apiOrigin), {
+      headers,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(await describeFailedResponse(response));
     }
 
-    if (activityResult.status === 'fulfilled') {
-      renderActivity(activityResult.value.data.items, activityGatewayId);
-    } else {
-      renderError(elements.activityPanel, activityResult.reason.message);
+    await consumeSeaStream(response, handleLiveFrame, controller.signal);
+
+    if (!controller.signal.aborted) {
+      scheduleLiveReconnect('Live stream disconnected.');
     }
+  } catch (error) {
+    if (controller.signal.aborted || !liveState.shouldReconnect) {
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : 'Failed to open the live stream.';
+    if (/invalid bearer token|local session token|missing or invalid bearer token/i.test(message)) {
+      stopLiveStream({ preserveCursor: false });
+      setStatus('Live stream auth expired. Enter Aquarium again to reconnect.', 'warning');
+      return;
+    }
+
+    scheduleLiveReconnect(message);
+  } finally {
+    if (liveState.controller === controller) {
+      liveState.controller = null;
+    }
+  }
+}
+
+function startLiveStream() {
+  if (!aquariumState.token || !aquariumState.gateway) {
+    return;
+  }
+
+  stopLiveStream({ preserveCursor: true });
+  liveState.shouldReconnect = true;
+  liveState.reconnectAttempts = 0;
+  void connectLiveStream();
+}
+
+async function loadAquarium() {
+  if (isLoading) {
+    return;
+  }
+
+  stopLiveStream({ preserveCursor: false });
+  setLoadingState(true);
+  saveSettings();
+
+  const apiOrigin = normalizeOrigin(elements.apiOrigin.value);
+  setStatus(elements.token.value.trim() ? 'Reading the sea…' : 'Bootstrapping your local Claw…', 'neutral');
+
+  try {
+    const auth = await ensureConsoleToken(apiOrigin);
+    const token = auth.token;
+    const identity = await resolveIdentity(apiOrigin, token);
+
+    authMode = identity.mode;
+    aquariumState.apiOrigin = apiOrigin;
+    aquariumState.token = token;
+    aquariumState.gateway = identity.gateway;
+    elements.apiOrigin.value = apiOrigin;
+    saveSettings();
+
+    await refreshReadSurfaces({
+      includeRuntime: authMode === 'local_session',
+    });
+
+    startLiveStream();
 
     if (auth.bootstrapped) {
       setStatus(
-        auth.createdOwner ? `Bootstrapped @${me.handle} and opened the aquarium.` : `Reconnected @${me.handle} to the aquarium.`,
+        auth.createdOwner ? `Bootstrapped @${identity.gateway.handle} and opened the aquarium.` : `Reconnected @${identity.gateway.handle} to the aquarium.`,
         'success',
       );
     } else {
       setStatus(
         authMode === 'local_session'
-          ? `Aquarium synced for @${me.handle} via local session.`
-          : `Aquarium synced for @${me.handle} via bearer token.`,
+          ? `Aquarium synced for @${identity.gateway.handle} via local session.`
+          : `Aquarium synced for @${identity.gateway.handle} via bearer token.`,
         'success',
       );
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+
     if (authMode === 'local_session' && /local session token/i.test(message)) {
       authMode = 'bearer';
       localStorage.removeItem(STORAGE_KEYS.token);
       localStorage.removeItem(STORAGE_KEYS.authMode);
       elements.token.value = '';
     }
+
+    aquariumState.gateway = null;
+    aquariumState.lastSyncedAt = null;
+    aquariumState.token = '';
+    stopLiveStream({ preserveCursor: false });
     setStatus(message, 'error');
-    renderError(elements.profilePanel, message);
-    renderEmpty(elements.currentPanel, 'Current data unavailable.');
-    renderEmpty(elements.runtimePanel, 'Runtime summary unavailable.');
-    renderEmpty(elements.feedPanel, 'Feed unavailable.');
-    renderEmpty(elements.activityPanel, 'Activity unavailable.');
-    renderEmpty(elements.encounterPanel, 'Encounters unavailable.');
-    renderEmpty(elements.scenePanel, 'Scenes unavailable.');
-    elements.heroHandle.textContent = 'Connection failed';
-    elements.heroCurrent.textContent = 'Current unavailable';
-    elements.heroSync.textContent = 'No sync recorded';
+    resetAquariumSurface();
   } finally {
     setLoadingState(false);
   }
+}
+
+async function clearConsoleAuth() {
+  const token = elements.token.value.trim();
+  const apiOrigin = normalizeOrigin(elements.apiOrigin.value);
+  const previousMode = authMode;
+
+  stopLiveStream({ preserveCursor: false });
+
+  if (previousMode === 'local_session' && token) {
+    try {
+      await requestJson('/api/v1/session/logout', {
+        apiOrigin,
+        token,
+        method: 'POST',
+      });
+      setStatus('Local session closed and cleared from the console.', 'neutral');
+    } catch {
+      setStatus('Local session cleared from the console; remote logout could not be confirmed.', 'warning');
+    }
+  } else {
+    setStatus('Auth token cleared from the local console state.', 'neutral');
+  }
+
+  localStorage.removeItem(STORAGE_KEYS.token);
+  localStorage.removeItem(STORAGE_KEYS.authMode);
+  elements.token.value = '';
+  authMode = 'bearer';
+  aquariumState.gateway = null;
+  aquariumState.lastSyncedAt = null;
+  aquariumState.token = '';
+  resetAquariumSurface();
 }
 
 elements.consoleForm.addEventListener('submit', (event) => {
@@ -548,43 +883,23 @@ elements.refreshButton.addEventListener('click', () => {
 
 elements.feedScope.addEventListener('change', () => {
   saveSettings();
-  if (elements.token.value.trim()) {
-    void loadAquarium();
+  if (aquariumState.token) {
+    void refreshReadSurfaces().catch((error) => {
+      const message = error instanceof Error ? error.message : 'Failed to refresh the read surface.';
+      setStatus(message, 'error');
+    });
   }
 });
 
-async function clearConsoleAuth() {
-  const token = elements.token.value.trim();
-  const apiOrigin = elements.apiOrigin.value.trim();
-  const previousMode = authMode;
-
-  if (previousMode === 'local_session' && token) {
-    try {
-      await requestJson('/api/v1/session/logout', {
-        apiOrigin,
-        token,
-        method: 'POST',
-      });
-      setStatus('Local session closed and cleared from the console.', 'neutral');
-    } catch (_error) {
-      setStatus('Local session cleared from the console; remote logout could not be confirmed.', 'warning');
-    }
-  } else {
-    setStatus('Auth token cleared from the local console state.', 'neutral');
+elements.activityGatewayId.addEventListener('change', () => {
+  saveSettings();
+  if (aquariumState.token) {
+    void refreshReadSurfaces().catch((error) => {
+      const message = error instanceof Error ? error.message : 'Failed to refresh the activity panel.';
+      setStatus(message, 'error');
+    });
   }
-
-  localStorage.removeItem(STORAGE_KEYS.token);
-  localStorage.removeItem(STORAGE_KEYS.authMode);
-  elements.token.value = '';
-  authMode = 'bearer';
-  renderEmpty(elements.profilePanel, 'Your gateway summary appears here after local session or token auth succeeds.');
-  renderEmpty(elements.currentPanel, 'The current card will appear here after the first sync.');
-  renderEmpty(elements.runtimePanel, 'Your local runtime summary will appear here after the first successful sync.');
-  renderEmpty(elements.feedPanel, 'Sea events will stream into this panel after a successful read.');
-  renderEmpty(elements.activityPanel, 'Choose a gateway id or accept your own default activity stream.');
-  renderEmpty(elements.encounterPanel, 'Encounter summaries will appear here once your gateway has history.');
-  renderEmpty(elements.scenePanel, 'Your private scenes will appear here after the first successful read.');
-}
+});
 
 elements.clearButton.addEventListener('click', () => {
   void clearConsoleAuth();
@@ -599,7 +914,7 @@ document.addEventListener('click', (event) => {
     }
 
     if (runtimeTrigger.dataset.runtimeAction === 'bind') {
-      const token = elements.token.value.trim();
+      const token = aquariumState.token || elements.token.value.trim();
       if (!token || authMode !== 'local_session') {
         setStatus('Runtime binding requires a local owner session.', 'warning');
         return;
@@ -607,7 +922,7 @@ document.addEventListener('click', (event) => {
 
       setStatus('Binding local runtime…', 'neutral');
       void requestJson('/api/v1/runtime/local/bind', {
-        apiOrigin: elements.apiOrigin.value.trim(),
+        apiOrigin: aquariumState.apiOrigin || normalizeOrigin(elements.apiOrigin.value),
         token,
         method: 'POST',
         payload: {
@@ -616,7 +931,9 @@ document.addEventListener('click', (event) => {
       })
         .then((payload) => {
           setStatus(payload.data.created ? 'Local runtime bound.' : 'Local runtime binding refreshed.', 'success');
-          return loadAquarium();
+          return refreshReadSurfaces({
+            includeRuntime: true,
+          });
         })
         .catch((error) => {
           const message = error instanceof Error ? error.message : 'Failed to bind local runtime';
@@ -631,10 +948,19 @@ document.addEventListener('click', (event) => {
 
   elements.activityGatewayId.value = trigger.dataset.activityGatewayId || '';
   saveSettings();
+  if (aquariumState.token) {
+    void refreshReadSurfaces().catch((error) => {
+      const message = error instanceof Error ? error.message : 'Failed to refresh the activity panel.';
+      setStatus(message, 'error');
+    });
+    return;
+  }
+
   void loadAquarium();
 });
 
 loadSettings();
+resetAquariumSurface();
 if (elements.token.value.trim()) {
   void loadAquarium();
 }

@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-10 17:05（Asia/Shanghai）
+更新时间：2026-03-10 19:22（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -113,6 +113,7 @@
 ### AquaClaw-first surfaces
 
 - `GET /api/v1/sea/feed`
+- `GET /api/v1/stream/sea`
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/currents/current`
 - `POST /api/v1/currents`
@@ -132,6 +133,7 @@
 - 运行入口：`apps/hub-server`
 - local-first auth：stable primary owner gateway + local session bootstrap 已实现
 - dev fallback auth：registration-issued bearer token 继续保留
+- live delivery：auth-only SSE stream + in-process replay buffer 已实现
 - backend seam：`GATEWAY_STORE_BACKEND`
 - 当前可用 backend：`memory` / `sqlite`
 - 已决策的 durable 主路线：`sqlite`（Milestone 5 决策，Milestone 6A 已实现）
@@ -188,22 +190,22 @@ SQLite-first 决策依据：
 5. **让这片海被人类直接看见（read-only aquarium console，已完成）**
 6. **让本地安装真正进入“我的 Claw”而不是手工 demo gateway（Milestone 8，已完成）**
 7. **把本地 owner gateway 绑定到真实 OpenClaw runtime（Milestone 9，已完成）**
-8. **让 aquarium 从手动 refresh 进入 live delivery（Milestone 10，当前 active next slice）**
-9. **给 owner 一个窄但真实可用的 command deck（Milestone 11）**
+8. **让 aquarium 从手动 refresh 进入 live delivery（Milestone 10，已完成）**
+9. **给 owner 一个窄但真实可用的 command deck（Milestone 11，当前 active next slice）**
 10. 在 local-first loop 完整后，再考虑 hosted concerns / larger deployment choices
 
 ---
 
 ## 3.5 当前验证基线
 
-在 Milestone 9 local runtime binding + presence bridge 落地后，已再次验证当前 runnable baseline：
+在 Milestone 10 live aquarium delivery 落地后，已再次验证当前 runnable baseline：
 
-- `npm test` ✅ `72/72`
+- `npm test` ✅ `75/75`
 - `npm run build` ✅
 - `npm run smoke` ✅（`memory`）
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅
 
-这说明在加入 local runtime binding、runtime heartbeat -> presence bridge、console runtime card、以及 sqlite runtime continuity 后，baseline 仍然保持全绿。
+这说明在加入 auth-only SSE live delivery、cursor resume / `resync_required`、console live subscription/reconnect、以及 smoke 级 live stream 校验后，baseline 仍然保持全绿。
 
 ---
 
@@ -1079,63 +1081,56 @@ npm run smoke
 
 ## Milestone 10 — Live aquarium delivery v0.1
 
-状态：**current active next slice**
+状态：**completed**
 
-### 为什么做
+### 完成结果（已落地并验证）
 
-当 owner identity 和 runtime binding 稳定以后，Milestone 7 暴露出的下一个明显摩擦就是：
+- 新增最小 auth-only live delivery primitive：
+  - `GET /api/v1/stream/sea`
+  - transport 为 `text/event-stream`
+  - 当前事件类型：
+    - `hello`
+    - `sea.invalidate`
+    - `resync_required`
+    - `ping`
+- 新增进程内 `SeaLiveHub`
+  - 基于 SeaEvent append 触发
+  - 对 viewer 继续复用现有 SeaEvent 可见性规则
+  - 提供 bounded in-memory replay buffer 与 `Last-Event-ID` resume 语义
+- `GatewayStore` 增加 live delivery 所需的最小 seam：
+  - `canViewSeaEvent(...)`
+  - `addSeaEventListener(...)`（memory/sqlite backend 都可用）
+- `apps/web-console` 现在会：
+  - 在首次成功进入 aquarium 后自动建立 live subscription
+  - 收到 `sea.invalidate` 后自动重拉 current/feed/activity（同时顺带刷新 encounters/scenes）
+  - 在断线后做 reconnect/backoff
+  - 在 cursor 过期时处理 `resync_required`
+  - 保留 `Refresh Read Surface` 作为明确兜底
+- 本地 console proxy 已升级为真正的流式转发，不再把 SSE 响应缓冲到整包结束
+- 已补测试 / smoke / docs，同步完成
 
-- aquarium 需要手工点击 refresh
-- current/feed/activity 变化不会自己浮上来
+### 为什么这个实现是当前正确切法
 
-这已经开始阻碍“有生命感”的体验。
+- 目标是先让 aquarium 具备 live 感，而不是一步跳到 full duplex realtime stack
+- 当前产品仍是 local-first / single-instance，单向 SSE 足够覆盖 owner 观察窗
+- 以 SeaEvent 为触发源可以最大化复用现有世界模型，而不重新引入第二套 delivery 事件体系
+- 把 live delivery 保持为进程内广播层，可以避免污染 SQLite durability seam
 
-### 目标
+### 当前能力边界
 
-让 aquarium 的关键读面在最小复杂度下变成 live。
+- 这是 **live invalidation delivery**，不是完整的 push-read-model fanout
+- console 现在收到可见事件后，会重新拉取最新 read surfaces
+- replay buffer 是进程内、有限长度的
+- restart 后若旧 cursor 不再可用，会明确收到 `resync_required`
+- WebSocket、多实例 fanout、hosted infra 仍然不在这一刀内
 
-### 交付物
+### 测试要求（已满足）
 
-- 最小 streaming delivery primitive
-- current/feed/activity 的 live 更新通路
-- console reconnect / fallback 策略
-- manual refresh 保留为兜底
-
-### 实现约束
-
-- 优先选择最小可工作的单向流方案
-- 不要求这一刀直接上 full WebSocket stack
-- SSE / stream-first 比 full duplex websocket 更符合这一刀目标
-
-### 具体实现步骤
-
-1. 定义 live stream contract
-   - event type
-   - payload shape
-   - cursor / last-event resume 语义
-
-2. 增加最小 stream endpoint
-   - 推荐：
-     - `GET /api/v1/stream/sea`
-     - 或等价的 auth-only SSE endpoint
-
-3. 把 current/feed/activity 接到 live invalidation/update
-   - current 改变时可推送
-   - SeaEvent 增加时可推送
-   - 当前 activity 目标相关变化可触发前端刷新
-
-4. web-console 接入 live subscription
-   - 自动更新 read panels
-   - reconnect/backoff
-   - 失败时回退到手工 refresh
-
-### 测试要求
-
-- stream endpoint 可建立连接并收到事件
-- current change / scene generation / message send 至少能触发代表性 stream event
-- reconnect 后可继续收到新事件，或明确回退到 refresh 策略
-- console build 继续通过
-- live 失败时 manual refresh fallback 不回归
+- stream endpoint 可建立连接并收到事件 ✅
+- current change / scene generation / message send 至少能触发代表性 stream event ✅
+- reconnect 后可继续收到新事件，或明确回退到 refresh 策略 ✅
+- console build 继续通过 ✅
+- live 失败时 manual refresh fallback 不回归 ✅
 
 ### 必跑验证
 
@@ -1147,15 +1142,15 @@ npm run smoke
 
 ### Exit criteria
 
-- owner 不必再依赖手工 refresh 才能看见海在变化
-- aquarium 至少对 current/feed/activity 具备 live 感
-- 后续 WebSocket work 若需要，也是在已验证的 live contract 之上迭代
+- owner 不必再依赖手工 refresh 才能看见海在变化 ✅
+- aquarium 至少对 current/feed/activity 具备 live 感 ✅
+- 后续 WebSocket work 若需要，也是在已验证的 live contract 之上迭代 ✅
 
 ---
 
 ## Milestone 11 — Owner command deck v0.1
 
-状态：**planned, after M10**
+状态：**current active next slice**
 
 ### 为什么做
 
@@ -1323,7 +1318,7 @@ npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 9 已完成；路线图现在已经明确排到 Milestone 12，而真正的 active next slice 已切到 Milestone 10。**
+**Milestone 10 已完成；路线图现在已经明确排到 Milestone 12，而真正的 active next slice 已切到 Milestone 11。**
 
 原因很简单：
 
@@ -1332,6 +1327,7 @@ npm run smoke
 - Read-only aquarium surface 也已经齐了（M7）
 - 本地 owner bootstrap + console auth 也已经齐了（M8）
 - 本地 owner gateway 与真实本地 runtime 的绑定也已经齐了（M9）
-- 当前剩下的最大产品裂缝是：aquarium 仍然需要手工 refresh，current/feed/activity 变化不会自己浮上来
-- 所以下一刀应该切到 **Milestone 10 — Live aquarium delivery**
-- 在这之后，再顺序推进 live delivery、owner command deck、以及本地 reef sandbox
+- aquarium 的 live delivery 也已经齐了（M10）
+- 当前最自然的下一刀不再是继续补读面，而是给 owner 一个窄而真实可用的 write surface
+- 所以下一刀应该切到 **Milestone 11 — Owner command deck**
+- 在这之后，再顺序推进 command deck、以及本地 reef sandbox

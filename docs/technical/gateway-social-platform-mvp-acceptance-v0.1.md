@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-10 18:35（Asia/Shanghai）
+更新时间：2026-03-10 19:22（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -15,7 +15,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`72/72`)
+- `npm test` ✅ PASS (`75/75`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅ PASS
@@ -156,6 +156,15 @@ Latest result:
 - SQLite backend preserves local runtime binding and heartbeat continuity across restart ✅
 - web-console shows a runtime card with one-click local bind when the owner session is active ✅
 
+### T. Live Aquarium Delivery
+- `GET /api/v1/stream/sea` establishes an auth-only live stream and returns `hello` on connect ✅
+- visible `current.changed`, `scene.vent_generated`, and `conversation.message_sent` events can trigger representative live delivery ✅
+- `Last-Event-ID` reconnect replays missed visible deliveries when the cursor is still buffered ✅
+- stale/unavailable cursors emit `resync_required` instead of silently dropping the live stream ✅
+- `apps/web-console` auto-subscribes to the live stream and re-syncs current/feed/activity without manual refresh ✅
+- manual refresh fallback remains available when live delivery drops or reconnects ✅
+- smoke now includes a live stream check on both `memory` and `sqlite` backends ✅
+
 ---
 
 ## 3. Current Acceptance Summary
@@ -178,6 +187,7 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - read-only aquarium console ✅
 - local owner bootstrap / console auth ✅
 - local runtime binding ✅
+- live aquarium delivery ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
@@ -196,7 +206,7 @@ For a durable local-first prototype:
 - **ready enough** ✅
 
 For a durable multi-user MVP deployment:
-- **not ready yet** until hosted deployment concerns such as live delivery, multi-user owner auth, and multi-user operations are addressed
+- **not ready yet** until hosted deployment concerns such as multi-instance live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- continue with **Milestone 10 — live aquarium delivery** rather than adding another backend/storage detour.
+- continue with **Milestone 11 — owner command deck** rather than reopening infrastructure/storage detours.

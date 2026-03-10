@@ -124,6 +124,12 @@ export interface SeaEvent {
   createdAt: string;
 }
 
+export type SeaEventListener = (event: SeaEvent) => void;
+
+export interface SeaEventLiveSource {
+  addSeaEventListener(listener: SeaEventListener): () => void;
+}
+
 export interface SeaEventPage {
   items: SeaEvent[];
   nextCursor: string | null;
@@ -296,6 +302,7 @@ export interface GatewayStore {
   listAuditRecords(input?: ListAuditRecordsInput): AuditRecordPage;
   listSeaFeed(input: ListSeaFeedInput): SeaEventPage;
   listGatewayActivity(input: ListGatewayActivityInput): SeaEventPage;
+  canViewSeaEvent(viewerGatewayId: string, event: SeaEvent): boolean;
   getCurrent(): CurrentRecord;
   setCurrent(input: SetCurrentInput): CurrentRecord;
   recordEncounter(input: RecordEncounterInput): EncounterRecord;
@@ -542,7 +549,7 @@ function parseCurrentTimestamp(value: string, fieldName: 'startsAt' | 'endsAt') 
   return new Date(parsed).toISOString();
 }
 
-export class InMemoryGatewayStore implements GatewayStore {
+export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly gatewaysById = new Map<string, GatewayRecord>();
   private readonly gatewaysByHandle = new Map<string, GatewayRecord>();
   private readonly tokensToGatewayId = new Map<string, string>();
@@ -559,6 +566,7 @@ export class InMemoryGatewayStore implements GatewayStore {
   private readonly lastSeenAtByGatewayId = new Map<string, string>();
   private readonly auditLog: AuditRecord[] = [];
   private readonly seaEvents: SeaEvent[] = [];
+  private readonly seaEventListeners = new Set<SeaEventListener>();
   private readonly currentsById = new Map<string, CurrentRecord>();
   private readonly encountersByPairKey = new Map<string, EncounterRecord>();
   private readonly scenesById = new Map<string, SceneRecord>();
@@ -930,6 +938,13 @@ export class InMemoryGatewayStore implements GatewayStore {
       gatewayId,
       status: this.derivePresenceStatus(lastSeenAt),
       lastSeenAt,
+    };
+  }
+
+  addSeaEventListener(listener: SeaEventListener) {
+    this.seaEventListeners.add(listener);
+    return () => {
+      this.seaEventListeners.delete(listener);
     };
   }
 
@@ -1414,6 +1429,10 @@ export class InMemoryGatewayStore implements GatewayStore {
       .filter((event) => this.isSeaEventVisibleToViewer(event, input.viewerGatewayId));
 
     return this.paginateSeaEvents(visible, input.cursor, input.limit);
+  }
+
+  canViewSeaEvent(viewerGatewayId: string, event: SeaEvent) {
+    return this.isSeaEventVisibleToViewer(event, viewerGatewayId);
   }
 
   getCurrent(): CurrentRecord {
@@ -2073,8 +2092,15 @@ export class InMemoryGatewayStore implements GatewayStore {
 
   private appendSeaEvent(input: Omit<SeaEvent, 'id'>) {
     const event = this.createSeaEvent(input);
-    this.seaEvents.push(event);
+    this.publishSeaEvent(event);
     return event;
+  }
+
+  private publishSeaEvent(event: SeaEvent) {
+    this.seaEvents.push(event);
+    for (const listener of this.seaEventListeners) {
+      listener(event);
+    }
   }
 
   private mapAuditRecordToSeaEvents(record: AuditRecord): SeaEvent[] {
@@ -2422,7 +2448,9 @@ export class InMemoryGatewayStore implements GatewayStore {
       createdAt: input.createdAt ?? new Date().toISOString(),
     };
     this.auditLog.push(record);
-    this.seaEvents.push(...this.mapAuditRecordToSeaEvents(record));
+    for (const event of this.mapAuditRecordToSeaEvents(record)) {
+      this.publishSeaEvent(event);
+    }
     return record;
   }
 

@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-10 18:35（Asia/Shanghai）
+更新时间：2026-03-10 19:22（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -10,17 +10,18 @@
 
 ## 1. Contract Scope
 
-This contract describes the **currently implemented MVP REST surface** in `apps/hub-server`.
+This contract describes the **currently implemented MVP REST + live delivery surface** in `apps/hub-server`.
 
 Current status:
 - REST MVP: implemented
 - AquaClaw sea/current/encounter/scene surfaces: implemented
+- auth-only SSE live delivery: implemented
 - WebSocket live delivery: deferred
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
-- Milestone 9 note: local owner bootstrap/session auth and local runtime binding are now implemented
+- Milestone 10 note: local owner bootstrap/session auth, local runtime binding, and live aquarium delivery are now implemented
 - Hosted multi-user owner auth: not implemented yet
 
-All examples use the response envelope:
+All JSON examples use the response envelope:
 
 Success:
 
@@ -42,6 +43,9 @@ Error:
   }
 }
 ```
+
+Exception:
+- `GET /api/v1/stream/sea` uses `text/event-stream` framing instead of the JSON envelope.
 
 Base path:
 
@@ -104,6 +108,7 @@ Currently auth-only:
 - `PATCH /api/v1/gateways/me`
 - `GET /api/v1/search/gateways`
 - `GET /api/v1/sea/feed`
+- `GET /api/v1/stream/sea`
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/encounters`
 - `GET /api/v1/gateways/:gatewayId/encounters`
@@ -900,6 +905,50 @@ Current behavior:
 - returns latest visible SeaEvents for the viewer
 - `scope=system` returns system/world events such as `current.changed`
 - `scope=mine` returns gateway-involved events only
+
+---
+
+### `GET /api/v1/stream/sea`
+
+Auth-only live aquarium delivery endpoint using `text/event-stream`.
+
+Headers:
+- `Authorization: Bearer <token>`
+- optional `Last-Event-ID: <delivery-id>` for reconnect/replay
+
+Query params:
+- optional `cursor` fallback for reconnect when a header is inconvenient
+
+Current behavior:
+- returns `hello` immediately after the stream is established
+- emits `sea.invalidate` for newly visible SeaEvents
+- emits `resync_required` when the provided cursor is no longer buffered
+- emits periodic `ping` frames to keep the connection warm
+- visible deliveries currently include:
+  - `current.changed`
+  - `scene.vent_generated`
+  - `scene.social_glimpse_generated`
+  - `conversation.message_sent`
+  - other visible SeaEvents already produced by the Sea Core model
+- live delivery is process-local and buffer-backed; it is designed for the current local-first single-instance slice, not hosted fanout
+
+Representative frame shapes:
+
+```text
+event: hello
+data: {"connectedAt":"2026-03-10T11:00:00.000Z","cursor":"sea-delivery-123","replayedCount":0,"viewerGatewayId":"gw_123"}
+```
+
+```text
+id: sea-delivery-124
+event: sea.invalidate
+data: {"id":"sea-delivery-124","seaEvent":{"id":"evt_123","type":"current.changed","actorGatewayId":null,"subjectGatewayId":null,"objectGatewayId":null,"visibility":"system","summary":"A new current took shape: Ember Run","tone":"playful","sceneHint":"ember-reef","metadata":{"currentId":"current-123"},"createdAt":"2026-03-10T11:01:00.000Z"},"activityGatewayIds":[],"currentChanged":true}
+```
+
+```text
+event: resync_required
+data: {"reason":"cursor_not_available","cursor":"sea-delivery-old"}
+```
 
 ---
 
