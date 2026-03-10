@@ -907,3 +907,115 @@ test('invite cannot be claimed twice when maxUses is exhausted', async () => {
 
   await app.close();
 });
+
+test('friendship can be removed and friends list becomes empty', async () => {
+  const app = buildApp();
+
+  const alpha = await app.inject({ method: 'POST', url: '/api/v1/gateways/register', payload: { displayName: 'Alpha Remove', handle: 'alpha-remove' } });
+  const alphaToken = alpha.json().data.credential.token as string;
+  const beta = await app.inject({ method: 'POST', url: '/api/v1/gateways/register', payload: { displayName: 'Beta Remove', handle: 'beta-remove' } });
+  const betaToken = beta.json().data.credential.token as string;
+  const betaId = beta.json().data.gateway.id as string;
+
+  const fr = await app.inject({ method: 'POST', url: '/api/v1/friend-requests', headers: { authorization: `Bearer ${alphaToken}` }, payload: { toGatewayId: betaId } });
+  const requestId = fr.json().data.request.id as string;
+  await app.inject({ method: 'POST', url: `/api/v1/friend-requests/${requestId}/accept`, headers: { authorization: `Bearer ${betaToken}` } });
+
+  const removed = await app.inject({ method: 'DELETE', url: `/api/v1/friends/${betaId}`, headers: { authorization: `Bearer ${alphaToken}` } });
+  assert.equal(removed.statusCode, 200);
+
+  const alphaFriends = await app.inject({ method: 'GET', url: '/api/v1/friends', headers: { authorization: `Bearer ${alphaToken}` } });
+  assert.equal(alphaFriends.json().data.items.length, 0);
+
+  const betaFriends = await app.inject({ method: 'GET', url: '/api/v1/friends', headers: { authorization: `Bearer ${betaToken}` } });
+  assert.equal(betaFriends.json().data.items.length, 0);
+
+  await app.close();
+});
+
+test('blocking removes friendship and prevents new friend requests', async () => {
+  const app = buildApp();
+
+  const alpha = await app.inject({ method: 'POST', url: '/api/v1/gateways/register', payload: { displayName: 'Alpha Block', handle: 'alpha-block' } });
+  const alphaToken = alpha.json().data.credential.token as string;
+  const alphaId = alpha.json().data.gateway.id as string;
+
+  const beta = await app.inject({ method: 'POST', url: '/api/v1/gateways/register', payload: { displayName: 'Beta Block', handle: 'beta-block' } });
+  const betaToken = beta.json().data.credential.token as string;
+  const betaId = beta.json().data.gateway.id as string;
+
+  const fr = await app.inject({ method: 'POST', url: '/api/v1/friend-requests', headers: { authorization: `Bearer ${alphaToken}` }, payload: { toGatewayId: betaId } });
+  const requestId = fr.json().data.request.id as string;
+  await app.inject({ method: 'POST', url: `/api/v1/friend-requests/${requestId}/accept`, headers: { authorization: `Bearer ${betaToken}` } });
+
+  const blocked = await app.inject({
+    method: 'POST',
+    url: '/api/v1/blocks',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { gatewayId: betaId, reason: 'spam' },
+  });
+  assert.equal(blocked.statusCode, 201);
+
+  const alphaFriends = await app.inject({ method: 'GET', url: '/api/v1/friends', headers: { authorization: `Bearer ${alphaToken}` } });
+  assert.equal(alphaFriends.json().data.items.length, 0);
+
+  const blockedRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${betaToken}` },
+    payload: { toGatewayId: alphaId },
+  });
+  assert.equal(blockedRequest.statusCode, 403);
+  assert.equal(blockedRequest.json().error.code, 'blocked');
+
+  const unblocked = await app.inject({
+    method: 'DELETE',
+    url: `/api/v1/blocks/${betaId}`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(unblocked.statusCode, 200);
+
+  await app.close();
+});
+
+test('blocking prevents conversation message access between previously connected gateways', async () => {
+  const app = buildApp();
+
+  const alpha = await app.inject({ method: 'POST', url: '/api/v1/gateways/register', payload: { displayName: 'Alpha Block Msg', handle: 'alpha-block-msg' } });
+  const alphaToken = alpha.json().data.credential.token as string;
+  const alphaId = alpha.json().data.gateway.id as string;
+
+  const beta = await app.inject({ method: 'POST', url: '/api/v1/gateways/register', payload: { displayName: 'Beta Block Msg', handle: 'beta-block-msg' } });
+  const betaToken = beta.json().data.credential.token as string;
+  const betaId = beta.json().data.gateway.id as string;
+
+  const fr = await app.inject({ method: 'POST', url: '/api/v1/friend-requests', headers: { authorization: `Bearer ${alphaToken}` }, payload: { toGatewayId: betaId } });
+  const requestId = fr.json().data.request.id as string;
+  const accepted = await app.inject({ method: 'POST', url: `/api/v1/friend-requests/${requestId}/accept`, headers: { authorization: `Bearer ${betaToken}` } });
+  const conversationId = accepted.json().data.conversation.id as string;
+
+  const blocked = await app.inject({
+    method: 'POST',
+    url: '/api/v1/blocks',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { gatewayId: betaId },
+  });
+  assert.equal(blocked.statusCode, 201);
+
+  const send = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${betaToken}` },
+    payload: { body: 'should fail' },
+  });
+  assert.equal(send.statusCode, 403);
+
+  const read = await app.inject({
+    method: 'GET',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+  });
+  assert.equal(read.statusCode, 403);
+
+  await app.close();
+});

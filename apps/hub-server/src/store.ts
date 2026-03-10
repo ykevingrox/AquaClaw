@@ -30,6 +30,13 @@ export interface FriendScopeRecord {
   updatedAt: string;
 }
 
+export interface BlockRecord {
+  blockerGatewayId: string;
+  blockedGatewayId: string;
+  reason: string;
+  createdAt: string;
+}
+
 export interface InviteRecord {
   id: string;
   code: string;
@@ -130,6 +137,12 @@ interface ClaimInviteInput {
   claimedByGatewayId: string;
 }
 
+interface CreateBlockInput {
+  blockerGatewayId: string;
+  blockedGatewayId: string;
+  reason?: string;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 const ONLINE_THRESHOLD_MS = 90_000;
 const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
@@ -141,6 +154,7 @@ export class InMemoryGatewayStore {
   private readonly friendRequestsById = new Map<string, FriendRequestRecord>();
   private readonly friendshipsById = new Map<string, FriendshipRecord>();
   private readonly friendScopesByKey = new Map<string, FriendScopeRecord>();
+  private readonly blocksByKey = new Map<string, BlockRecord>();
   private readonly invitesById = new Map<string, InviteRecord>();
   private readonly invitesByCode = new Map<string, InviteRecord>();
   private readonly inviteClaimsByKey = new Map<string, InviteClaimRecord>();
@@ -352,6 +366,10 @@ export class InMemoryGatewayStore {
       throw new Error('gateway not found');
     }
 
+    if (this.isBlockedEitherWay(input.fromGatewayId, input.toGatewayId)) {
+      throw new Error('blocked relationship');
+    }
+
     if (this.areFriends(input.fromGatewayId, input.toGatewayId)) {
       throw new Error('already friends');
     }
@@ -443,6 +461,61 @@ export class InMemoryGatewayStore {
     };
     this.friendRequestsById.set(request.id, updatedRequest);
     return updatedRequest;
+  }
+
+  removeFriendship(gatewayAId: string, gatewayBId: string) {
+    const friendship = Array.from(this.friendshipsById.values()).find(
+      (item) =>
+        (item.gatewayAId === gatewayAId && item.gatewayBId === gatewayBId) ||
+        (item.gatewayAId === gatewayBId && item.gatewayBId === gatewayAId),
+    );
+    if (!friendship) {
+      throw new Error('friendship not found');
+    }
+
+    this.friendshipsById.delete(friendship.id);
+    this.clearFriendScopes(gatewayAId, gatewayBId);
+    this.clearFriendScopes(gatewayBId, gatewayAId);
+    return friendship;
+  }
+
+  createBlock(input: CreateBlockInput): BlockRecord {
+    if (input.blockerGatewayId === input.blockedGatewayId) {
+      throw new Error('cannot block yourself');
+    }
+    if (!this.gatewaysById.has(input.blockerGatewayId) || !this.gatewaysById.has(input.blockedGatewayId)) {
+      throw new Error('gateway not found');
+    }
+
+    const key = this.blockKey(input.blockerGatewayId, input.blockedGatewayId);
+    if (this.blocksByKey.has(key)) {
+      throw new Error('already blocked');
+    }
+
+    if (this.areFriends(input.blockerGatewayId, input.blockedGatewayId)) {
+      this.removeFriendship(input.blockerGatewayId, input.blockedGatewayId);
+    }
+
+    this.rejectPendingBetween(input.blockerGatewayId, input.blockedGatewayId);
+
+    const block: BlockRecord = {
+      blockerGatewayId: input.blockerGatewayId,
+      blockedGatewayId: input.blockedGatewayId,
+      reason: input.reason?.trim() ?? '',
+      createdAt: new Date().toISOString(),
+    };
+    this.blocksByKey.set(key, block);
+    return block;
+  }
+
+  removeBlock(blockerGatewayId: string, blockedGatewayId: string) {
+    const key = this.blockKey(blockerGatewayId, blockedGatewayId);
+    const existing = this.blocksByKey.get(key);
+    if (!existing) {
+      throw new Error('block not found');
+    }
+    this.blocksByKey.delete(key);
+    return existing;
   }
 
   listIncomingFriendRequests(gatewayId: string): FriendRequestRecord[] {
@@ -539,6 +612,10 @@ export class InMemoryGatewayStore {
     if (!conversation.memberGatewayIds.includes(input.senderGatewayId)) {
       throw new Error('gateway is not a member of this conversation');
     }
+    const peerGatewayId = conversation.memberGatewayIds[0] === input.senderGatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
+    if (this.isBlockedEitherWay(input.senderGatewayId, peerGatewayId)) {
+      throw new Error('blocked relationship');
+    }
 
     const body = input.body.trim();
     if (!body) {
@@ -572,6 +649,10 @@ export class InMemoryGatewayStore {
     if (!conversation.memberGatewayIds.includes(viewerGatewayId)) {
       throw new Error('gateway is not a member of this conversation');
     }
+    const peerGatewayId = conversation.memberGatewayIds[0] === viewerGatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
+    if (this.isBlockedEitherWay(viewerGatewayId, peerGatewayId)) {
+      throw new Error('blocked relationship');
+    }
 
     return Array.from(this.messagesById.values())
       .filter((message) => message.conversationId === conversationId)
@@ -603,6 +684,12 @@ export class InMemoryGatewayStore {
     return ['profile.read', 'presence.read', 'chat.send', 'chat.receive', 'task.request'];
   }
 
+  private clearFriendScopes(fromGatewayId: string, toGatewayId: string) {
+    for (const scopeName of this.defaultScopeNames()) {
+      this.friendScopesByKey.delete(this.scopeKey(fromGatewayId, toGatewayId, scopeName));
+    }
+  }
+
   private seedDefaultFriendScopes(fromGatewayId: string, toGatewayId: string) {
     const now = new Date().toISOString();
     for (const scopeName of this.defaultScopeNames()) {
@@ -620,6 +707,32 @@ export class InMemoryGatewayStore {
 
   private scopeKey(fromGatewayId: string, toGatewayId: string, scopeName: ScopeName) {
     return `${fromGatewayId}:${toGatewayId}:${scopeName}`;
+  }
+
+  private blockKey(blockerGatewayId: string, blockedGatewayId: string) {
+    return `${blockerGatewayId}:${blockedGatewayId}`;
+  }
+
+  private isBlockedEitherWay(gatewayAId: string, gatewayBId: string) {
+    return this.blocksByKey.has(this.blockKey(gatewayAId, gatewayBId)) || this.blocksByKey.has(this.blockKey(gatewayBId, gatewayAId));
+  }
+
+  private rejectPendingBetween(gatewayAId: string, gatewayBId: string) {
+    const now = new Date().toISOString();
+    for (const request of this.friendRequestsById.values()) {
+      const matches =
+        request.status === 'pending' &&
+        ((request.fromGatewayId === gatewayAId && request.toGatewayId === gatewayBId) ||
+          (request.fromGatewayId === gatewayBId && request.toGatewayId === gatewayAId));
+      if (matches) {
+        this.friendRequestsById.set(request.id, {
+          ...request,
+          status: 'rejected',
+          updatedAt: now,
+          respondedAt: now,
+        });
+      }
+    }
   }
 
   private derivePresenceStatus(lastSeenAt: string | null): PresenceStatus {
@@ -644,6 +757,7 @@ export class InMemoryGatewayStore {
     this.friendRequestsById.clear();
     this.friendshipsById.clear();
     this.friendScopesByKey.clear();
+    this.blocksByKey.clear();
     this.invitesById.clear();
     this.invitesByCode.clear();
     this.inviteClaimsByKey.clear();

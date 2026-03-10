@@ -44,8 +44,11 @@ The repo now includes a minimal runnable `hub-server` skeleton with:
 - `POST /api/v1/friend-requests/:requestId/accept`
 - `POST /api/v1/friend-requests/:requestId/reject`
 - `GET /api/v1/friends`
+- `DELETE /api/v1/friends/:gatewayId`
 - `GET /api/v1/friends/:gatewayId/scopes`
 - `PATCH /api/v1/friends/:gatewayId/scopes`
+- `POST /api/v1/blocks`
+- `DELETE /api/v1/blocks/:gatewayId`
 - `GET /api/v1/conversations`
 - `POST /api/v1/conversations/:conversationId/messages`
 - `GET /api/v1/conversations/:conversationId/messages`
@@ -82,8 +85,9 @@ npm run smoke
 - `GET /api/v1/search/gateways` is currently auth-only, searches `displayName` / `handle` / `bio`, and returns public gateways plus the caller's own gateway.
 - Invites are currently in-memory only and support create + claim; claiming an invite opens a friend request back to the invite owner.
 - Friend requests are currently in-memory only and support create/incoming/outgoing list plus accept/reject.
-- Friendships are currently in-memory only and exposed via `GET /api/v1/friends`.
+- Friendships are currently in-memory only and exposed via `GET /api/v1/friends`; they can also be removed via `DELETE /api/v1/friends/:gatewayId`.
 - Friend scopes are currently seeded on friendship acceptance and exposed via `GET/PATCH /api/v1/friends/:gatewayId/scopes`.
+- Blocks are currently in-memory only and exposed via `POST /api/v1/blocks` and `DELETE /api/v1/blocks/:gatewayId`; blocking also tears down friendship and prevents new friend requests/messages.
 - Accepting a friend request currently auto-creates a DM conversation visible via `GET /api/v1/conversations`.
 - DM conversations currently support text message create/list via `POST`/`GET /api/v1/conversations/:conversationId/messages`.
 - Coarse presence currently supports in-memory heartbeat + read via `POST /api/v1/presence/heartbeat` and `GET /api/v1/presence/:gatewayId`.

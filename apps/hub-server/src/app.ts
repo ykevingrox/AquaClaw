@@ -66,6 +66,11 @@ interface ClaimInviteBody {
   code?: string;
 }
 
+interface CreateBlockBody {
+  gatewayId?: string;
+  reason?: string;
+}
+
 function extractBearerToken(value: string | undefined) {
   if (!value) return null;
   const [scheme, token] = value.split(' ');
@@ -161,6 +166,9 @@ function friendRequestErrorToHttp(message: string) {
   if (message === 'only the recipient can accept this request' || message === 'only the recipient can reject this request') {
     return { statusCode: 403, code: 'forbidden' };
   }
+  if (message === 'blocked relationship') {
+    return { statusCode: 403, code: 'blocked' };
+  }
   if (message === 'friend request is not pending') {
     return { statusCode: 409, code: 'invalid_state' };
   }
@@ -173,6 +181,9 @@ function conversationErrorToHttp(message: string) {
   }
   if (message === 'gateway is not a member of this conversation') {
     return { statusCode: 403, code: 'forbidden' };
+  }
+  if (message === 'blocked relationship') {
+    return { statusCode: 403, code: 'blocked' };
   }
   return { statusCode: 400, code: 'validation_failed' };
 }
@@ -199,6 +210,22 @@ function inviteErrorToHttp(message: string) {
   }
   if (message === 'invite already claimed' || message === 'pending request already exists' || message === 'already friends') {
     return { statusCode: 409, code: message === 'invite already claimed' ? 'invite_already_claimed' : message === 'pending request already exists' ? 'pending_request_exists' : 'already_friends' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function socialActionErrorToHttp(message: string) {
+  if (message === 'friendship not found' || message === 'block not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'already blocked') {
+    return { statusCode: 409, code: 'already_blocked' };
+  }
+  if (message === 'blocked relationship') {
+    return { statusCode: 403, code: 'blocked' };
+  }
+  if (message === 'cannot block yourself') {
+    return { statusCode: 400, code: 'validation_failed' };
   }
   return { statusCode: 400, code: 'validation_failed' };
 }
@@ -601,6 +628,33 @@ export function buildApp(options: BuildAppOptions = {}) {
     };
   });
 
+  app.delete<{ Params: FriendScopesParams }>('/api/v1/friends/:gatewayId', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    try {
+      const friendship = store.removeFriendship(result.gateway.id, request.params.gatewayId);
+      return {
+        ok: true,
+        data: {
+          friendship,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to remove friendship';
+      const mapped = socialActionErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
   app.get<{ Params: FriendScopesParams }>('/api/v1/friends/:gatewayId/scopes', async (request, reply) => {
     const result = getAuthedGateway(store, request.headers.authorization);
     if ('error' in result) {
@@ -684,6 +738,75 @@ export function buildApp(options: BuildAppOptions = {}) {
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'failed to update friend scopes';
       const mapped = friendScopesErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: CreateBlockBody }>('/api/v1/blocks', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const gatewayId = request.body?.gatewayId?.trim();
+    if (!gatewayId) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'gatewayId is required',
+        },
+      });
+    }
+
+    try {
+      const block = store.createBlock({
+        blockerGatewayId: result.gateway.id,
+        blockedGatewayId: gatewayId,
+        reason: request.body?.reason,
+      });
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          block,
+        },
+      });
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to create block';
+      const mapped = socialActionErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.delete<{ Params: FriendScopesParams }>('/api/v1/blocks/:gatewayId', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    try {
+      const block = store.removeBlock(result.gateway.id, request.params.gatewayId);
+      return {
+        ok: true,
+        data: {
+          block,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to remove block';
+      const mapped = socialActionErrorToHttp(messageText);
       return reply.code(mapped.statusCode).send({
         ok: false,
         error: {
