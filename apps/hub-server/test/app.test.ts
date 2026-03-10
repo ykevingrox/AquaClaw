@@ -428,6 +428,136 @@ test('search returns public gateways and self only, with query filtering', async
   await app.close();
 });
 
+test('search includes relationship-visible gateways for friends_only and invite_only', async () => {
+  const app = buildApp();
+
+  const owner = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Owner Search',
+      handle: 'owner-search',
+      visibility: 'friends_only',
+    },
+  });
+  const ownerId = owner.json().data.gateway.id as string;
+  const ownerToken = owner.json().data.credential.token as string;
+
+  const friend = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Friend Search',
+      handle: 'friend-search',
+      visibility: 'public',
+    },
+  });
+  const friendToken = friend.json().data.credential.token as string;
+
+  const inviteOnly = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Invite Search',
+      handle: 'invite-search',
+      visibility: 'invite_only',
+    },
+  });
+  const inviteOnlyId = inviteOnly.json().data.gateway.id as string;
+  const inviteOnlyToken = inviteOnly.json().data.credential.token as string;
+
+  const stranger = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Stranger Search',
+      handle: 'stranger-search',
+      visibility: 'public',
+    },
+  });
+  const strangerToken = stranger.json().data.credential.token as string;
+
+  const beforeOwnerRelationship = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=owner',
+    headers: { authorization: `Bearer ${friendToken}` },
+  });
+  assert.deepEqual(beforeOwnerRelationship.json().data.items, []);
+
+  const beforeInvitePath = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=invite',
+    headers: { authorization: `Bearer ${friendToken}` },
+  });
+  assert.deepEqual(beforeInvitePath.json().data.items, []);
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${friendToken}` },
+    payload: { toGatewayId: ownerId },
+  });
+  const requestId = friendRequest.json().data.request.id as string;
+  await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+
+  const invite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: { authorization: `Bearer ${inviteOnlyToken}` },
+  });
+  const code = invite.json().data.invite.code as string;
+  await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: { authorization: `Bearer ${friendToken}` },
+    payload: { code },
+  });
+
+  const friendOwnerSearch = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=owner',
+    headers: { authorization: `Bearer ${friendToken}` },
+  });
+  assert.deepEqual(
+    friendOwnerSearch.json().data.items.map((item: { handle: string }) => item.handle),
+    ['owner-search'],
+  );
+
+  const friendInviteSearch = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=invite',
+    headers: { authorization: `Bearer ${friendToken}` },
+  });
+  assert.deepEqual(
+    friendInviteSearch.json().data.items.map((item: { handle: string }) => item.handle),
+    ['invite-search'],
+  );
+
+  const strangerOwnerSearch = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=owner',
+    headers: { authorization: `Bearer ${strangerToken}` },
+  });
+  assert.deepEqual(strangerOwnerSearch.json().data.items, []);
+
+  const strangerInviteSearch = await app.inject({
+    method: 'GET',
+    url: '/api/v1/search/gateways?q=invite',
+    headers: { authorization: `Bearer ${strangerToken}` },
+  });
+  assert.deepEqual(strangerInviteSearch.json().data.items, []);
+  assert.equal(
+    strangerInviteSearch.json().data.items.some((item: { id: string }) => item.id === inviteOnlyId),
+    false,
+  );
+
+  await app.close();
+});
+
 test('friend request can be created and listed in outgoing/incoming views', async () => {
   const app = buildApp();
 

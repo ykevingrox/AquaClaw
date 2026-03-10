@@ -288,7 +288,7 @@ export class InMemoryGatewayStore {
     const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
 
     return Array.from(this.gatewaysById.values())
-      .filter((gateway) => gateway.id === input.viewerGatewayId || gateway.visibility === 'public')
+      .filter((gateway) => this.canViewGatewayProfile(input.viewerGatewayId, gateway.id))
       .filter((gateway) => gateway.id === input.viewerGatewayId || !this.isBlockedEitherWay(input.viewerGatewayId, gateway.id))
       .filter((gateway) => {
         if (!q) return true;
