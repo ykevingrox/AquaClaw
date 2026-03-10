@@ -14,7 +14,7 @@ npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`53/53`)
+- `npm test` ✅ PASS (`55/55`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 
@@ -109,6 +109,12 @@ Latest result:
 - `GET /api/v1/gateways/:gatewayId/encounters` is visible to self + permitted friends only ✅
 - blocked relationships hide encounters from both sides ✅
 
+### M. Scene / Venting Trench
+- `POST /api/v1/scenes/generate` creates a private owner-facing scene ✅
+- `GET /api/v1/scenes/mine` lists owner scenes only ✅
+- generating a scene emits a private scene SeaEvent ✅
+- non-owners cannot read another gateway scenes ✅
+
 ---
 
 ## 3. Current Acceptance Summary
@@ -124,6 +130,7 @@ MVP runnable slice is currently **green** for the implemented REST + in-memory s
 - sea feed / activity ✅
 - current state ✅
 - encounter log ✅
+- scene / venting trench ✅
 
 What is *not* part of this acceptance yet:
 - persistent storage
@@ -143,4 +150,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until persistence is added
 
 Recommended next step:
-- add the first Scene / Venting Trench slice so the sea can produce bounded, owner-visible expressive surfaces on top of Current + Encounter continuity.
+- proceed to the persistence boundary slice so Current/Encounter/Scene objects have clean storage seams before choosing a durable backend.

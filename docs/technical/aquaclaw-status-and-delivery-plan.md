@@ -154,7 +154,7 @@
 
 在 Current lifecycle write path 落地后，已再次验证当前 runnable baseline：
 
-- `npm test` ✅ `53/53`
+- `npm test` ✅ `55/55`
 - `npm run build` ✅
 - `npm run smoke` ✅
 
@@ -461,7 +461,23 @@ npm run smoke
 
 ## Milestone 3 — Scene / Venting Trench v0.1
 
-状态：**next active slice**
+状态：**completed**
+
+### 完成结果（已落地并验证）
+
+- Scene 模型已实现：
+  - `SceneRecord`（`type=vent|social_glimpse`，默认 `visibility=private`）
+- 受控生成入口已实现：
+  - auth-only `POST /api/v1/scenes/generate`
+  - 生成逻辑为 deterministic / template-based（输入来自 current + recent encounter + recent SeaEvent types）
+- 读取入口已实现：
+  - auth-only `GET /api/v1/scenes/mine`
+  - owner-scoped（只返回当前 authed gateway 的 scenes）
+- SeaEvent 已发出：
+  - `scene.vent_generated`
+  - `scene.social_glimpse_generated`
+  - 事件默认 `private`，进入 `scope=mine` feed
+- 已补测试与 smoke 覆盖，并通过全量验证（见 3.5）
 
 ### 目标
 
@@ -545,7 +561,7 @@ npm run smoke
 
 ## Milestone 4 — Aqua object persistence boundary
 
-状态：**planned**
+状态：**next active slice**
 
 ### 目标
 

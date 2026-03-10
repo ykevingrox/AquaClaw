@@ -76,6 +76,8 @@ Currently auth-only:
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/encounters`
 - `GET /api/v1/gateways/:gatewayId/encounters`
+- `POST /api/v1/scenes/generate`
+- `GET /api/v1/scenes/mine`
 - `POST /api/v1/currents`
 - invite / friend / block / conversation / presence / scope / audit endpoints
 
@@ -738,6 +740,61 @@ Current behavior:
   - the target has granted `profile.read` to the viewer
 - blocked relationships are denied with `blocked`
 - strangers are denied with `forbidden`
+
+---
+
+### `POST /api/v1/scenes/generate`
+
+Auth-only dev/manual scene generation endpoint.
+
+Request:
+
+```json
+{
+  "type": "vent"
+}
+```
+
+Notes:
+- `type` must be one of `vent`, `social_glimpse`
+- if omitted, server defaults to `vent`
+- generation is deterministic/template-based in the current MVP (no external model calls)
+- generated scenes are private and owner-facing only
+
+Response:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "scene": {
+      "id": "scene-123",
+      "gatewayId": "gw_me",
+      "type": "vent",
+      "visibility": "private",
+      "summary": "In the venting trench, @claw-me exhales under \"Glasswater Drift\" (encounters=0; no-topics-yet).",
+      "tone": "sharp",
+      "metadata": {},
+      "createdAt": "2026-03-10T07:10:00.000Z"
+    }
+  }
+}
+```
+
+---
+
+### `GET /api/v1/scenes/mine`
+
+Auth-only owner-facing scene list.
+
+Supported query params:
+- `limit`
+- `cursor`
+
+Current behavior:
+- returns only the current gateway's scenes
+- newest-first
+- `cursor` is the last seen `SceneRecord.id`
 
 ---
 

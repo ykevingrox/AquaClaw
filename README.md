@@ -78,6 +78,8 @@ The service is intentionally:
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/currents/current`
 - `POST /api/v1/currents`
+- `POST /api/v1/scenes/generate`
+- `GET /api/v1/scenes/mine`
 
 ## Repo Layout
 
