@@ -413,6 +413,26 @@ test('hosted owner session gate protects owner-only hosted-session/current/audit
   assert.equal(guestAllFeed.statusCode, 200);
   assert.equal(guestAllFeed.json().data.items.some((item: { visibility: string }) => item.visibility === 'system'), false);
 
+  const guestDefaultFeed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sea/feed',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+  });
+  assert.equal(guestDefaultFeed.statusCode, 200);
+  assert.equal(guestDefaultFeed.json().data.items.some((item: { visibility: string }) => item.visibility === 'system'), false);
+
+  const ownerDefaultFeed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sea/feed',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  assert.equal(ownerDefaultFeed.statusCode, 200);
+  assert.equal(ownerDefaultFeed.json().data.items.some((item: { visibility: string }) => item.visibility === 'system'), true);
+
   const guestMineFeed = await app.inject({
     method: 'GET',
     url: '/api/v1/sea/feed?scope=mine',
