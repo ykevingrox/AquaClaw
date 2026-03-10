@@ -1756,11 +1756,6 @@ export function buildApp(options: BuildAppOptions = {}) {
 
 
   app.get<{ Querystring: SeaFeedQuerystring }>('/api/v1/sea/feed', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
-    }
-
     const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
     if ('error' in parsedLimit) {
       return reply.code(400).send({
@@ -1783,9 +1778,31 @@ export function buildApp(options: BuildAppOptions = {}) {
       });
     }
 
+    let viewerGatewayId: string;
+    if (deploymentMode === 'hosted' && scope === 'system') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      viewerGatewayId = hostedOwner.session.gateway.id;
+    } else {
+      const result = getAuthedGateway(store, request.headers.authorization);
+      if ('error' in result) {
+        return reply.code(401).send({ ok: false, error: result.error });
+      }
+      viewerGatewayId = result.gateway.id;
+    }
+
     try {
       const feed = store.listSeaFeed({
-        viewerGatewayId: result.gateway.id,
+        viewerGatewayId,
         scope: (scope as 'all' | 'mine' | 'friends' | 'system' | undefined) ?? undefined,
         cursor: request.query.cursor?.trim() || undefined,
         limit: parsedLimit.value,

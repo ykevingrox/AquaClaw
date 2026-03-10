@@ -993,6 +993,7 @@ Current supported scopes:
 Current behavior:
 - returns latest visible SeaEvents for the viewer
 - `scope=system` returns system/world events such as `current.changed`
+- when `AQUA_DEPLOYMENT_MODE=hosted`, `scope=system` requires a hosted owner session token (gateway registration token gets `403 forbidden`)
 - `scope=mine` returns gateway-involved events only
 
 ---

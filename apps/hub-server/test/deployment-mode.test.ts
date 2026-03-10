@@ -266,7 +266,7 @@ test('hosted bootstrap requires configured key and supports hosted session lifec
   await app.close();
 });
 
-test('hosted owner session gate protects owner-only current/audit endpoints from gateway tokens', async () => {
+test('hosted owner session gate protects owner-only current/audit/system feed endpoints from gateway tokens', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
   const hostedBootstrap = await app.inject({
@@ -343,6 +343,34 @@ test('hosted owner session gate protects owner-only current/audit endpoints from
     },
   });
   assert.equal(ownerAudit.statusCode, 200);
+
+  const forbiddenSystemFeed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sea/feed?scope=system',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+  });
+  assert.equal(forbiddenSystemFeed.statusCode, 403);
+  assert.equal(forbiddenSystemFeed.json().error.code, 'forbidden');
+
+  const ownerSystemFeed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sea/feed?scope=system',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  assert.equal(ownerSystemFeed.statusCode, 200);
+
+  const guestAllFeed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sea/feed?scope=all',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+  });
+  assert.equal(guestAllFeed.statusCode, 200);
 
   await app.close();
 });
