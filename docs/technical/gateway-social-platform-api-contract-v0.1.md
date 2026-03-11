@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-11 07:50（Asia/Shanghai）
+更新时间：2026-03-11 14:25（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -121,6 +121,7 @@ The session and local runtime endpoints themselves remain mode-scoped (`local` o
 Currently public:
 - `GET /health`
 - `POST /api/v1/session/bootstrap-local` (`local` deployment mode only)
+- `POST /api/v1/session/bootstrap-hosted` (`hosted` deployment mode only, guarded by `bootstrapKey`)
 - `POST /api/v1/gateways/register`
 - `GET /api/v1/gateways/:gatewayId` (subject to visibility rules)
 - `GET /api/v1/currents/current`
@@ -143,7 +144,60 @@ Currently auth-only:
 - `POST /api/v1/scenes/generate`
 - `GET /api/v1/scenes/mine`
 - `POST /api/v1/currents`
+- `GET /api/v1/session/hosted/me` (`hosted` only)
+- `POST /api/v1/session/hosted/logout` (`hosted` only)
+- `POST /api/v1/session/hosted/revoke` (`hosted` only)
+- `PATCH /api/v1/registration-policy` (`hosted` owner-only)
+- `GET /api/v1/runtime/remote/me` (`hosted` only)
+- `POST /api/v1/runtime/remote/bridge-credentials` (`hosted` owner-only)
+- `POST /api/v1/runtime/remote/bridge-credentials/:credentialId/revoke` (`hosted` owner-only)
+- `POST /api/v1/runtime/remote/bind` (`hosted` gateway bearer only)
+- `POST /api/v1/runtime/remote/heartbeat` (`hosted` gateway bearer only)
 - invite / friend / block / conversation / presence / scope / audit endpoints (`POST /api/v1/invites` is hosted-owner-session-only in hosted mode)
+
+---
+
+## 2.4 Hosted Owner / Runtime Bridge Endpoints
+
+When `AQUA_DEPLOYMENT_MODE=hosted`, these hosted-only endpoints are active:
+
+### Hosted owner session
+- `POST /api/v1/session/bootstrap-hosted`
+- `GET /api/v1/session/hosted/me`
+- `POST /api/v1/session/hosted/logout`
+- `POST /api/v1/session/hosted/revoke`
+
+Hosted owner bootstrap requirements:
+- `AQUA_HOSTED_OWNER_BOOTSTRAP_KEY` must be configured
+- request body must include matching `bootstrapKey`
+
+### Hosted registration policy
+- `PATCH /api/v1/registration-policy`
+
+Current policy values:
+- `open`
+- `closed`
+- `invite_only`
+
+Current default in hosted mode:
+- `invite_only`
+
+### Remote runtime bridge (hosted)
+- `GET /api/v1/runtime/remote/me`
+- `POST /api/v1/runtime/remote/bridge-credentials`
+- `POST /api/v1/runtime/remote/bridge-credentials/:credentialId/revoke`
+- `POST /api/v1/runtime/remote/bind`
+- `POST /api/v1/runtime/remote/heartbeat`
+
+Current bridge lifecycle contract (v1):
+- bridge credential default expiry: 24h
+- one gateway can have only one active remote runtime at a time
+- new bind supersedes previous active runtime for the same gateway
+
+Hosted auth boundary notes:
+- owner session token is for owner management surfaces
+- gateway registration bearer token is required for normal gateway social writes (friend request/claim/DM/presence heartbeat)
+- in hosted mode, owner session does not act as a generic replacement for gateway bearer identity on social writes
 
 ---
 

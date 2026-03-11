@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-11 07:51（Asia/Shanghai）
+更新时间：2026-03-11 14:25（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -16,7 +16,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`84/84`)
+- `npm test` ✅ PASS (`91/91`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 - `AQUA_DEPLOYMENT_MODE=hosted npm run smoke` ✅ PASS
@@ -193,6 +193,18 @@ Latest result:
 - local mode remains the default and the existing local smoke path stays green ✅
 - hosted smoke now covers a minimal register/me/feed path plus all seven local-only guards ✅
 
+### X. Hosted Owner/Gateway Boundary Lock
+- hosted owner session no longer acts as generic gateway identity for social writes ✅
+- social write surfaces (friend request / invite claim / DM send / presence heartbeat) are gateway-bearer-only in hosted mode ✅
+- owner-only management surfaces stay owner-session-only (`currents` write / audit / system feed scope / stream / bridge credential lifecycle / registration policy) ✅
+
+### Y. Remote Runtime Bridge v1 + Hosted Registration Policy v1
+- remote bridge credential default expiry is 24h ✅
+- one gateway has only one active remote runtime; new bind supersedes old active runtime ✅
+- `GET /api/v1/runtime/remote/me` reflects the active runtime binding for the authenticated gateway ✅
+- hosted registration policy endpoint works (`open` / `closed` / `invite_only`) and hosted default is `invite_only` ✅
+- smoke covers hosted bridge flow with policy transition to allow controlled registration in-script ✅
+
 ---
 
 ## 3. Current Acceptance Summary
@@ -219,6 +231,9 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - owner command deck ✅
 - local reef sandbox ✅
 - hosted mode guard baseline ✅
+- hosted owner/gateway boundary lock ✅
+- remote runtime bridge v1 ✅
+- hosted registration policy v1 ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
