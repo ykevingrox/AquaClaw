@@ -1343,7 +1343,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环，且 Phase 1 Slice A（hosted baseline）已完成；Phase 2 hosted owner/auth 已补上 owner bootstrap + hosted session revoke，并在 hosted 模式把 `POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites` 收敛到 owner session，同时让 hosted owner session token 可直连 hosted-safe auth-only gateway 面（如 `GET/PATCH /api/v1/gateways/me`），当前 active next slice 继续收敛 owner/gateway 最小权限边界。**
+**Milestone 8-12 local-first loop 已闭环；Phase 1 hosted baseline、Phase 2 hosted owner/auth、remote runtime bridge v1、以及 hosted owner/gateway 最小权限边界都已落地并验收通过。当前 active next slice 进入 Phase 4 的第一项硬化：hosted 最小 abuse guard（基础速率限制）+ invite lifecycle 细化。**
 
 当前判断：
 
@@ -1355,17 +1355,19 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - hosted owner session token 可直接访问 hosted-safe auth-only gateway 面（已覆盖 `GET/PATCH /api/v1/gateways/me`）
 - hosted 下非 owner gateway 读取 `GET /api/v1/sea/feed?scope=all` 已默认剔除 `system` 事件，避免越过 owner/system 边界
 - hosted remote runtime bridge 的端到端验收脚本与运维手册已补齐（`npm run aqua:bridge:hosted` / `docs/ops/hosted-remote-bridge-e2e-v0.1.md`）
-- 下一步应继续收敛剩余 owner/gateway 最小权限模型
+- owner/gateway 边界收敛已完成；下一步进入 hosted 可运营硬化（abuse guard + invite lifecycle）
 
 下一刀（已拆分为可执行清单，按顺序推进）：
 
-1. 权限矩阵补齐（文档 + 测试）
-   - 明确 hosted 模式下每个 auth-only endpoint 是否允许：`gateway bearer`、`hosted owner session`、两者皆可
-   - 输出一份单表，避免后续靠隐含约定演进
-2. 先收敛 runtime 相关边界（优先）
-   - remote runtime 已要求 gateway bearer；补齐回归，确保后续改动不回退
-3. 再收敛社交写面边界（待决策后落地）
-   - invite claim / friend request / presence heartbeat / DM write 是否允许 hosted owner session，先定规则再改实现
+1. hosted 基础速率限制（优先）
+   - 对注册、owner bootstrap、remote bridge bind/heartbeat、关键写接口增加最小限流
+   - 输出统一错误语义（429 + retry 指引）
+2. invite lifecycle 细化
+   - 补齐 invite 过期/吊销语义与测试覆盖
+   - 与 registration policy（open/closed/invite_only）组合验证
+3. 文档与验收同步
+   - contract / acceptance / status plan 更新
+   - hosted 运维手册增加限流与邀请码策略章节
 
 ### 决策锁定（2026-03-11）
 
