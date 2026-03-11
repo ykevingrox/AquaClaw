@@ -1116,3 +1116,65 @@ test('hosted owner session gate protects owner-only hosted-session/current/audit
 
   await app.close();
 });
+
+test('hosted invite lifecycle enforces expiresAt validation and expired claim behavior', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-invite-lifecycle-owner');
+  const ownerToken = owner.credential.token;
+  await setHostedRegistrationPolicy(app, ownerToken, 'open');
+
+  const guestRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Invite Guest',
+      handle: 'hosted-invite-guest',
+    },
+  });
+  assert.equal(guestRegister.statusCode, 201);
+  const guestToken = guestRegister.json().data.credential.token as string;
+
+  const invalidExpiryInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      expiresAt: 'not-a-date',
+    },
+  });
+  assert.equal(invalidExpiryInvite.statusCode, 400);
+  assert.equal(invalidExpiryInvite.json().error.code, 'validation_failed');
+
+  const expiredInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      maxUses: 1,
+      expiresAt: '2000-01-01T00:00:00.000Z',
+    },
+  });
+  assert.equal(expiredInvite.statusCode, 201);
+  const code = expiredInvite.json().data.invite.code as string;
+
+  const expiredClaim = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+    payload: {
+      code,
+    },
+  });
+  assert.equal(expiredClaim.statusCode, 409);
+  assert.equal(expiredClaim.json().error.code, 'invalid_state');
+  assert.equal(expiredClaim.json().error.message, 'invite expired');
+
+  await app.close();
+});
