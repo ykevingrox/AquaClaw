@@ -1128,6 +1128,162 @@ test('hosted owner session gate protects owner-only hosted-session/current/audit
   await app.close();
 });
 
+test('hosted registration policy matrix keeps invite create/claim/revoke available for existing hosted gateways', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-registration-invite-matrix-owner');
+  const ownerToken = owner.credential.token;
+  await setHostedRegistrationPolicy(app, ownerToken, 'open');
+
+  const claimerOneRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Matrix Claimer One',
+      handle: 'hosted-matrix-claimer-one',
+    },
+  });
+  assert.equal(claimerOneRegister.statusCode, 201);
+  const claimerOneToken = claimerOneRegister.json().data.credential.token as string;
+
+  const claimerTwoRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Matrix Claimer Two',
+      handle: 'hosted-matrix-claimer-two',
+    },
+  });
+  assert.equal(claimerTwoRegister.statusCode, 201);
+  const claimerTwoToken = claimerTwoRegister.json().data.credential.token as string;
+
+  const claimerThreeRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Matrix Claimer Three',
+      handle: 'hosted-matrix-claimer-three',
+    },
+  });
+  assert.equal(claimerThreeRegister.statusCode, 201);
+  const claimerThreeToken = claimerThreeRegister.json().data.credential.token as string;
+
+  const openInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      maxUses: 1,
+    },
+  });
+  assert.equal(openInvite.statusCode, 201);
+  const openInviteCode = openInvite.json().data.invite.code as string;
+
+  const openClaim = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: {
+      authorization: `Bearer ${claimerOneToken}`,
+    },
+    payload: {
+      code: openInviteCode,
+    },
+  });
+  assert.equal(openClaim.statusCode, 200);
+
+  await setHostedRegistrationPolicy(app, ownerToken, 'closed');
+
+  const closedRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Matrix Closed Register',
+      handle: 'hosted-matrix-closed-register',
+    },
+  });
+  assert.equal(closedRegister.statusCode, 403);
+  assert.equal(closedRegister.json().error.code, 'registration_closed');
+
+  const closedInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      maxUses: 1,
+    },
+  });
+  assert.equal(closedInvite.statusCode, 201);
+  const closedInviteCode = closedInvite.json().data.invite.code as string;
+
+  const closedClaim = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: {
+      authorization: `Bearer ${claimerTwoToken}`,
+    },
+    payload: {
+      code: closedInviteCode,
+    },
+  });
+  assert.equal(closedClaim.statusCode, 200);
+
+  await setHostedRegistrationPolicy(app, ownerToken, 'invite_only');
+
+  const inviteOnlyRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Matrix Invite-only Register',
+      handle: 'hosted-matrix-invite-only-register',
+    },
+  });
+  assert.equal(inviteOnlyRegister.statusCode, 403);
+  assert.equal(inviteOnlyRegister.json().error.code, 'registration_invite_only');
+
+  const inviteOnlyInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      maxUses: 1,
+    },
+  });
+  assert.equal(inviteOnlyInvite.statusCode, 201);
+  const inviteOnlyInviteId = inviteOnlyInvite.json().data.invite.id as string;
+  const inviteOnlyInviteCode = inviteOnlyInvite.json().data.invite.code as string;
+
+  const inviteOnlyRevoke = await app.inject({
+    method: 'POST',
+    url: `/api/v1/invites/${inviteOnlyInviteId}/revoke`,
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  assert.equal(inviteOnlyRevoke.statusCode, 200);
+
+  const revokedClaim = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: {
+      authorization: `Bearer ${claimerThreeToken}`,
+    },
+    payload: {
+      code: inviteOnlyInviteCode,
+    },
+  });
+  assert.equal(revokedClaim.statusCode, 409);
+  assert.equal(revokedClaim.json().error.code, 'invalid_state');
+  assert.equal(revokedClaim.json().error.message, 'invite revoked');
+
+  await app.close();
+});
+
 test('hosted invite lifecycle enforces expiresAt validation plus revoke behavior', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
