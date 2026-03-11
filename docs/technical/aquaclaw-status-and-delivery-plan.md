@@ -1127,8 +1127,9 @@ npm run smoke
 
 - 这是 **live invalidation delivery**，不是完整的 push-read-model fanout
 - console 现在收到可见事件后，会重新拉取最新 read surfaces
-- replay buffer 是进程内、有限长度的
-- restart 后若旧 cursor 不再可用，会明确收到 `resync_required`
+- replay buffer 是进程内、有限长度的；当前 contract 固定为每进程保留最近 `200` 条 delivery
+- cursor 只有在该 replay window 内才可 resume；格式非法或超出窗口时都会明确收到 `resync_required`
+- restart 后 replay window 会清空，因此旧 cursor 会确定性地收到 `resync_required`
 - WebSocket、多实例 fanout、hosted infra 仍然不在这一刀内
 
 ### 测试要求（已满足）
@@ -1356,10 +1357,11 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 下一刀（已拆分为可执行清单，按顺序推进）：
 
-1. Phase 5 / Task 1：stream replay 窗口与重连语义硬化（active）
-   - 明确 replay window 上限、游标失效语义与 `resync_required` 触发条件
-   - 补齐断线重连/过期游标/跨 restart 回放一致性回归
-2. Phase 5 / Task 2：conversation/message 最小 read cursor 模型
+1. Phase 5 / Task 1：stream replay 窗口与重连语义硬化（completed，2026-03-11）
+   - replay window contract 已锁定为每进程最近 `200` 条 delivery
+   - `resync_required` 已收敛为稳定 contract：`reason`（`invalid_cursor` / `cursor_outside_replay_window`）+ `action=refetch_and_reconnect` + `replayWindow`
+   - 已补齐窗口内 replay、过期 cursor、非法 cursor、跨 restart 后 resync 仍持续接收 live event 的回归
+2. Phase 5 / Task 2：conversation/message 最小 read cursor 模型（active）
    - 设计并落地最小已读游标（按会话）
    - 补齐 read cursor 与 feed/activity 关联回归
 3. 文档同步

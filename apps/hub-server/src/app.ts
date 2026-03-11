@@ -2,7 +2,7 @@ import { type ServerResponse } from 'node:http';
 
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type { DeploymentMode } from './config.js';
-import { SeaLiveHub } from './live-hub.js';
+import { SeaLiveHub, type SeaLiveHubOptions } from './live-hub.js';
 import { createInMemoryRateLimiter, type RateLimitPolicy } from './rate-limiter.js';
 import {
   createGatewayStore,
@@ -18,6 +18,7 @@ interface BuildAppOptions {
   deploymentMode?: DeploymentMode;
   hostedOwnerBootstrapKey?: string | null;
   hostedRateLimits?: Partial<HostedRateLimitPolicies>;
+  seaLiveHub?: SeaLiveHubOptions;
   now?: () => number;
 }
 
@@ -921,7 +922,7 @@ export function buildApp(options: BuildAppOptions = {}) {
   };
   const hostedRateLimiter = createInMemoryRateLimiter(options.now ?? Date.now);
   const app = Fastify({ logger: true });
-  const liveHub = new SeaLiveHub(store);
+  const liveHub = new SeaLiveHub(store, options.seaLiveHub);
   const detachLiveSource = isSeaEventLiveSource(store) ? liveHub.attach(store) : null;
 
   app.addHook('onClose', async () => {
@@ -2696,6 +2697,7 @@ export function buildApp(options: BuildAppOptions = {}) {
         connectedAt: new Date().toISOString(),
         cursor: subscription.latestVisibleDeliveryId,
         replayedCount: subscription.backlog.length,
+        replayWindow: subscription.replayWindow,
         viewerGatewayId,
       },
     });
@@ -2703,10 +2705,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     if (subscription.resyncRequired) {
       writeSseEvent(reply.raw, {
         event: 'resync_required',
-        data: {
-          reason: 'cursor_not_available',
-          cursor: cursor ?? null,
-        },
+        data: subscription.resyncRequired,
       });
     }
 

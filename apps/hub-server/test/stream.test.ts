@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { buildApp } from '../src/app.js';
+import { DEFAULT_MAX_BUFFERED_DELIVERIES } from '../src/live-hub.js';
+import { createGatewayStore } from '../src/store.js';
 
 type App = ReturnType<typeof buildApp>;
 
@@ -14,6 +16,29 @@ interface StreamEvent {
 interface SeaStreamClient {
   nextEvent(timeoutMs?: number): Promise<StreamEvent>;
   close(): void;
+}
+
+interface ReplayWindowData {
+  retentionPolicy: 'count';
+  maxBufferedDeliveries: number;
+  retainedDeliveries: number;
+  oldestAvailableCursor: string | null;
+  latestAvailableCursor: string | null;
+}
+
+interface HelloEventData {
+  connectedAt: string;
+  cursor: string | null;
+  replayedCount: number;
+  replayWindow: ReplayWindowData;
+  viewerGatewayId: string;
+}
+
+interface ResyncRequiredData {
+  reason: 'cursor_outside_replay_window' | 'invalid_cursor';
+  cursor: string;
+  action: 'refetch_and_reconnect';
+  replayWindow: ReplayWindowData;
 }
 
 async function closeSeaStream(stream: SeaStreamClient | null) {
@@ -43,22 +68,40 @@ async function bootstrapLocalSession(app: App) {
   };
 }
 
-async function registerGateway(app: App, input: { displayName: string; handle: string }) {
+let currentSequence = 0;
+
+async function writeCurrent(app: App, token: string) {
+  currentSequence += 1;
   const response = await app.inject({
     method: 'POST',
-    url: '/api/v1/gateways/register',
-    payload: input,
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+    payload: {
+      key: `live-stream-current-${currentSequence}`,
+      label: `Live Stream Current ${currentSequence}`,
+      summary: `Live stream current ${currentSequence} keeps the aquarium moving.`,
+      tone: 'playful',
+      startsAt: new Date(Date.now() - 60_000).toISOString(),
+      endsAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    },
   });
   assert.equal(response.statusCode, 201);
-  return response.json().data as {
-    gateway: {
-      id: string;
-      handle: string;
-    };
-    credential: {
-      token: string;
-    };
-  };
+}
+
+async function generateVentScene(app: App, token: string) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/scenes/generate',
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+    payload: {
+      type: 'vent',
+    },
+  });
+  assert.equal(response.statusCode, 201);
 }
 
 async function listen(app: App) {
@@ -238,8 +281,12 @@ test('sea stream requires authentication', async () => {
   await app.close();
 });
 
-test('sea stream delivers current and scene updates and replays missed deliveries on reconnect', async (t) => {
-  const app = buildApp();
+test('sea stream replays missed deliveries when the cursor remains inside the replay window', async () => {
+  const app = buildApp({
+    seaLiveHub: {
+      maxBufferedDeliveries: 3,
+    },
+  });
   let stream: SeaStreamClient | null = null;
 
   try {
@@ -250,24 +297,11 @@ test('sea stream delivers current and scene updates and replays missed deliverie
 
     const hello = await stream.nextEvent();
     assert.equal(hello.event, 'hello');
-    assert.equal((hello.data as { viewerGatewayId: string }).viewerGatewayId, owner.gateway.id);
+    const helloData = hello.data as HelloEventData;
+    assert.equal(helloData.viewerGatewayId, owner.gateway.id);
+    assert.equal(helloData.replayWindow.maxBufferedDeliveries, 3);
 
-    const currentWrite = await app.inject({
-      method: 'POST',
-      url: '/api/v1/currents',
-      headers: {
-        authorization: `Bearer ${owner.credential.token}`,
-      },
-      payload: {
-        key: 'live-stream-current',
-        label: 'Live Stream Current',
-        summary: 'A live stream current rolls across the aquarium glass.',
-        tone: 'playful',
-        startsAt: new Date(Date.now() - 60_000).toISOString(),
-        endsAt: new Date(Date.now() + 30 * 60_000).toISOString(),
-      },
-    });
-    assert.equal(currentWrite.statusCode, 201);
+    await writeCurrent(app, owner.credential.token);
 
     const currentEvent = await stream.nextEvent();
     assert.equal(currentEvent.event, 'sea.invalidate');
@@ -278,101 +312,193 @@ test('sea stream delivers current and scene updates and replays missed deliverie
     await closeSeaStream(stream);
     stream = null;
 
-    const generatedScene = await app.inject({
-      method: 'POST',
-      url: '/api/v1/scenes/generate',
-      headers: {
-        authorization: `Bearer ${owner.credential.token}`,
-      },
-      payload: {
-        type: 'vent',
-      },
-    });
-    assert.equal(generatedScene.statusCode, 201);
+    await writeCurrent(app, owner.credential.token);
+    await writeCurrent(app, owner.credential.token);
 
     stream = await openSeaStream(baseUrl, owner.credential.token, { lastEventId });
 
     const replayHello = await stream.nextEvent();
     assert.equal(replayHello.event, 'hello');
-    assert.equal((replayHello.data as { replayedCount: number }).replayedCount >= 1, true);
+    const replayHelloData = replayHello.data as HelloEventData;
+    assert.equal(replayHelloData.replayedCount, 2);
+    assert.equal(replayHelloData.replayWindow.maxBufferedDeliveries, 3);
+    assert.equal(replayHelloData.replayWindow.retainedDeliveries, 3);
+    assert.ok(replayHelloData.cursor);
 
-    const replayedEvent = await stream.nextEvent();
-    assert.equal(replayedEvent.event, 'sea.invalidate');
-    assert.equal((replayedEvent.data as { seaEvent: { type: string } }).seaEvent.type, 'scene.vent_generated');
+    const replayedEventOne = await stream.nextEvent();
+    assert.equal(replayedEventOne.event, 'sea.invalidate');
+    assert.equal((replayedEventOne.data as { seaEvent: { type: string } }).seaEvent.type, 'current.changed');
+
+    const replayedEventTwo = await stream.nextEvent();
+    assert.equal(replayedEventTwo.event, 'sea.invalidate');
+    assert.equal((replayedEventTwo.data as { seaEvent: { type: string } }).seaEvent.type, 'current.changed');
+    assert.notEqual(replayedEventOne.id, replayedEventTwo.id);
   } finally {
     await closeSeaStream(stream);
     await app.close();
   }
 });
 
-test('sea stream emits resync_required for stale cursors and delivers message events to permitted viewers', async (t) => {
-  const app = buildApp();
+test('sea stream emits resync_required when the cursor falls outside the replay window', async () => {
+  const app = buildApp({
+    seaLiveHub: {
+      maxBufferedDeliveries: 2,
+    },
+  });
+  let stream: SeaStreamClient | null = null;
+
+  try {
+    const baseUrl = await listen(app);
+    const owner = await bootstrapLocalSession(app);
+
+    stream = await openSeaStream(baseUrl, owner.credential.token);
+    const hello = await stream.nextEvent();
+    assert.equal(hello.event, 'hello');
+
+    await writeCurrent(app, owner.credential.token);
+
+    const currentEvent = await stream.nextEvent();
+    assert.equal(currentEvent.event, 'sea.invalidate');
+    const lastEventId = currentEvent.id;
+    assert.ok(lastEventId);
+
+    await closeSeaStream(stream);
+    stream = null;
+
+    await writeCurrent(app, owner.credential.token);
+    await writeCurrent(app, owner.credential.token);
+
+    stream = await openSeaStream(baseUrl, owner.credential.token, {
+      lastEventId,
+    });
+
+    const replayHello = await stream.nextEvent();
+    assert.equal(replayHello.event, 'hello');
+    const replayHelloData = replayHello.data as HelloEventData;
+    assert.equal(replayHelloData.replayedCount, 0);
+    assert.equal(replayHelloData.replayWindow.maxBufferedDeliveries, 2);
+    assert.equal(replayHelloData.replayWindow.retainedDeliveries, 2);
+
+    const resync = await stream.nextEvent();
+    assert.equal(resync.event, 'resync_required');
+    const resyncData = resync.data as ResyncRequiredData;
+    assert.equal(resyncData.reason, 'cursor_outside_replay_window');
+    assert.equal(resyncData.cursor, lastEventId);
+    assert.equal(resyncData.action, 'refetch_and_reconnect');
+    assert.equal(resyncData.replayWindow.maxBufferedDeliveries, 2);
+    assert.equal(resyncData.replayWindow.retainedDeliveries, 2);
+    assert.ok(resyncData.replayWindow.oldestAvailableCursor);
+    assert.ok(resyncData.replayWindow.latestAvailableCursor);
+    assert.notEqual(
+      resyncData.replayWindow.oldestAvailableCursor,
+      resyncData.replayWindow.latestAvailableCursor,
+    );
+  } finally {
+    await closeSeaStream(stream);
+    await app.close();
+  }
+});
+
+test('sea stream emits resync_required for malformed cursors', async () => {
+  const store = createGatewayStore();
+  const owner = store.register({
+    displayName: 'Malformed Cursor Owner',
+    handle: 'malformed-cursor-owner',
+  });
+  const app = buildApp({ store });
   let stream: SeaStreamClient | null = null;
 
   try {
     const baseUrl = await listen(app);
 
-    const alpha = await registerGateway(app, {
-      displayName: 'Alpha Stream',
-      handle: 'alpha-stream',
-    });
-    const beta = await registerGateway(app, {
-      displayName: 'Beta Stream',
-      handle: 'beta-stream',
-    });
-
-    const friendRequest = await app.inject({
-      method: 'POST',
-      url: '/api/v1/friend-requests',
-      headers: {
-        authorization: `Bearer ${alpha.credential.token}`,
-      },
-      payload: {
-        toGatewayId: beta.gateway.id,
-      },
-    });
-    assert.equal(friendRequest.statusCode, 201);
-    const requestId = friendRequest.json().data.request.id as string;
-
-    const accept = await app.inject({
-      method: 'POST',
-      url: `/api/v1/friend-requests/${requestId}/accept`,
-      headers: {
-        authorization: `Bearer ${beta.credential.token}`,
-      },
-    });
-    assert.equal(accept.statusCode, 200);
-    const conversationId = accept.json().data.conversation.id as string;
-
-    stream = await openSeaStream(baseUrl, beta.credential.token, {
-      lastEventId: 'missing-delivery-id',
+    stream = await openSeaStream(baseUrl, owner.token, {
+      lastEventId: 'not-a-sea-delivery-id',
     });
 
     const hello = await stream.nextEvent();
     assert.equal(hello.event, 'hello');
+    const helloData = hello.data as HelloEventData;
+    assert.equal(helloData.replayedCount, 0);
+    assert.equal(helloData.replayWindow.maxBufferedDeliveries, DEFAULT_MAX_BUFFERED_DELIVERIES);
+    assert.equal(helloData.replayWindow.retainedDeliveries, 0);
 
     const resync = await stream.nextEvent();
     assert.equal(resync.event, 'resync_required');
-    assert.equal((resync.data as { reason: string }).reason, 'cursor_not_available');
-
-    const send = await app.inject({
-      method: 'POST',
-      url: `/api/v1/conversations/${conversationId}/messages`,
-      headers: {
-        authorization: `Bearer ${alpha.credential.token}`,
-      },
-      payload: {
-        body: 'live delivery should reach beta',
-      },
-    });
-    assert.equal(send.statusCode, 201);
-
-    const messageEvent = await stream.nextEvent();
-    assert.equal(messageEvent.event, 'sea.invalidate');
-    assert.equal((messageEvent.data as { seaEvent: { type: string } }).seaEvent.type, 'conversation.message_sent');
-    assert.equal((messageEvent.data as { activityGatewayIds: string[] }).activityGatewayIds.includes(beta.gateway.id), true);
+    const resyncData = resync.data as ResyncRequiredData;
+    assert.equal(resyncData.reason, 'invalid_cursor');
+    assert.equal(resyncData.cursor, 'not-a-sea-delivery-id');
+    assert.equal(resyncData.action, 'refetch_and_reconnect');
+    assert.equal(resyncData.replayWindow.maxBufferedDeliveries, DEFAULT_MAX_BUFFERED_DELIVERIES);
+    assert.equal(resyncData.replayWindow.retainedDeliveries, 0);
+    assert.equal(resyncData.replayWindow.oldestAvailableCursor, null);
+    assert.equal(resyncData.replayWindow.latestAvailableCursor, null);
   } finally {
     await closeSeaStream(stream);
     await app.close();
+  }
+});
+
+test('sea stream continues live delivery after resync_required on restart reconnect', async () => {
+  const store = createGatewayStore();
+  const app = buildApp({ store });
+  let appClosed = false;
+  let restartedApp: App | null = null;
+  let stream: SeaStreamClient | null = null;
+
+  try {
+    const baseUrl = await listen(app);
+    const owner = await bootstrapLocalSession(app);
+
+    stream = await openSeaStream(baseUrl, owner.credential.token);
+    const hello = await stream.nextEvent();
+    assert.equal(hello.event, 'hello');
+
+    await writeCurrent(app, owner.credential.token);
+
+    const currentEvent = await stream.nextEvent();
+    assert.equal(currentEvent.event, 'sea.invalidate');
+    const lastEventId = currentEvent.id;
+    assert.ok(lastEventId);
+
+    await closeSeaStream(stream);
+    stream = null;
+
+    await app.close();
+    appClosed = true;
+
+    restartedApp = buildApp({ store });
+    const restartedBaseUrl = await listen(restartedApp);
+
+    stream = await openSeaStream(restartedBaseUrl, owner.credential.token, {
+      lastEventId,
+    });
+
+    const replayHello = await stream.nextEvent();
+    assert.equal(replayHello.event, 'hello');
+    const replayHelloData = replayHello.data as HelloEventData;
+    assert.equal(replayHelloData.replayedCount, 0);
+    assert.equal(replayHelloData.replayWindow.retainedDeliveries, 0);
+    assert.equal(replayHelloData.cursor, null);
+
+    const resync = await stream.nextEvent();
+    assert.equal(resync.event, 'resync_required');
+    const resyncData = resync.data as ResyncRequiredData;
+    assert.equal(resyncData.reason, 'cursor_outside_replay_window');
+    assert.equal(resyncData.cursor, lastEventId);
+    assert.equal(resyncData.replayWindow.retainedDeliveries, 0);
+
+    await generateVentScene(restartedApp, owner.credential.token);
+
+    const liveEvent = await stream.nextEvent();
+    assert.equal(liveEvent.event, 'sea.invalidate');
+    assert.equal((liveEvent.data as { seaEvent: { type: string } }).seaEvent.type, 'scene.vent_generated');
+  } finally {
+    await closeSeaStream(stream);
+    if (!appClosed) {
+      await app.close();
+    }
+    if (restartedApp) {
+      await restartedApp.close();
+    }
   }
 });

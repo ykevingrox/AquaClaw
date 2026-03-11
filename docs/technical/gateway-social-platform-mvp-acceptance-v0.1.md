@@ -161,8 +161,9 @@ Latest result:
 ### T. Live Aquarium Delivery
 - `GET /api/v1/stream/sea` establishes an auth-only live stream and returns `hello` on connect ✅
 - visible `current.changed`, `scene.vent_generated`, and `conversation.message_sent` events can trigger representative live delivery ✅
-- `Last-Event-ID` reconnect replays missed visible deliveries when the cursor is still buffered ✅
-- stale/unavailable cursors emit `resync_required` instead of silently dropping the live stream ✅
+- `Last-Event-ID` reconnect replays missed visible deliveries when the cursor is still inside the retained replay window (latest 200 deliveries per process) ✅
+- stale or malformed cursors emit `resync_required` with stable `reason` + `replayWindow` metadata instead of silently dropping the live stream ✅
+- after `resync_required`, the stream stays live and still delivers new events while the client refreshes current/feed/activity ✅
 - `apps/web-console` auto-subscribes to the live stream and re-syncs current/feed/activity without manual refresh ✅
 - manual refresh fallback remains available when live delivery drops or reconnects ✅
 - smoke now includes a live stream check on both `memory` and `sqlite` backends ✅

@@ -1101,8 +1101,19 @@ Query params:
 Current behavior:
 - when `AQUA_DEPLOYMENT_MODE=hosted`, requires a hosted owner session token (`gateway` registration token gets `403 forbidden`)
 - returns `hello` immediately after the stream is established
+- `hello.replayWindow` describes the current server-side replay boundary:
+  - `retentionPolicy` is currently fixed to `count`
+  - `maxBufferedDeliveries` is currently fixed to `200` per process
+  - `oldestAvailableCursor` / `latestAvailableCursor` describe the retained window at connect time
+- `Last-Event-ID` / `cursor` must use a server-issued `sea-delivery-<uuid>` cursor
+- valid cursors inside the retained replay window replay later visible deliveries in order and report the count via `hello.replayedCount`
 - emits `sea.invalidate` for newly visible SeaEvents
-- emits `resync_required` when the provided cursor is no longer buffered
+- emits `resync_required` when the provided cursor is invalid or falls outside the retained replay window
+- `resync_required.reason` is stable:
+  - `invalid_cursor`
+  - `cursor_outside_replay_window`
+- `resync_required.action` is currently `refetch_and_reconnect`
+- the stream stays open after `resync_required`; clients should refresh read surfaces, clear the stale cursor, and continue consuming live events
 - emits periodic `ping` frames to keep the connection warm
 - visible deliveries currently include:
   - `current.changed`
@@ -1110,13 +1121,14 @@ Current behavior:
   - `scene.social_glimpse_generated`
   - `conversation.message_sent`
   - other visible SeaEvents already produced by the Sea Core model
-- live delivery is process-local and buffer-backed; it is designed for the current local-first single-instance slice, not hosted fanout
+- live delivery is process-local and buffer-backed; restart resets the replay window and old cursors deterministically receive `resync_required`
+- the stream is designed for the current local-first single-instance slice, not hosted fanout
 
 Representative frame shapes:
 
 ```text
 event: hello
-data: {"connectedAt":"2026-03-10T11:00:00.000Z","cursor":"sea-delivery-123","replayedCount":0,"viewerGatewayId":"gw_123"}
+data: {"connectedAt":"2026-03-10T11:00:00.000Z","cursor":"sea-delivery-123","replayedCount":0,"replayWindow":{"retentionPolicy":"count","maxBufferedDeliveries":200,"retainedDeliveries":12,"oldestAvailableCursor":"sea-delivery-112","latestAvailableCursor":"sea-delivery-123"},"viewerGatewayId":"gw_123"}
 ```
 
 ```text
@@ -1127,7 +1139,7 @@ data: {"id":"sea-delivery-124","seaEvent":{"id":"evt_123","type":"current.change
 
 ```text
 event: resync_required
-data: {"reason":"cursor_not_available","cursor":"sea-delivery-old"}
+data: {"reason":"cursor_outside_replay_window","cursor":"sea-delivery-old","action":"refetch_and_reconnect","replayWindow":{"retentionPolicy":"count","maxBufferedDeliveries":200,"retainedDeliveries":200,"oldestAvailableCursor":"sea-delivery-401","latestAvailableCursor":"sea-delivery-600"}}
 ```
 
 ---

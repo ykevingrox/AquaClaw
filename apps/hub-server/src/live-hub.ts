@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 
 import type { GatewayStore, SeaEvent, SeaEventLiveSource } from './store.js';
 
-const DEFAULT_MAX_BUFFERED_DELIVERIES = 200;
+const SEA_DELIVERY_ID_PATTERN = /^sea-delivery-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const DEFAULT_MAX_BUFFERED_DELIVERIES = 200;
 
 export interface SeaStreamDelivery {
   id: string;
@@ -11,14 +13,32 @@ export interface SeaStreamDelivery {
   currentChanged: boolean;
 }
 
+export interface SeaReplayWindow {
+  retentionPolicy: 'count';
+  maxBufferedDeliveries: number;
+  retainedDeliveries: number;
+  oldestAvailableCursor: string | null;
+  latestAvailableCursor: string | null;
+}
+
+export type SeaStreamResyncReason = 'cursor_outside_replay_window' | 'invalid_cursor';
+
+export interface SeaStreamResyncRequired {
+  reason: SeaStreamResyncReason;
+  cursor: string;
+  action: 'refetch_and_reconnect';
+  replayWindow: SeaReplayWindow;
+}
+
 export interface SeaLiveSubscription {
   backlog: SeaStreamDelivery[];
   latestVisibleDeliveryId: string | null;
-  resyncRequired: boolean;
+  replayWindow: SeaReplayWindow;
+  resyncRequired: SeaStreamResyncRequired | null;
   unsubscribe: () => void;
 }
 
-interface SeaLiveHubOptions {
+export interface SeaLiveHubOptions {
   maxBufferedDeliveries?: number;
 }
 
@@ -51,6 +71,7 @@ export class SeaLiveHub {
     push: (delivery: SeaStreamDelivery) => void;
   }): SeaLiveSubscription {
     const cursor = input.cursor?.trim() || null;
+    const replayWindow = this.describeReplayWindow();
     const subscriberId = randomUUID();
     this.subscribers.set(subscriberId, {
       viewerGatewayId: input.viewerGatewayId,
@@ -58,15 +79,19 @@ export class SeaLiveHub {
     });
 
     let backlogStartIndex = this.deliveries.length;
-    let resyncRequired = false;
+    let resyncRequired: SeaStreamResyncRequired | null = null;
 
     if (cursor) {
-      const cursorIndex = this.deliveries.findIndex((delivery) => delivery.id === cursor);
-      if (cursorIndex >= 0) {
-        backlogStartIndex = cursorIndex + 1;
-      } else if (this.deliveries.length > 0) {
-        backlogStartIndex = 0;
-        resyncRequired = true;
+      if (!SEA_DELIVERY_ID_PATTERN.test(cursor)) {
+        resyncRequired = this.createResyncRequired('invalid_cursor', cursor, replayWindow);
+      } else {
+        const cursorIndex = this.deliveries.findIndex((delivery) => delivery.id === cursor);
+        if (cursorIndex >= 0) {
+          backlogStartIndex = cursorIndex + 1;
+        } else {
+          backlogStartIndex = 0;
+          resyncRequired = this.createResyncRequired('cursor_outside_replay_window', cursor, replayWindow);
+        }
       }
     }
 
@@ -81,6 +106,7 @@ export class SeaLiveHub {
     return {
       backlog,
       latestVisibleDeliveryId,
+      replayWindow,
       resyncRequired,
       unsubscribe: () => {
         this.subscribers.delete(subscriberId);
@@ -124,5 +150,28 @@ export class SeaLiveHub {
     }
 
     return null;
+  }
+
+  private describeReplayWindow(): SeaReplayWindow {
+    return {
+      retentionPolicy: 'count',
+      maxBufferedDeliveries: this.maxBufferedDeliveries,
+      retainedDeliveries: this.deliveries.length,
+      oldestAvailableCursor: this.deliveries[0]?.id ?? null,
+      latestAvailableCursor: this.deliveries.at(-1)?.id ?? null,
+    };
+  }
+
+  private createResyncRequired(
+    reason: SeaStreamResyncReason,
+    cursor: string,
+    replayWindow: SeaReplayWindow,
+  ): SeaStreamResyncRequired {
+    return {
+      reason,
+      cursor,
+      action: 'refetch_and_reconnect',
+      replayWindow,
+    };
   }
 }
