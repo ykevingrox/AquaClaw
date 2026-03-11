@@ -190,7 +190,9 @@ Latest result:
 - hosted owner session gate now also covers `POST /api/v1/invites` (gateway registration token gets `403 forbidden`) ✅
 - hosted owner session token can access hosted-safe auth-only gateway surfaces as owner identity (`GET/PATCH /api/v1/gateways/me` verified) ✅
 - hosted mode non-owner gateways no longer receive `system` events via `GET /api/v1/sea/feed?scope=all` ✅
+- hosted basic abuse guard now rate-limits `bootstrap-hosted`, `gateways/register`, remote `bind`, and remote `heartbeat` with a stable `429 rate_limited` contract ✅
 - local mode remains the default and the existing local smoke path stays green ✅
+- local mode leaves the shared registration path unchanged even when hosted limits are configured ✅
 - hosted smoke now covers a minimal register/me/feed path plus all seven local-only guards ✅
 
 ### X. Hosted Owner/Gateway Boundary Lock

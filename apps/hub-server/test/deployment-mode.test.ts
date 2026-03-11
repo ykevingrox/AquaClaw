@@ -65,6 +65,25 @@ async function setHostedRegistrationPolicy(
   assert.equal(response.json().data.policy, policy);
 }
 
+function assertRateLimited(
+  response: {
+    statusCode: number;
+    json(): unknown;
+    headers: Record<string, string | number | string[] | undefined>;
+  },
+) {
+  assert.equal(response.statusCode, 429);
+  assert.equal(response.headers['retry-after'], '60');
+  assert.deepEqual(response.json(), {
+    ok: false,
+    error: {
+      code: 'rate_limited',
+      message: 'rate limit exceeded',
+      retryAfterSeconds: 60,
+    },
+  });
+}
+
 test('hosted mode rejects local-only endpoints with a consistent local_mode_only error', async () => {
   const app = buildApp({ deploymentMode: 'hosted' });
 
@@ -380,6 +399,178 @@ test('hosted bootstrap requires configured key and supports hosted session lifec
     },
   });
   assert.equal(thirdAfterRevokeCurrent.statusCode, 401);
+
+  await app.close();
+});
+
+test('hosted mode rate limits bootstrap/register/remote bind/heartbeat with a stable 429 contract', async () => {
+  const nowMs = Date.parse('2026-03-11T00:00:00.000Z');
+  const app = buildApp({
+    deploymentMode: 'hosted',
+    hostedOwnerBootstrapKey: 'hosted-secret',
+    now: () => nowMs,
+    hostedRateLimits: {
+      bootstrapHosted: { limit: 1, windowMs: 60_000 },
+      registerGateway: { limit: 1, windowMs: 60_000 },
+      remoteBind: { limit: 1, windowMs: 60_000 },
+      remoteHeartbeat: { limit: 1, windowMs: 60_000 },
+    },
+  });
+
+  const firstBootstrap = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-hosted',
+    payload: {
+      bootstrapKey: 'hosted-secret',
+      handle: 'hosted-rate-limit-owner',
+    },
+  });
+  assert.equal(firstBootstrap.statusCode, 201);
+  const ownerToken = firstBootstrap.json().data.credential.token as string;
+
+  const secondBootstrap = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-hosted',
+    payload: {
+      bootstrapKey: 'hosted-secret',
+      handle: 'hosted-rate-limit-owner',
+    },
+  });
+  assertRateLimited(secondBootstrap);
+
+  await setHostedRegistrationPolicy(app, ownerToken, 'open');
+
+  const firstRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Rate Limit Gateway One',
+      handle: 'hosted-rate-limit-gateway-one',
+    },
+  });
+  assert.equal(firstRegister.statusCode, 201);
+  const gatewayToken = firstRegister.json().data.credential.token as string;
+
+  const secondRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Rate Limit Gateway Two',
+      handle: 'hosted-rate-limit-gateway-two',
+    },
+  });
+  assertRateLimited(secondRegister);
+
+  const firstBridgeCredential = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bridge-credentials',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      label: 'hosted-rate-limit-bridge-one',
+    },
+  });
+  assert.equal(firstBridgeCredential.statusCode, 201);
+  const firstBridgeToken = firstBridgeCredential.json().data.credential.token as string;
+
+  const firstBind = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bind',
+    headers: {
+      authorization: `Bearer ${gatewayToken}`,
+    },
+    payload: {
+      bridgeToken: firstBridgeToken,
+      runtimeId: 'hosted-rate-limit-runtime-one',
+    },
+  });
+  assert.equal(firstBind.statusCode, 201);
+
+  const secondBridgeCredential = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bridge-credentials',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      label: 'hosted-rate-limit-bridge-two',
+    },
+  });
+  assert.equal(secondBridgeCredential.statusCode, 201);
+  const secondBridgeToken = secondBridgeCredential.json().data.credential.token as string;
+
+  const secondBind = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bind',
+    headers: {
+      authorization: `Bearer ${gatewayToken}`,
+    },
+    payload: {
+      bridgeToken: secondBridgeToken,
+      runtimeId: 'hosted-rate-limit-runtime-two',
+    },
+  });
+  assertRateLimited(secondBind);
+
+  const firstHeartbeat = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/heartbeat',
+    headers: {
+      authorization: `Bearer ${gatewayToken}`,
+    },
+    payload: {
+      runtimeId: 'hosted-rate-limit-runtime-one',
+      connectionType: 'openclaw_remote',
+    },
+  });
+  assert.equal(firstHeartbeat.statusCode, 200);
+
+  const secondHeartbeat = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/heartbeat',
+    headers: {
+      authorization: `Bearer ${gatewayToken}`,
+    },
+    payload: {
+      runtimeId: 'hosted-rate-limit-runtime-one',
+      connectionType: 'openclaw_remote',
+    },
+  });
+  assertRateLimited(secondHeartbeat);
+
+  await app.close();
+});
+
+test('local mode leaves shared registration behavior unchanged when hosted limits are configured', async () => {
+  const nowMs = Date.parse('2026-03-11T00:00:00.000Z');
+  const app = buildApp({
+    deploymentMode: 'local',
+    now: () => nowMs,
+    hostedRateLimits: {
+      registerGateway: { limit: 1, windowMs: 60_000 },
+    },
+  });
+
+  const firstRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Local Rate Limit Gateway One',
+      handle: 'local-rate-limit-gateway-one',
+    },
+  });
+  assert.equal(firstRegister.statusCode, 201);
+
+  const secondRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Local Rate Limit Gateway Two',
+      handle: 'local-rate-limit-gateway-two',
+    },
+  });
+  assert.equal(secondRegister.statusCode, 201);
 
   await app.close();
 });

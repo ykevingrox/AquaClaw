@@ -1,8 +1,9 @@
 import { type ServerResponse } from 'node:http';
 
-import Fastify, { type FastifyReply } from 'fastify';
+import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type { DeploymentMode } from './config.js';
 import { SeaLiveHub } from './live-hub.js';
+import { createInMemoryRateLimiter, type RateLimitPolicy } from './rate-limiter.js';
 import {
   createGatewayStore,
   type EncounterRecord,
@@ -16,6 +17,15 @@ interface BuildAppOptions {
   store?: GatewayStore;
   deploymentMode?: DeploymentMode;
   hostedOwnerBootstrapKey?: string | null;
+  hostedRateLimits?: Partial<HostedRateLimitPolicies>;
+  now?: () => number;
+}
+
+interface HostedRateLimitPolicies {
+  bootstrapHosted: RateLimitPolicy;
+  registerGateway: RateLimitPolicy;
+  remoteBind: RateLimitPolicy;
+  remoteHeartbeat: RateLimitPolicy;
 }
 
 interface RegisterBody {
@@ -867,10 +877,42 @@ function sendHostedModeOnly(reply: FastifyReply) {
   });
 }
 
+function sendRateLimited(reply: FastifyReply, retryAfterSeconds?: number) {
+  if (retryAfterSeconds !== undefined) {
+    reply.header('retry-after', String(retryAfterSeconds));
+  }
+
+  return reply.code(429).send({
+    ok: false,
+    error: {
+      code: 'rate_limited',
+      message: 'rate limit exceeded',
+      ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+    },
+  });
+}
+
+function getSourceRateLimitKey(request: FastifyRequest) {
+  const source = request.ip.trim();
+  return source || 'unknown';
+}
+
+const DEFAULT_HOSTED_RATE_LIMITS: HostedRateLimitPolicies = {
+  bootstrapHosted: { limit: 5, windowMs: 60_000 },
+  registerGateway: { limit: 10, windowMs: 60_000 },
+  remoteBind: { limit: 10, windowMs: 60_000 },
+  remoteHeartbeat: { limit: 120, windowMs: 60_000 },
+};
+
 export function buildApp(options: BuildAppOptions = {}) {
   const store = options.store ?? createGatewayStore();
   const deploymentMode = options.deploymentMode ?? 'local';
   const hostedOwnerBootstrapKey = options.hostedOwnerBootstrapKey ?? process.env.AQUA_HOSTED_OWNER_BOOTSTRAP_KEY ?? null;
+  const hostedRateLimits: HostedRateLimitPolicies = {
+    ...DEFAULT_HOSTED_RATE_LIMITS,
+    ...options.hostedRateLimits,
+  };
+  const hostedRateLimiter = createInMemoryRateLimiter(options.now ?? Date.now);
   const app = Fastify({ logger: true });
   const liveHub = new SeaLiveHub(store);
   const detachLiveSource = isSeaEventLiveSource(store) ? liveHub.attach(store) : null;
@@ -878,6 +920,14 @@ export function buildApp(options: BuildAppOptions = {}) {
   app.addHook('onClose', async () => {
     detachLiveSource?.();
   });
+
+  function enforceHostedRateLimit(target: keyof HostedRateLimitPolicies, key: string, reply: FastifyReply) {
+    const decision = hostedRateLimiter.consume(`${target}:${key}`, hostedRateLimits[target]);
+    if (!decision.allowed) {
+      return sendRateLimited(reply, decision.retryAfterSeconds);
+    }
+    return null;
+  }
 
   app.get('/health', async () => ({ ok: true, data: { status: 'ok' } }));
 
@@ -1063,6 +1113,11 @@ export function buildApp(options: BuildAppOptions = {}) {
           message: 'bio must be a string when provided',
         },
       });
+    }
+
+    const bootstrapLimit = enforceHostedRateLimit('bootstrapHosted', getSourceRateLimitKey(request), reply);
+    if (bootstrapLimit) {
+      return bootstrapLimit;
     }
 
     try {
@@ -1675,6 +1730,11 @@ export function buildApp(options: BuildAppOptions = {}) {
       });
     }
 
+    const bindLimit = enforceHostedRateLimit('remoteBind', result.gateway.id, reply);
+    if (bindLimit) {
+      return bindLimit;
+    }
+
     try {
       const runtime = store.bindRemoteRuntime({
         bridgeToken,
@@ -1766,6 +1826,11 @@ export function buildApp(options: BuildAppOptions = {}) {
           message: 'metadata must be an object when provided',
         },
       });
+    }
+
+    const heartbeatLimit = enforceHostedRateLimit('remoteHeartbeat', result.gateway.id, reply);
+    if (heartbeatLimit) {
+      return heartbeatLimit;
     }
 
     try {
@@ -1993,6 +2058,13 @@ export function buildApp(options: BuildAppOptions = {}) {
           message: 'displayName and handle are required',
         },
       });
+    }
+
+    if (deploymentMode === 'hosted') {
+      const registrationLimit = enforceHostedRateLimit('registerGateway', getSourceRateLimitKey(request), reply);
+      if (registrationLimit) {
+        return registrationLimit;
+      }
     }
 
     try {

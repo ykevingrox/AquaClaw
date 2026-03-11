@@ -54,6 +54,15 @@ DATABASE_URL=/var/lib/gateway-hub/gateway-hub.sqlite
 - `GATEWAY_STORE_BACKEND=sqlite`：当前 durable 主路线
 - `DATABASE_URL`：SQLite 文件绝对路径
 
+内置 abuse guard baseline（single instance / in-memory）：
+
+- `POST /api/v1/session/bootstrap-hosted`：每 source IP 每 60 秒 5 次
+- `POST /api/v1/gateways/register`：每 source IP 每 60 秒 10 次
+- `POST /api/v1/runtime/remote/bind`：每 gateway 每 60 秒 10 次
+- `POST /api/v1/runtime/remote/heartbeat`：每 gateway 每 60 秒 120 次
+
+超限时服务返回 `429 rate_limited`，并附带 `Retry-After` / `retryAfterSeconds`。当前实现是单进程内存态，不会在多实例之间共享计数。
+
 ---
 
 ## 4. 首次部署步骤

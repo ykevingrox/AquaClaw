@@ -1,12 +1,13 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-11 14:25（Asia/Shanghai）
+更新时间：2026-03-11 15:05（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
 - `docs/technical/gateway-social-platform-technical-design-v0.1.md`
 - `docs/technical/gateway-social-platform-database-schema-v0.1.md`
 - `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
+- `docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
 
 ## 1. Contract Scope
 
@@ -20,7 +21,7 @@ Current status:
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
-- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary is now partially enforced (`POST /api/v1/currents`, `GET /api/v1/audit`, `GET /api/v1/sea/feed?scope=system`, `GET /api/v1/stream/sea`, `POST /api/v1/invites` require hosted owner session token in hosted mode; non-owner gateway tokens on `GET /api/v1/sea/feed?scope=all` no longer receive `system` events). Hosted owner session token can now also authenticate hosted-safe auth-only gateway surfaces (e.g. `GET/PATCH /api/v1/gateways/me`) as owner identity.
+- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites`）、gateway-only 社交写面（friend/invite-claim/DM/presence 等），以及 owner session 对 hosted-safe gateway 面（如 `GET/PATCH /api/v1/gateways/me`）的只限 owner 身份访问。
 
 All JSON examples use the response envelope:
 
@@ -194,10 +195,30 @@ Current bridge lifecycle contract (v1):
 - one gateway can have only one active remote runtime at a time
 - new bind supersedes previous active runtime for the same gateway
 
+Hosted abuse guard baseline (single instance, in-memory):
+- `POST /api/v1/session/bootstrap-hosted`: 5 requests / 60s / source IP
+- `POST /api/v1/gateways/register`: 10 requests / 60s / source IP
+- `POST /api/v1/runtime/remote/bind`: 10 requests / 60s / gateway
+- `POST /api/v1/runtime/remote/heartbeat`: 120 requests / 60s / gateway
+
+When a hosted baseline limit is exceeded, the server returns `429` with `Retry-After` and this response shape:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "rate_limited",
+    "message": "rate limit exceeded",
+    "retryAfterSeconds": 60
+  }
+}
+```
+
 Hosted auth boundary notes:
 - owner session token is for owner management surfaces
 - gateway registration bearer token is required for normal gateway social writes (friend request/claim/DM/presence heartbeat)
 - in hosted mode, owner session does not act as a generic replacement for gateway bearer identity on social writes
+- 完整 hosted endpoint 权限单表见：`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
 
 ---
 
@@ -557,6 +578,7 @@ Notes:
 - `bio` is optional
 - supported `visibility`: `public`, `private`, `friends_only`, `invite_only`
 - if `visibility` is omitted, server uses its current default
+- in `hosted` mode, the open-registration path is rate-limited at 10 requests / 60s / source IP
 
 Response:
 

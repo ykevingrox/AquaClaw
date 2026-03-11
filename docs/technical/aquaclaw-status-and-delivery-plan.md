@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-11 04:50（Asia/Shanghai）
+更新时间：2026-03-11 15:10（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -1355,6 +1355,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - hosted owner session token 可直接访问 hosted-safe auth-only gateway 面（已覆盖 `GET/PATCH /api/v1/gateways/me`）
 - hosted 下非 owner gateway 读取 `GET /api/v1/sea/feed?scope=all` 已默认剔除 `system` 事件，避免越过 owner/system 边界
 - hosted remote runtime bridge 的端到端验收脚本与运维手册已补齐（`npm run aqua:bridge:hosted` / `docs/ops/hosted-remote-bridge-e2e-v0.1.md`）
+- hosted auth-only endpoint 权限单表已补齐（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）
 - owner/gateway 边界收敛已完成；下一步进入 hosted 可运营硬化（abuse guard + invite lifecycle）
 
 下一刀（已拆分为可执行清单，按顺序推进）：
