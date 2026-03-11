@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-11 15:10（Asia/Shanghai）
+更新时间：2026-03-11 17:40（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -1343,33 +1343,27 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环；Phase 1 hosted baseline、Phase 2 hosted owner/auth、remote runtime bridge v1、以及 hosted owner/gateway 最小权限边界都已落地并验收通过。当前 active next slice 进入 Phase 4 的第一项硬化：hosted 最小 abuse guard（基础速率限制）+ invite lifecycle 细化。**
+**Milestone 8-12 local-first loop 已闭环；Phase 1~4（含 hosted baseline / owner-auth / remote bridge v1 / registration policy + invite lifecycle + abuse guard）已落地并验收通过。当前 active next slice 已切到 Phase 5：delivery & consistency 强化的第一刀（stream replay 窗口与重连语义硬化）。**
 
 当前判断：
 
-- local-first 主链条仍保持全绿（test/build/smoke，含 sqlite）
-- hosted baseline seam 已落地（deployment mode + local-only guard + hosted smoke）
-- hosted deploy/ops 手册已补齐（`docs/ops/hosted-deploy-v0.1.md`）
-- hosted owner bootstrap/login + hosted session revoke 已可用
-- hosted 下 `POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke` 已收敛为 owner session token 才可访问
-- invite lifecycle 的过期/吊销语义与回归测试已补齐（含 hosted owner-session gate）
-- hosted owner session token 可直接访问 hosted-safe auth-only gateway 面（已覆盖 `GET/PATCH /api/v1/gateways/me`）
-- hosted 下非 owner gateway 读取 `GET /api/v1/sea/feed?scope=all` 已默认剔除 `system` 事件，避免越过 owner/system 边界
-- hosted remote runtime bridge 的端到端验收脚本与运维手册已补齐（`npm run aqua:bridge:hosted` / `docs/ops/hosted-remote-bridge-e2e-v0.1.md`）
-- hosted auth-only endpoint 权限单表已补齐（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）
-- owner/gateway 边界收敛已完成；下一步进入 hosted 可运营硬化（abuse guard + invite lifecycle）
+- local-first 主链条保持全绿（`npm test` 97/97、`npm run build`、`npm run smoke`，含 sqlite smoke）
+- hosted 主链条与硬化项全绿（owner session、registration policy、invite revoke、abuse guard 429 合约）
+- hosted owner/gateway 权限边界与 auth-only 面收敛已完成（含 `GET/PATCH /api/v1/gateways/me`）
+- hosted `scope=all` 对非 owner 默认剔除 `system` 事件的边界已稳定
+- remote runtime bridge v1（create/bind/heartbeat/revoke）与运维脚本文档已完成并回归通过
+- Phase 4 的“速率限制 + invite lifecycle + policy matrix + 文档同步”已完成，进入 Phase 5
 
 下一刀（已拆分为可执行清单，按顺序推进）：
 
-1. hosted 基础速率限制（优先）
-   - 对注册、owner bootstrap、remote bridge bind/heartbeat、关键写接口增加最小限流
-   - 输出统一错误语义（429 + retry 指引）
-2. invite + registration policy 组合验证（剩余）
-   - 在 open/closed/invite_only 下补齐 invite 创建/claim/revoke 的策略矩阵验收
-   - 输出冲突/拒绝语义约定（便于 console 与运维文档对齐）
-3. 文档与验收同步
-   - contract / acceptance / status plan 更新
-   - hosted 运维手册增加限流与邀请码策略章节
+1. Phase 5 / Task 1：stream replay 窗口与重连语义硬化（active）
+   - 明确 replay window 上限、游标失效语义与 `resync_required` 触发条件
+   - 补齐断线重连/过期游标/跨 restart 回放一致性回归
+2. Phase 5 / Task 2：conversation/message 最小 read cursor 模型
+   - 设计并落地最小已读游标（按会话）
+   - 补齐 read cursor 与 feed/activity 关联回归
+3. 文档同步
+   - 更新 contract / acceptance / status plan 的 Phase 5 验收基线
 
 ### 决策锁定（2026-03-11）
 
