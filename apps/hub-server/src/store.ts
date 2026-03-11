@@ -204,6 +204,8 @@ export interface HostedSessionRecord {
   createdAt: string;
 }
 
+export type HostedRegistrationPolicy = 'open' | 'closed' | 'invite_only';
+
 export interface LocalRuntimeBindingRecord {
   id: string;
   installationId: string;
@@ -229,6 +231,7 @@ export interface RemoteRuntimeBridgeCredentialRecord {
   claimedByGatewayId: string | null;
   label: string;
   metadata: Record<string, unknown>;
+  expiresAt: string | null;
   revokedAt: string | null;
   revokedByGatewayId: string | null;
   createdAt: string;
@@ -270,6 +273,7 @@ export interface GatewayStoreSnapshot {
   gatewayTokens: GatewayTokenSnapshotRecord[];
   localOwnerGatewayId?: string | null;
   hostedOwnerGatewayId?: string | null;
+  hostedRegistrationPolicy?: HostedRegistrationPolicy | null;
   localSessions?: LocalSessionRecord[];
   hostedSessions?: HostedSessionRecord[];
   localRuntimeBinding?: LocalRuntimeBindingRecord | null;
@@ -307,6 +311,8 @@ export interface GatewayStore {
     session: HostedSessionRecord;
     createdOwner: boolean;
   };
+  getHostedRegistrationPolicy(): HostedRegistrationPolicy | null;
+  setHostedRegistrationPolicy(input: SetHostedRegistrationPolicyInput): HostedRegistrationPolicy;
   findHostedSessionByToken(token: string): { gateway: GatewayRecord; session: HostedSessionRecord } | null;
   logoutHostedSession(token: string): HostedSessionRecord;
   revokeHostedSessions(input: RevokeHostedSessionsInput): HostedSessionRecord[];
@@ -406,6 +412,11 @@ interface BootstrapHostedSessionInput {
 interface RevokeHostedSessionsInput {
   gatewayId: string;
   exceptToken?: string;
+}
+
+interface SetHostedRegistrationPolicyInput {
+  policy: HostedRegistrationPolicy;
+  actorGatewayId: string;
 }
 
 interface BindLocalRuntimeInput {
@@ -596,7 +607,7 @@ interface HeartbeatLocalRuntimeInput {
 
 interface HeartbeatRemoteRuntimeInput {
   gatewayId: string;
-  runtimeId?: string;
+  runtimeId: string;
   metadata?: Record<string, unknown>;
   connectionType?: string | null;
 }
@@ -623,6 +634,7 @@ const DEFAULT_REMOTE_RUNTIME_ID = 'openclaw-remote-runtime';
 const DEFAULT_REMOTE_RUNTIME_LABEL = 'Hosted Remote Runtime';
 const DEFAULT_REMOTE_RUNTIME_SOURCE = 'hosted_remote_bind';
 const DEFAULT_REMOTE_BRIDGE_LABEL = 'Hosted Remote Runtime Bridge';
+const DEFAULT_REMOTE_BRIDGE_TTL_MS = 24 * 60 * 60 * 1000;
 const LOCAL_REEF_SEED_KEY = 'local_reef_v1';
 const LOCAL_REEF_HANDLE_PREFIX = 'reef-';
 const LOCAL_REEF_OWNER_SCENE_SUMMARY =
@@ -761,6 +773,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly sceneIdsByGatewayId = new Map<string, string[]>();
   private localOwnerGatewayId: string | null = null;
   private hostedOwnerGatewayId: string | null = null;
+  private hostedRegistrationPolicy: HostedRegistrationPolicy | null = null;
   private localRuntimeBinding: LocalRuntimeBindingRecord | null = null;
   private readonly remoteRuntimeBridgeCredentialsById = new Map<string, RemoteRuntimeBridgeCredentialRecord>();
   private readonly remoteRuntimeBridgeCredentialsByToken = new Map<string, RemoteRuntimeBridgeCredentialRecord>();
@@ -922,6 +935,35 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     };
   }
 
+  getHostedRegistrationPolicy() {
+    return this.hostedRegistrationPolicy;
+  }
+
+  setHostedRegistrationPolicy(input: SetHostedRegistrationPolicyInput) {
+    this.assertHostedOwnerGateway(input.actorGatewayId);
+
+    if (input.policy !== 'open' && input.policy !== 'closed' && input.policy !== 'invite_only') {
+      throw new Error('invalid hosted registration policy');
+    }
+
+    if (this.hostedRegistrationPolicy === input.policy) {
+      return input.policy;
+    }
+
+    this.hostedRegistrationPolicy = input.policy;
+    this.appendAuditRecord({
+      actorGatewayId: input.actorGatewayId,
+      targetGatewayId: input.actorGatewayId,
+      action: 'registration.policy_updated',
+      metadata: {
+        policy: input.policy,
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    return input.policy;
+  }
+
   findHostedSessionByToken(token: string) {
     const session = this.hostedSessionsByToken.get(token) ?? null;
     if (!session) {
@@ -1062,7 +1104,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   createRemoteRuntimeBridgeCredential(input: CreateRemoteRuntimeBridgeCredentialInput): RemoteRuntimeBridgeCredentialRecord {
     this.assertHostedOwnerGateway(input.createdByGatewayId);
 
-    const now = new Date().toISOString();
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
     const normalizedLabel = input.label === undefined ? DEFAULT_REMOTE_BRIDGE_LABEL : input.label.trim();
     if (!normalizedLabel) {
       throw new Error('label is required');
@@ -1075,6 +1118,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       claimedByGatewayId: null,
       label: normalizedLabel,
       metadata: input.metadata ?? {},
+      expiresAt: new Date(nowMs + DEFAULT_REMOTE_BRIDGE_TTL_MS).toISOString(),
       revokedAt: null,
       revokedByGatewayId: null,
       createdAt: now,
@@ -1089,6 +1133,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       action: 'runtime.remote_bridge_credential_created',
       metadata: {
         credentialId: credential.id,
+        expiresAt: credential.expiresAt,
         label: credential.label,
       },
       createdAt: now,
@@ -1151,6 +1196,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     if (credential.revokedAt) {
       throw new Error('remote runtime bridge credential revoked');
     }
+    if (credential.expiresAt && new Date(credential.expiresAt).getTime() <= Date.now()) {
+      throw new Error('remote runtime bridge credential expired');
+    }
     if (credential.claimedByGatewayId && credential.claimedByGatewayId !== input.gatewayId) {
       throw new Error('remote runtime bridge credential already claimed');
     }
@@ -1199,6 +1247,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
           label,
           source,
           metadata: input.metadata ?? existing.metadata,
+          lastHeartbeatAt: null,
           updatedAt: now,
         }
       : {
@@ -1523,7 +1572,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
 
     const runtimeId = input.runtimeId?.trim();
-    if (runtimeId && runtimeId !== binding.runtimeId) {
+    if (!runtimeId) {
+      throw new Error('runtimeId is required');
+    }
+    if (runtimeId !== binding.runtimeId) {
       throw new Error('remote runtime binding does not match runtimeId');
     }
 
@@ -3253,6 +3305,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       gatewayTokens: [...this.tokensToGatewayId.entries()].map(([token, gatewayId]) => ({ token, gatewayId })),
       localOwnerGatewayId: this.localOwnerGatewayId,
       hostedOwnerGatewayId: this.hostedOwnerGatewayId,
+      hostedRegistrationPolicy: this.hostedRegistrationPolicy,
       localSessions: [...this.localSessionsByToken.values()],
       hostedSessions: [...this.hostedSessionsByToken.values()],
       localRuntimeBinding: this.localRuntimeBinding,
@@ -3299,6 +3352,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
     this.localOwnerGatewayId = snapshot.localOwnerGatewayId ?? null;
     this.hostedOwnerGatewayId = snapshot.hostedOwnerGatewayId ?? null;
+    this.hostedRegistrationPolicy = snapshot.hostedRegistrationPolicy ?? null;
     for (const session of snapshot.localSessions ?? []) {
       this.localSessionsByToken.set(session.token, session);
     }
@@ -3307,8 +3361,12 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
     this.localRuntimeBinding = snapshot.localRuntimeBinding ?? null;
     for (const credential of snapshot.remoteRuntimeBridgeCredentials ?? []) {
-      this.remoteRuntimeBridgeCredentialsById.set(credential.id, credential);
-      this.remoteRuntimeBridgeCredentialsByToken.set(credential.token, credential);
+      const normalizedCredential: RemoteRuntimeBridgeCredentialRecord = {
+        ...credential,
+        expiresAt: credential.expiresAt ?? null,
+      };
+      this.remoteRuntimeBridgeCredentialsById.set(normalizedCredential.id, normalizedCredential);
+      this.remoteRuntimeBridgeCredentialsByToken.set(normalizedCredential.token, normalizedCredential);
     }
     for (const binding of snapshot.remoteRuntimeBindings ?? []) {
       this.remoteRuntimeBindingsByGatewayId.set(binding.gatewayId, binding);
@@ -3385,6 +3443,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.sceneIdsByGatewayId.clear();
     this.localOwnerGatewayId = null;
     this.hostedOwnerGatewayId = null;
+    this.hostedRegistrationPolicy = null;
     this.localRuntimeBinding = null;
     this.activeCurrentId = null;
   }

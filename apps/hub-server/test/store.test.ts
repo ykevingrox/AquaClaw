@@ -156,6 +156,7 @@ test('GatewayStore remote runtime bridge credential seam requires hosted owner i
     label: 'Hosted Remote Bridge',
   });
   assert.equal(typeof credential.token, 'string');
+  assert.equal(typeof credential.expiresAt, 'string');
   assert.equal(credential.claimedByGatewayId, null);
 
   assert.throws(
@@ -165,6 +166,97 @@ test('GatewayStore remote runtime bridge credential seam requires hosted owner i
       }),
     /hosted runtime bridge credential requires the hosted owner gateway/,
   );
+});
+
+test('GatewayStore remote runtime bridge credentials default to 24h expiry and newer binds supersede the active runtime', () => {
+  const store = new InMemoryGatewayStore();
+  const hostedOwner = store.bootstrapHostedSession({
+    displayName: 'Hosted Runtime Lifecycle Owner',
+    handle: 'hosted-runtime-lifecycle-owner',
+  }).gateway;
+  const remoteGateway = registerGateway(store, {
+    displayName: 'Hosted Runtime Lifecycle Gateway',
+    handle: 'hosted-runtime-lifecycle-gateway',
+  });
+
+  const expiringCredential = store.createRemoteRuntimeBridgeCredential({
+    createdByGatewayId: hostedOwner.id,
+    label: 'Expiring Runtime Bridge',
+  });
+  const expiresInMs = Date.parse(expiringCredential.expiresAt ?? '') - Date.now();
+  assert.equal(expiresInMs > 23 * 60 * 60 * 1000, true);
+  assert.equal(expiresInMs <= 24 * 60 * 60 * 1000 + 5_000, true);
+
+  const snapshot = store.exportSnapshot();
+  const expiredAt = new Date(Date.now() - 60_000).toISOString();
+  snapshot.remoteRuntimeBridgeCredentials =
+    snapshot.remoteRuntimeBridgeCredentials?.map((credential) =>
+      credential.id === expiringCredential.id
+        ? {
+            ...credential,
+            expiresAt: expiredAt,
+          }
+        : credential,
+    ) ?? [];
+  store.importSnapshot(snapshot);
+
+  assert.throws(
+    () =>
+      store.bindRemoteRuntime({
+        gatewayId: remoteGateway.id,
+        bridgeToken: expiringCredential.token,
+        runtimeId: 'expired-runtime',
+      }),
+    /remote runtime bridge credential expired/,
+  );
+
+  const initialCredential = store.createRemoteRuntimeBridgeCredential({
+    createdByGatewayId: hostedOwner.id,
+    label: 'Initial Runtime Bridge',
+  });
+  const initialBind = store.bindRemoteRuntime({
+    gatewayId: remoteGateway.id,
+    bridgeToken: initialCredential.token,
+    runtimeId: 'runtime-a',
+    installationId: 'install-a',
+  });
+  assert.equal(initialBind.created, true);
+
+  store.heartbeatRemoteRuntime({
+    gatewayId: remoteGateway.id,
+    runtimeId: 'runtime-a',
+  });
+
+  const replacementCredential = store.createRemoteRuntimeBridgeCredential({
+    createdByGatewayId: hostedOwner.id,
+    label: 'Replacement Runtime Bridge',
+  });
+  const rebound = store.bindRemoteRuntime({
+    gatewayId: remoteGateway.id,
+    bridgeToken: replacementCredential.token,
+    runtimeId: 'runtime-b',
+    installationId: 'install-b',
+  });
+  assert.equal(rebound.created, false);
+  assert.equal(rebound.runtime.binding.runtimeId, 'runtime-b');
+  assert.equal(rebound.runtime.binding.installationId, 'install-b');
+  assert.equal(rebound.runtime.status, 'offline');
+
+  assert.throws(
+    () =>
+      store.heartbeatRemoteRuntime({
+        gatewayId: remoteGateway.id,
+        runtimeId: 'runtime-a',
+      }),
+    /remote runtime binding does not match runtimeId/,
+  );
+
+  const replacementHeartbeat = store.heartbeatRemoteRuntime({
+    gatewayId: remoteGateway.id,
+    runtimeId: 'runtime-b',
+  });
+  assert.equal(replacementHeartbeat.runtime.binding.runtimeId, 'runtime-b');
+  assert.equal(replacementHeartbeat.runtime.status, 'online');
 });
 
 test('GatewayStore remote runtime seam supports claim, heartbeat, and revoke flow', () => {

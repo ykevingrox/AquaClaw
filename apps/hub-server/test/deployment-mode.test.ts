@@ -18,12 +18,52 @@ const hostedOnlyEndpoints = [
   { method: 'GET', url: '/api/v1/session/hosted/me' },
   { method: 'POST', url: '/api/v1/session/hosted/logout' },
   { method: 'POST', url: '/api/v1/session/hosted/revoke' },
+  { method: 'PATCH', url: '/api/v1/registration-policy' },
   { method: 'GET', url: '/api/v1/runtime/remote/me' },
   { method: 'POST', url: '/api/v1/runtime/remote/bridge-credentials' },
   { method: 'POST', url: '/api/v1/runtime/remote/bridge-credentials/remote-bridge-id/revoke' },
   { method: 'POST', url: '/api/v1/runtime/remote/bind' },
   { method: 'POST', url: '/api/v1/runtime/remote/heartbeat' },
 ] as const;
+
+async function bootstrapHostedOwner(app: ReturnType<typeof buildApp>, handle = 'hosted-owner-deployment') {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-hosted',
+    payload: {
+      bootstrapKey: 'hosted-secret',
+      handle,
+    },
+  });
+  assert.equal(response.statusCode, 201);
+  return response.json().data as {
+    gateway: {
+      id: string;
+    };
+    credential: {
+      token: string;
+    };
+  };
+}
+
+async function setHostedRegistrationPolicy(
+  app: ReturnType<typeof buildApp>,
+  ownerToken: string,
+  policy: 'open' | 'closed' | 'invite_only',
+) {
+  const response = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/registration-policy',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      policy,
+    },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().data.policy, policy);
+}
 
 test('hosted mode rejects local-only endpoints with a consistent local_mode_only error', async () => {
   const app = buildApp({ deploymentMode: 'hosted' });
@@ -69,8 +109,22 @@ test('local mode rejects hosted-only endpoints with a consistent hosted_mode_onl
   await app.close();
 });
 
-test('hosted mode still allows hosted-safe gateway auth flows', async () => {
-  const app = buildApp({ deploymentMode: 'hosted' });
+test('hosted registration defaults invite-only until the owner opens it, and hosted-safe gateway auth flows continue afterward', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const blockedRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Smoke Gateway',
+      handle: 'hosted-smoke-gateway',
+    },
+  });
+  assert.equal(blockedRegister.statusCode, 403);
+  assert.equal(blockedRegister.json().error.code, 'registration_invite_only');
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-open-registration-owner');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
 
   const register = await app.inject({
     method: 'POST',
@@ -98,6 +152,65 @@ test('hosted mode still allows hosted-safe gateway auth flows', async () => {
     url: '/api/v1/currents/current',
   });
   assert.equal(current.statusCode, 200);
+
+  await app.close();
+});
+
+test('hosted registration policy is owner-session-only and supports open, closed, and invite-only states', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-registration-policy-owner');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+
+  const guestRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Registration Guest',
+      handle: 'hosted-registration-guest',
+    },
+  });
+  assert.equal(guestRegister.statusCode, 201);
+  const guestToken = guestRegister.json().data.credential.token as string;
+
+  const forbiddenGuestPatch = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/registration-policy',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+    payload: {
+      policy: 'closed',
+    },
+  });
+  assert.equal(forbiddenGuestPatch.statusCode, 403);
+  assert.equal(forbiddenGuestPatch.json().error.code, 'forbidden');
+
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'closed');
+
+  const closedRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Closed Hosted Guest',
+      handle: 'closed-hosted-guest',
+    },
+  });
+  assert.equal(closedRegister.statusCode, 403);
+  assert.equal(closedRegister.json().error.code, 'registration_closed');
+
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'invite_only');
+
+  const inviteOnlyRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Invite Only Hosted Guest',
+      handle: 'invite-only-hosted-guest',
+    },
+  });
+  assert.equal(inviteOnlyRegister.statusCode, 403);
+  assert.equal(inviteOnlyRegister.json().error.code, 'registration_invite_only');
 
   await app.close();
 });
@@ -324,6 +437,218 @@ test('hosted owner session token can access hosted-safe gateway surfaces as owne
   await app.close();
 });
 
+test('hosted owner session token cannot act as gateway identity on hosted social write surfaces', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-owner-social-writes');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Social Alpha',
+      handle: 'hosted-social-alpha',
+    },
+  });
+  assert.equal(alphaRegister.statusCode, 201);
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+  const alphaGatewayId = alphaRegister.json().data.gateway.id as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Social Beta',
+      handle: 'hosted-social-beta',
+    },
+  });
+  assert.equal(betaRegister.statusCode, 201);
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const gammaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Social Gamma',
+      handle: 'hosted-social-gamma',
+    },
+  });
+  assert.equal(gammaRegister.statusCode, 201);
+  const gammaToken = gammaRegister.json().data.credential.token as string;
+
+  const ownerInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      maxUses: 1,
+    },
+  });
+  assert.equal(ownerInvite.statusCode, 201);
+  const inviteCode = ownerInvite.json().data.invite.code as string;
+
+  const ownerClaimInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      code: inviteCode,
+    },
+  });
+  assert.equal(ownerClaimInvite.statusCode, 403);
+  assert.equal(ownerClaimInvite.json().error.code, 'forbidden');
+
+  const ownerCreateFriendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      toGatewayId: alphaGatewayId,
+    },
+  });
+  assert.equal(ownerCreateFriendRequest.statusCode, 403);
+  assert.equal(ownerCreateFriendRequest.json().error.code, 'forbidden');
+
+  const alphaToBetaRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: {
+      authorization: `Bearer ${alphaToken}`,
+    },
+    payload: {
+      toGatewayId: betaGatewayId,
+    },
+  });
+  assert.equal(alphaToBetaRequest.statusCode, 201);
+  const alphaToBetaRequestId = alphaToBetaRequest.json().data.request.id as string;
+
+  const ownerAcceptAttempt = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${alphaToBetaRequestId}/accept`,
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(ownerAcceptAttempt.statusCode, 403);
+  assert.equal(ownerAcceptAttempt.json().error.code, 'forbidden');
+
+  const betaAccept = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${alphaToBetaRequestId}/accept`,
+    headers: {
+      authorization: `Bearer ${betaToken}`,
+    },
+  });
+  assert.equal(betaAccept.statusCode, 200);
+  const conversationId = betaAccept.json().data.conversation.id as string;
+
+  const gammaToBetaRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: {
+      authorization: `Bearer ${gammaToken}`,
+    },
+    payload: {
+      toGatewayId: betaGatewayId,
+    },
+  });
+  assert.equal(gammaToBetaRequest.statusCode, 201);
+  const gammaToBetaRequestId = gammaToBetaRequest.json().data.request.id as string;
+
+  const ownerRejectAttempt = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${gammaToBetaRequestId}/reject`,
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(ownerRejectAttempt.statusCode, 403);
+  assert.equal(ownerRejectAttempt.json().error.code, 'forbidden');
+
+  const ownerSendMessage = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      body: 'owner session should not send hosted DM',
+    },
+  });
+  assert.equal(ownerSendMessage.statusCode, 403);
+  assert.equal(ownerSendMessage.json().error.code, 'forbidden');
+
+  const ownerPresenceHeartbeat = await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      sessionId: 'hosted-owner-social-write',
+    },
+  });
+  assert.equal(ownerPresenceHeartbeat.statusCode, 403);
+  assert.equal(ownerPresenceHeartbeat.json().error.code, 'forbidden');
+
+  const ownerUpdateScopes = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/friends/${betaGatewayId}/scopes`,
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      updates: [{ scopeName: 'presence.read', state: 'granted' }],
+    },
+  });
+  assert.equal(ownerUpdateScopes.statusCode, 403);
+  assert.equal(ownerUpdateScopes.json().error.code, 'forbidden');
+
+  const ownerRemoveFriend = await app.inject({
+    method: 'DELETE',
+    url: `/api/v1/friends/${betaGatewayId}`,
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(ownerRemoveFriend.statusCode, 403);
+  assert.equal(ownerRemoveFriend.json().error.code, 'forbidden');
+
+  const ownerCreateBlock = await app.inject({
+    method: 'POST',
+    url: '/api/v1/blocks',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      gatewayId: alphaGatewayId,
+      reason: 'should not block from owner session',
+    },
+  });
+  assert.equal(ownerCreateBlock.statusCode, 403);
+  assert.equal(ownerCreateBlock.json().error.code, 'forbidden');
+
+  const ownerRemoveBlock = await app.inject({
+    method: 'DELETE',
+    url: `/api/v1/blocks/${alphaGatewayId}`,
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(ownerRemoveBlock.statusCode, 403);
+  assert.equal(ownerRemoveBlock.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
 test('hosted owner session gate protects owner-only hosted-session/current/audit/system feed/stream/invite/remote-bridge endpoints from gateway tokens', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
@@ -336,6 +661,7 @@ test('hosted owner session gate protects owner-only hosted-session/current/audit
   });
   assert.equal(hostedBootstrap.statusCode, 201);
   const ownerToken = hostedBootstrap.json().data.credential.token as string;
+  await setHostedRegistrationPolicy(app, ownerToken, 'open');
 
   const register = await app.inject({
     method: 'POST',
@@ -377,6 +703,19 @@ test('hosted owner session gate protects owner-only hosted-session/current/audit
   });
   assert.equal(forbiddenHostedRevoke.statusCode, 403);
   assert.equal(forbiddenHostedRevoke.json().error.code, 'forbidden');
+
+  const forbiddenRegistrationPolicy = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/registration-policy',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+    payload: {
+      policy: 'closed',
+    },
+  });
+  assert.equal(forbiddenRegistrationPolicy.statusCode, 403);
+  assert.equal(forbiddenRegistrationPolicy.json().error.code, 'forbidden');
 
   const forbiddenBridgeCredentialCreate = await app.inject({
     method: 'POST',

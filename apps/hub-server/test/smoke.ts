@@ -112,6 +112,21 @@ async function assertHostedLocalGuard(
   });
 }
 
+async function setHostedRegistrationPolicy(
+  app: ReturnType<typeof buildApp>,
+  ownerToken: string,
+  policy: 'open' | 'closed' | 'invite_only',
+) {
+  const response = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/registration-policy',
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { policy },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().data.policy, policy);
+}
+
 async function runHostedSmoke(app: ReturnType<typeof buildApp>) {
   const health = await app.inject({ method: 'GET', url: '/health' });
   assert.equal(health.statusCode, 200);
@@ -139,6 +154,19 @@ async function runHostedSmoke(app: ReturnType<typeof buildApp>) {
     headers: { authorization: `Bearer ${ownerToken}` },
   });
   assert.equal(ownerMe.statusCode, 200);
+
+  const blockedRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Blocked Hosted Smoke Gateway',
+      handle: 'blocked-hosted-smoke-gateway',
+    },
+  });
+  assert.equal(blockedRegister.statusCode, 403);
+  assert.equal(blockedRegister.json().error.code, 'registration_invite_only');
+
+  await setHostedRegistrationPolicy(app, ownerToken, 'open');
 
   const register = await app.inject({
     method: 'POST',
@@ -273,7 +301,7 @@ async function runHostedSmoke(app: ReturnType<typeof buildApp>) {
   }
 
   return (
-    'health=1 current=1 hosted_owner_bootstrap=1 hosted_owner_me=1 register=1 me=1 current_owner_gate=1 sea_feed=1 ' +
+    'health=1 current=1 hosted_owner_bootstrap=1 hosted_owner_me=1 registration_policy=1 register=1 me=1 current_owner_gate=1 sea_feed=1 ' +
     'remote_bridge=1 remote_runtime_bind=1 remote_runtime_me=1 remote_runtime_heartbeat=1 invite_owner_gate=1 local_mode_guards=7'
   );
 }

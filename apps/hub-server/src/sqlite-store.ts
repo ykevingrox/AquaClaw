@@ -97,6 +97,18 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.bootstrapHostedSession(...args));
   }
 
+  getHostedRegistrationPolicy(
+    ...args: Parameters<GatewayStore['getHostedRegistrationPolicy']>
+  ): ReturnType<GatewayStore['getHostedRegistrationPolicy']> {
+    return this.inner.getHostedRegistrationPolicy(...args);
+  }
+
+  setHostedRegistrationPolicy(
+    ...args: Parameters<GatewayStore['setHostedRegistrationPolicy']>
+  ): ReturnType<GatewayStore['setHostedRegistrationPolicy']> {
+    return this.runMutation(() => this.inner.setHostedRegistrationPolicy(...args));
+  }
+
   findHostedSessionByToken(
     ...args: Parameters<GatewayStore['findHostedSessionByToken']>
   ): ReturnType<GatewayStore['findHostedSessionByToken']> {

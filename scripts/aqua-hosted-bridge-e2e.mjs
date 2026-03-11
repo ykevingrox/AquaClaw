@@ -360,6 +360,14 @@ async function main() {
       };
     }
 
+    await requestJson(options.baseUrl, '/api/v1/registration-policy', {
+      method: 'PATCH',
+      token: ownerToken,
+      payload: {
+        policy: 'open',
+      },
+    });
+
     try {
       const register = await requestJson(options.baseUrl, '/api/v1/gateways/register', {
         method: 'POST',

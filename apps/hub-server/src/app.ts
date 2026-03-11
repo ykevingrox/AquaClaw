@@ -3,7 +3,14 @@ import { type ServerResponse } from 'node:http';
 import Fastify, { type FastifyReply } from 'fastify';
 import type { DeploymentMode } from './config.js';
 import { SeaLiveHub } from './live-hub.js';
-import { createGatewayStore, type EncounterRecord, type GatewayStore, type GatewayVisibility, type SeaEventLiveSource } from './store.js';
+import {
+  createGatewayStore,
+  type EncounterRecord,
+  type GatewayStore,
+  type GatewayVisibility,
+  type HostedRegistrationPolicy,
+  type SeaEventLiveSource,
+} from './store.js';
 
 interface BuildAppOptions {
   store?: GatewayStore;
@@ -31,6 +38,10 @@ interface BootstrapHostedSessionBody {
   handle?: string;
   bio?: string;
   visibility?: GatewayVisibility;
+}
+
+interface UpdateHostedRegistrationPolicyBody {
+  policy?: string;
 }
 
 interface RevokeHostedSessionsBody {
@@ -211,7 +222,18 @@ function isSeaEventLiveSource(store: GatewayStore): store is GatewayStore & SeaE
   return 'addSeaEventListener' in store && typeof store.addSeaEventListener === 'function';
 }
 
-function getAuthedGateway(store: GatewayStore, authorization: string | undefined) {
+type AuthedGatewayResult =
+  | {
+      gateway: NonNullable<ReturnType<GatewayStore['findByToken']>>;
+    }
+  | {
+      error: {
+        code: 'unauthorized';
+        message: string;
+      };
+    };
+
+function getAuthedGateway(store: GatewayStore, authorization: string | undefined): AuthedGatewayResult {
   const token = extractBearerToken(authorization);
   if (!token) {
     return {
@@ -219,17 +241,17 @@ function getAuthedGateway(store: GatewayStore, authorization: string | undefined
         code: 'unauthorized',
         message: 'missing or invalid bearer token',
       },
-    } as const;
+    };
   }
 
   const gateway = store.findByToken(token);
   if (gateway) {
-    return { gateway } as const;
+    return { gateway };
   }
 
   const hostedSession = store.findHostedSessionByToken(token);
   if (hostedSession) {
-    return { gateway: hostedSession.gateway } as const;
+    return { gateway: hostedSession.gateway };
   }
 
   return {
@@ -237,10 +259,25 @@ function getAuthedGateway(store: GatewayStore, authorization: string | undefined
       code: 'unauthorized',
       message: 'invalid bearer token',
     },
-  } as const;
+  };
 }
 
-function getAuthedGatewayCredentialOnly(store: GatewayStore, authorization: string | undefined) {
+type AuthedGatewayCredentialOnlyResult =
+  | {
+      gateway: NonNullable<ReturnType<GatewayStore['findByToken']>>;
+    }
+  | {
+      error: {
+        statusCode: 401 | 403;
+        code: 'unauthorized' | 'forbidden';
+        message: string;
+      };
+    };
+
+function getAuthedGatewayCredentialOnly(
+  store: GatewayStore,
+  authorization: string | undefined,
+): AuthedGatewayCredentialOnlyResult {
   const token = extractBearerToken(authorization);
   if (!token) {
     return {
@@ -249,7 +286,7 @@ function getAuthedGatewayCredentialOnly(store: GatewayStore, authorization: stri
         code: 'unauthorized',
         message: 'missing or invalid bearer token',
       },
-    } as const;
+    };
   }
 
   const hostedSession = store.findHostedSessionByToken(token);
@@ -260,12 +297,12 @@ function getAuthedGatewayCredentialOnly(store: GatewayStore, authorization: stri
         code: 'forbidden',
         message: 'endpoint requires gateway bearer token',
       },
-    } as const;
+    };
   }
 
   const gateway = store.findByToken(token);
   if (gateway) {
-    return { gateway } as const;
+    return { gateway };
   }
 
   return {
@@ -274,7 +311,7 @@ function getAuthedGatewayCredentialOnly(store: GatewayStore, authorization: stri
       code: 'unauthorized',
       message: 'invalid bearer token',
     },
-  } as const;
+  };
 }
 
 function getOptionalAuthedGateway(store: GatewayStore, authorization: string | undefined) {
@@ -376,6 +413,91 @@ function getHostedOwnerSessionForEndpoint(store: GatewayStore, authorization: st
     ok: true,
     session: hostedSession,
   };
+}
+
+type GatewayWriteEndpointResult =
+  | {
+      ok: true;
+      gateway: NonNullable<ReturnType<GatewayStore['findByToken']>>;
+    }
+  | {
+      ok: false;
+      error: {
+        statusCode: 401 | 403;
+        code: 'unauthorized' | 'forbidden';
+        message: string;
+      };
+    };
+
+function getGatewayForSocialWriteEndpoint(
+  store: GatewayStore,
+  deploymentMode: DeploymentMode,
+  authorization: string | undefined,
+): GatewayWriteEndpointResult {
+  if (deploymentMode === 'hosted') {
+    const result = getAuthedGatewayCredentialOnly(store, authorization);
+    if (!('gateway' in result)) {
+      return {
+        ok: false,
+        error: result.error,
+      };
+    }
+
+    return {
+      ok: true,
+      gateway: result.gateway,
+    };
+  }
+
+  const result = getAuthedGateway(store, authorization);
+  if ('error' in result) {
+    return {
+      ok: false,
+      error: {
+        statusCode: 401,
+        code: result.error.code,
+        message: result.error.message,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    gateway: result.gateway,
+  };
+}
+
+function normalizeHostedRegistrationPolicy(value: string | undefined): HostedRegistrationPolicy | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase().replace(/-/g, '_');
+  if (normalized === 'open' || normalized === 'closed' || normalized === 'invite_only') {
+    return normalized;
+  }
+
+  return null;
+}
+
+function getEffectiveHostedRegistrationPolicy(store: GatewayStore): HostedRegistrationPolicy {
+  return store.getHostedRegistrationPolicy() ?? 'invite_only';
+}
+
+function hostedRegistrationPolicyError(policy: HostedRegistrationPolicy) {
+  if (policy === 'closed') {
+    return {
+      statusCode: 403,
+      code: 'registration_closed',
+      message: 'hosted registration is closed',
+    } as const;
+  }
+
+  return {
+    statusCode: 403,
+    code: 'registration_invite_only',
+    message: 'hosted registration is invite-only',
+  } as const;
 }
 
 function toGatewaySummary(gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
@@ -702,6 +824,7 @@ function remoteRuntimeErrorToHttp(message: string) {
     return { statusCode: 403, code: 'forbidden' };
   }
   if (
+    message === 'remote runtime bridge credential expired' ||
     message === 'remote runtime bridge credential revoked' ||
     message === 'remote runtime bridge credential already claimed' ||
     message === 'remote runtime binding does not match runtimeId'
@@ -1077,6 +1200,59 @@ export function buildApp(options: BuildAppOptions = {}) {
     };
   });
 
+  app.patch<{ Body: UpdateHostedRegistrationPolicyBody }>('/api/v1/registration-policy', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+    if (!hostedOwner.ok) {
+      const endpointError = hostedOwner.error;
+      return reply.code(endpointError.statusCode).send({
+        ok: false,
+        error: {
+          code: endpointError.code,
+          message: endpointError.message,
+        },
+      });
+    }
+
+    const policy = normalizeHostedRegistrationPolicy(request.body?.policy);
+    if (!policy) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'policy must be one of open, closed, invite_only',
+        },
+      });
+    }
+
+    try {
+      const updatedPolicy = store.setHostedRegistrationPolicy({
+        policy,
+        actorGatewayId: hostedOwner.session.gateway.id,
+      });
+
+      return {
+        ok: true,
+        data: {
+          policy: updatedPolicy,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to update hosted registration policy';
+      const statusCode = message === 'hosted runtime bridge credential requires the hosted owner gateway' ? 403 : 400;
+      return reply.code(statusCode).send({
+        ok: false,
+        error: {
+          code: statusCode === 403 ? 'forbidden' : 'validation_failed',
+          message,
+        },
+      });
+    }
+  });
+
   app.get('/api/v1/runtime/local', async (request, reply) => {
     if (deploymentMode === 'hosted') {
       return sendLocalModeOnly(reply);
@@ -1337,6 +1513,7 @@ export function buildApp(options: BuildAppOptions = {}) {
             claimedByGatewayId: credential.claimedByGatewayId,
             label: credential.label,
             metadata: credential.metadata,
+            expiresAt: credential.expiresAt,
             revokedAt: credential.revokedAt,
             revokedByGatewayId: credential.revokedByGatewayId,
             createdAt: credential.createdAt,
@@ -1402,6 +1579,7 @@ export function buildApp(options: BuildAppOptions = {}) {
               claimedByGatewayId: credential.claimedByGatewayId,
               label: credential.label,
               metadata: credential.metadata,
+              expiresAt: credential.expiresAt,
               revokedAt: credential.revokedAt,
               revokedByGatewayId: credential.revokedByGatewayId,
               createdAt: credential.createdAt,
@@ -1518,6 +1696,7 @@ export function buildApp(options: BuildAppOptions = {}) {
             claimedByGatewayId: runtime.bridgeCredential.claimedByGatewayId,
             label: runtime.bridgeCredential.label,
             metadata: runtime.bridgeCredential.metadata,
+            expiresAt: runtime.bridgeCredential.expiresAt,
             revokedAt: runtime.bridgeCredential.revokedAt,
             revokedByGatewayId: runtime.bridgeCredential.revokedByGatewayId,
             createdAt: runtime.bridgeCredential.createdAt,
@@ -1557,12 +1736,12 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
 
     const runtimeId = request.body?.runtimeId?.trim();
-    if (request.body?.runtimeId !== undefined && !runtimeId) {
+    if (!runtimeId) {
       return reply.code(400).send({
         ok: false,
         error: {
           code: 'validation_failed',
-          message: 'runtimeId must be a non-empty string when provided',
+          message: 'runtimeId is required',
         },
       });
     }
@@ -1790,6 +1969,20 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Body: RegisterBody }>('/api/v1/gateways/register', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      const policy = getEffectiveHostedRegistrationPolicy(store);
+      if (policy !== 'open') {
+        const registrationError = hostedRegistrationPolicyError(policy);
+        return reply.code(registrationError.statusCode).send({
+          ok: false,
+          error: {
+            code: registrationError.code,
+            message: registrationError.message,
+          },
+        });
+      }
+    }
+
     const { displayName, handle, bio, visibility } = request.body ?? {};
 
     if (!displayName?.trim() || !handle?.trim()) {
@@ -2510,9 +2703,15 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Body: ClaimInviteBody }>('/api/v1/invites/claim', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
     }
 
     const code = request.body?.code?.trim();
@@ -2559,9 +2758,15 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Body: CreateFriendRequestBody }>('/api/v1/friend-requests', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
     }
 
     const { toGatewayId, message } = request.body ?? {};
@@ -2646,9 +2851,15 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Params: FriendRequestParams }>('/api/v1/friend-requests/:requestId/accept', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
     }
 
     try {
@@ -2678,9 +2889,15 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Params: FriendRequestParams }>('/api/v1/friend-requests/:requestId/reject', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
     }
 
     try {
@@ -2720,9 +2937,15 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.delete<{ Params: FriendScopesParams }>('/api/v1/friends/:gatewayId', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
     }
 
     try {
@@ -2778,9 +3001,15 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.patch<{ Params: FriendScopesParams; Body: UpdateFriendScopesBody }>('/api/v1/friends/:gatewayId/scopes', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
     }
 
     const rawUpdates = request.body?.updates ?? [];
@@ -2840,9 +3069,15 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Body: CreateBlockBody }>('/api/v1/blocks', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
     }
 
     const gatewayId = request.body?.gatewayId?.trim();
@@ -2882,9 +3117,15 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.delete<{ Params: FriendScopesParams }>('/api/v1/blocks/:gatewayId', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
     }
 
     try {
@@ -2951,9 +3192,15 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Params: ConversationParams; Body: CreateMessageBody }>('/api/v1/conversations/:conversationId/messages', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
     }
 
     try {
@@ -2982,9 +3229,15 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Body: PresenceHeartbeatBody }>('/api/v1/presence/heartbeat', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
     }
 
     const sessionId = request.body?.sessionId?.trim();

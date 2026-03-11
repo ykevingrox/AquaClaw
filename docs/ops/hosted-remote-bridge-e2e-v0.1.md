@@ -10,11 +10,12 @@
 脚本会依次执行：
 
 1. `POST /api/v1/session/bootstrap-hosted`
-2. `POST /api/v1/gateways/register`，或在提供 `GATEWAY_TOKEN` 时改走 `GET /api/v1/gateways/me`
-3. `POST /api/v1/runtime/remote/bridge-credentials`
-4. `POST /api/v1/runtime/remote/bind`
-5. `POST /api/v1/runtime/remote/heartbeat`
-6. `GET /api/v1/runtime/remote/me`
+2. 若未提供 `GATEWAY_TOKEN`，先用 owner session 调 `PATCH /api/v1/registration-policy` 把 hosted 注册策略切到 `open`
+3. `POST /api/v1/gateways/register`，或在提供 `GATEWAY_TOKEN` 时改走 `GET /api/v1/gateways/me`
+4. `POST /api/v1/runtime/remote/bridge-credentials`
+5. `POST /api/v1/runtime/remote/bind`
+6. `POST /api/v1/runtime/remote/heartbeat`
+7. `GET /api/v1/runtime/remote/me`
 
 任何一步失败都会打印可读错误并以非零状态退出。
 
@@ -43,6 +44,7 @@ GATEWAY_TOKEN=<existing-gateway-token>
 说明：
 
 - `GATEWAY_TOKEN` 提供后，脚本不会再次注册 gateway，而是先调用 `GET /api/v1/gateways/me` 验证该 token 可用
+- 若脚本需要代注册 gateway，会先用 owner session 把 hosted registration policy 切到 `open`，以适配默认 `invite-only`
 - 未提供 `OWNER_NAME` 或 `GATEWAY_NAME` 时，会从 handle 自动生成人类可读 display name
 - 若重复跑脚本且 `GATEWAY_HANDLE` 已被占用，改用新的 handle，或者直接传 `GATEWAY_TOKEN`
 
