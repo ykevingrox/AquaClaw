@@ -240,6 +240,43 @@ function getAuthedGateway(store: GatewayStore, authorization: string | undefined
   } as const;
 }
 
+function getAuthedGatewayCredentialOnly(store: GatewayStore, authorization: string | undefined) {
+  const token = extractBearerToken(authorization);
+  if (!token) {
+    return {
+      error: {
+        statusCode: 401,
+        code: 'unauthorized',
+        message: 'missing or invalid bearer token',
+      },
+    } as const;
+  }
+
+  const hostedSession = store.findHostedSessionByToken(token);
+  if (hostedSession) {
+    return {
+      error: {
+        statusCode: 403,
+        code: 'forbidden',
+        message: 'endpoint requires gateway bearer token',
+      },
+    } as const;
+  }
+
+  const gateway = store.findByToken(token);
+  if (gateway) {
+    return { gateway } as const;
+  }
+
+  return {
+    error: {
+      statusCode: 401,
+      code: 'unauthorized',
+      message: 'invalid bearer token',
+    },
+  } as const;
+}
+
 function getOptionalAuthedGateway(store: GatewayStore, authorization: string | undefined) {
   const token = extractBearerToken(authorization);
   if (!token) {
@@ -1217,12 +1254,19 @@ export function buildApp(options: BuildAppOptions = {}) {
       return sendHostedModeOnly(reply);
     }
 
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getAuthedGatewayCredentialOnly(store, request.headers.authorization);
+    if (!('gateway' in result)) {
+      const error = result.error;
+      return reply.code(error.statusCode).send({
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
     }
 
-    const runtime = store.getRemoteRuntimeBindingByGatewayId(result.gateway.id);
+    const runtime = store.getRemoteRuntimeBindingByGatewayId(result.gateway!.id);
     if (!runtime) {
       return reply.code(404).send({
         ok: false,
@@ -1384,9 +1428,16 @@ export function buildApp(options: BuildAppOptions = {}) {
       return sendHostedModeOnly(reply);
     }
 
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getAuthedGatewayCredentialOnly(store, request.headers.authorization);
+    if (!('gateway' in result)) {
+      const error = result.error;
+      return reply.code(error.statusCode).send({
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
     }
 
     const { bridgeToken, installationId, runtimeId, label, source, metadata } = request.body ?? {};
@@ -1449,7 +1500,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     try {
       const runtime = store.bindRemoteRuntime({
         bridgeToken,
-        gatewayId: result.gateway.id,
+        gatewayId: result.gateway!.id,
         installationId,
         runtimeId,
         label,
@@ -1493,9 +1544,16 @@ export function buildApp(options: BuildAppOptions = {}) {
       return sendHostedModeOnly(reply);
     }
 
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({ ok: false, error: result.error });
+    const result = getAuthedGatewayCredentialOnly(store, request.headers.authorization);
+    if (!('gateway' in result)) {
+      const error = result.error;
+      return reply.code(error.statusCode).send({
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
     }
 
     const runtimeId = request.body?.runtimeId?.trim();
@@ -1533,7 +1591,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     try {
       const runtime = store.heartbeatRemoteRuntime({
-        gatewayId: result.gateway.id,
+        gatewayId: result.gateway!.id,
         runtimeId,
         connectionType: connectionType ?? null,
         metadata,

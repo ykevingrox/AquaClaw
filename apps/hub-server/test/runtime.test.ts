@@ -300,3 +300,85 @@ test('hosted remote runtime bridge flow supports create-bind-heartbeat-revoke li
 
   await app.close();
 });
+
+test('hosted remote runtime bind/heartbeat/me require gateway credential and reject hosted owner session token', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwnerSession(app);
+
+  const createBridgeCredential = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bridge-credentials',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      label: 'hosted-remote-bridge-owner-block',
+    },
+  });
+  assert.equal(createBridgeCredential.statusCode, 201);
+  const bridgeToken = createBridgeCredential.json().data.credential.token as string;
+
+  const ownerBindAttempt = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bind',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      bridgeToken,
+      runtimeId: 'owner-should-not-bind-remote-runtime',
+    },
+  });
+  assert.equal(ownerBindAttempt.statusCode, 403);
+  assert.equal(ownerBindAttempt.json().error.code, 'forbidden');
+
+  const registerRemote = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Remote Runtime Role Split Gateway',
+      handle: 'hosted-remote-runtime-role-split',
+    },
+  });
+  assert.equal(registerRemote.statusCode, 201);
+  const remoteGatewayToken = registerRemote.json().data.credential.token as string;
+
+  const bindRemote = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bind',
+    headers: {
+      authorization: `Bearer ${remoteGatewayToken}`,
+    },
+    payload: {
+      bridgeToken,
+      runtimeId: 'remote-runtime-role-split',
+    },
+  });
+  assert.equal(bindRemote.statusCode, 201);
+
+  const ownerGetRemoteAttempt = await app.inject({
+    method: 'GET',
+    url: '/api/v1/runtime/remote/me',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(ownerGetRemoteAttempt.statusCode, 403);
+  assert.equal(ownerGetRemoteAttempt.json().error.code, 'forbidden');
+
+  const ownerHeartbeatAttempt = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/heartbeat',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      runtimeId: 'remote-runtime-role-split',
+    },
+  });
+  assert.equal(ownerHeartbeatAttempt.statusCode, 403);
+  assert.equal(ownerHeartbeatAttempt.json().error.code, 'forbidden');
+
+  await app.close();
+});
