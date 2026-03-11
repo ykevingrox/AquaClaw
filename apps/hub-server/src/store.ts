@@ -222,6 +222,38 @@ export interface LocalRuntimeBindingState {
   status: PresenceStatus;
 }
 
+export interface RemoteRuntimeBridgeCredentialRecord {
+  id: string;
+  token: string;
+  createdByGatewayId: string;
+  claimedByGatewayId: string | null;
+  label: string;
+  metadata: Record<string, unknown>;
+  revokedAt: string | null;
+  revokedByGatewayId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RemoteRuntimeBindingRecord {
+  id: string;
+  bridgeCredentialId: string;
+  gatewayId: string;
+  installationId: string;
+  runtimeId: string;
+  label: string;
+  source: string;
+  metadata: Record<string, unknown>;
+  lastHeartbeatAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RemoteRuntimeBindingState {
+  binding: RemoteRuntimeBindingRecord;
+  status: PresenceStatus;
+}
+
 export interface GatewayPresenceSnapshotRecord {
   gatewayId: string;
   lastSeenAt: string;
@@ -241,6 +273,8 @@ export interface GatewayStoreSnapshot {
   localSessions?: LocalSessionRecord[];
   hostedSessions?: HostedSessionRecord[];
   localRuntimeBinding?: LocalRuntimeBindingRecord | null;
+  remoteRuntimeBridgeCredentials?: RemoteRuntimeBridgeCredentialRecord[];
+  remoteRuntimeBindings?: RemoteRuntimeBindingRecord[];
   presenceHeartbeats: GatewayPresenceSnapshotRecord[];
   friendRequests: FriendRequestRecord[];
   friendships: FriendshipRecord[];
@@ -281,6 +315,14 @@ export interface GatewayStore {
     runtime: LocalRuntimeBindingState;
     created: boolean;
   };
+  createRemoteRuntimeBridgeCredential(input: CreateRemoteRuntimeBridgeCredentialInput): RemoteRuntimeBridgeCredentialRecord;
+  revokeRemoteRuntimeBridgeCredential(input: RevokeRemoteRuntimeBridgeCredentialInput): RemoteRuntimeBridgeCredentialRecord;
+  bindRemoteRuntime(input: BindRemoteRuntimeInput): {
+    runtime: RemoteRuntimeBindingState;
+    bridgeCredential: RemoteRuntimeBridgeCredentialRecord;
+    created: boolean;
+  };
+  getRemoteRuntimeBindingByGatewayId(gatewayId: string): RemoteRuntimeBindingState | null;
   seedLocalReefSandbox(input: SeedLocalReefInput): LocalReefSeedResult;
   findById(gatewayId: string): GatewayRecord | null;
   findByToken(token: string): GatewayRecord | null;
@@ -313,6 +355,10 @@ export interface GatewayStore {
   heartbeatPresence(gatewayId: string): GatewayPresenceRecord;
   heartbeatLocalRuntime(input: HeartbeatLocalRuntimeInput): {
     runtime: LocalRuntimeBindingState;
+    presence: GatewayPresenceRecord;
+  };
+  heartbeatRemoteRuntime(input: HeartbeatRemoteRuntimeInput): {
+    runtime: RemoteRuntimeBindingState;
     presence: GatewayPresenceRecord;
   };
   canViewPresence(viewerGatewayId: string, targetGatewayId: string): boolean;
@@ -369,6 +415,27 @@ interface BindLocalRuntimeInput {
   source?: string;
   metadata?: Record<string, unknown>;
   gatewayId: string;
+}
+
+interface CreateRemoteRuntimeBridgeCredentialInput {
+  createdByGatewayId: string;
+  label?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface RevokeRemoteRuntimeBridgeCredentialInput {
+  credentialId: string;
+  revokedByGatewayId: string;
+}
+
+interface BindRemoteRuntimeInput {
+  bridgeToken: string;
+  gatewayId: string;
+  installationId?: string;
+  runtimeId?: string;
+  label?: string;
+  source?: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface CreateFriendRequestInput {
@@ -527,6 +594,13 @@ interface HeartbeatLocalRuntimeInput {
   connectionType?: string | null;
 }
 
+interface HeartbeatRemoteRuntimeInput {
+  gatewayId: string;
+  runtimeId?: string;
+  metadata?: Record<string, unknown>;
+  connectionType?: string | null;
+}
+
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 const VALID_SEA_EVENT_TONES: SeaEventTone[] = ['calm', 'playful', 'reflective', 'sharp', 'neutral'];
 const ONLINE_THRESHOLD_MS = 90_000;
@@ -544,6 +618,11 @@ const DEFAULT_LOCAL_INSTALLATION_ID = 'local-installation';
 const DEFAULT_LOCAL_RUNTIME_ID = 'openclaw-local-runtime';
 const DEFAULT_LOCAL_RUNTIME_LABEL = 'Local OpenClaw Runtime';
 const DEFAULT_LOCAL_RUNTIME_SOURCE = 'manual_local_bind';
+const DEFAULT_REMOTE_RUNTIME_INSTALLATION_ID = 'remote-installation';
+const DEFAULT_REMOTE_RUNTIME_ID = 'openclaw-remote-runtime';
+const DEFAULT_REMOTE_RUNTIME_LABEL = 'Hosted Remote Runtime';
+const DEFAULT_REMOTE_RUNTIME_SOURCE = 'hosted_remote_bind';
+const DEFAULT_REMOTE_BRIDGE_LABEL = 'Hosted Remote Runtime Bridge';
 const LOCAL_REEF_SEED_KEY = 'local_reef_v1';
 const LOCAL_REEF_HANDLE_PREFIX = 'reef-';
 const LOCAL_REEF_OWNER_SCENE_SUMMARY =
@@ -683,6 +762,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private localOwnerGatewayId: string | null = null;
   private hostedOwnerGatewayId: string | null = null;
   private localRuntimeBinding: LocalRuntimeBindingRecord | null = null;
+  private readonly remoteRuntimeBridgeCredentialsById = new Map<string, RemoteRuntimeBridgeCredentialRecord>();
+  private readonly remoteRuntimeBridgeCredentialsByToken = new Map<string, RemoteRuntimeBridgeCredentialRecord>();
+  private readonly remoteRuntimeBindingsByGatewayId = new Map<string, RemoteRuntimeBindingRecord>();
   private activeCurrentId: string | null = null;
 
   register(
@@ -977,6 +1059,196 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     };
   }
 
+  createRemoteRuntimeBridgeCredential(input: CreateRemoteRuntimeBridgeCredentialInput): RemoteRuntimeBridgeCredentialRecord {
+    this.assertHostedOwnerGateway(input.createdByGatewayId);
+
+    const now = new Date().toISOString();
+    const normalizedLabel = input.label === undefined ? DEFAULT_REMOTE_BRIDGE_LABEL : input.label.trim();
+    if (!normalizedLabel) {
+      throw new Error('label is required');
+    }
+
+    const credential: RemoteRuntimeBridgeCredentialRecord = {
+      id: `remote-bridge-${randomUUID()}`,
+      token: randomBytes(24).toString('hex'),
+      createdByGatewayId: input.createdByGatewayId,
+      claimedByGatewayId: null,
+      label: normalizedLabel,
+      metadata: input.metadata ?? {},
+      revokedAt: null,
+      revokedByGatewayId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.remoteRuntimeBridgeCredentialsById.set(credential.id, credential);
+    this.remoteRuntimeBridgeCredentialsByToken.set(credential.token, credential);
+    this.appendAuditRecord({
+      actorGatewayId: input.createdByGatewayId,
+      targetGatewayId: input.createdByGatewayId,
+      action: 'runtime.remote_bridge_credential_created',
+      metadata: {
+        credentialId: credential.id,
+        label: credential.label,
+      },
+      createdAt: now,
+    });
+
+    return { ...credential };
+  }
+
+  revokeRemoteRuntimeBridgeCredential(input: RevokeRemoteRuntimeBridgeCredentialInput): RemoteRuntimeBridgeCredentialRecord {
+    this.assertHostedOwnerGateway(input.revokedByGatewayId);
+
+    const existing = this.remoteRuntimeBridgeCredentialsById.get(input.credentialId);
+    if (!existing) {
+      throw new Error('remote runtime bridge credential not found');
+    }
+
+    if (existing.revokedAt) {
+      return { ...existing };
+    }
+
+    const now = new Date().toISOString();
+    const revoked: RemoteRuntimeBridgeCredentialRecord = {
+      ...existing,
+      revokedAt: now,
+      revokedByGatewayId: input.revokedByGatewayId,
+      updatedAt: now,
+    };
+
+    this.remoteRuntimeBridgeCredentialsById.set(revoked.id, revoked);
+    this.remoteRuntimeBridgeCredentialsByToken.set(revoked.token, revoked);
+    this.appendAuditRecord({
+      actorGatewayId: input.revokedByGatewayId,
+      targetGatewayId: revoked.claimedByGatewayId ?? input.revokedByGatewayId,
+      action: 'runtime.remote_bridge_credential_revoked',
+      metadata: {
+        credentialId: revoked.id,
+        claimedByGatewayId: revoked.claimedByGatewayId,
+      },
+      createdAt: now,
+    });
+
+    return { ...revoked };
+  }
+
+  bindRemoteRuntime(input: BindRemoteRuntimeInput) {
+    const gateway = this.gatewaysById.get(input.gatewayId);
+    if (!gateway) {
+      throw new Error('gateway not found');
+    }
+
+    const bridgeToken = input.bridgeToken.trim();
+    if (!bridgeToken) {
+      throw new Error('bridgeToken is required');
+    }
+
+    const credential = this.remoteRuntimeBridgeCredentialsByToken.get(bridgeToken);
+    if (!credential) {
+      throw new Error('remote runtime bridge credential not found');
+    }
+    if (credential.revokedAt) {
+      throw new Error('remote runtime bridge credential revoked');
+    }
+    if (credential.claimedByGatewayId && credential.claimedByGatewayId !== input.gatewayId) {
+      throw new Error('remote runtime bridge credential already claimed');
+    }
+
+    const now = new Date().toISOString();
+    const claimedCredential =
+      credential.claimedByGatewayId === input.gatewayId
+        ? credential
+        : {
+            ...credential,
+            claimedByGatewayId: input.gatewayId,
+            updatedAt: now,
+          };
+
+    this.remoteRuntimeBridgeCredentialsById.set(claimedCredential.id, claimedCredential);
+    this.remoteRuntimeBridgeCredentialsByToken.set(claimedCredential.token, claimedCredential);
+
+    if (!credential.claimedByGatewayId) {
+      this.appendAuditRecord({
+        actorGatewayId: input.gatewayId,
+        targetGatewayId: credential.createdByGatewayId,
+        action: 'runtime.remote_bridge_credential_claimed',
+        metadata: {
+          credentialId: credential.id,
+        },
+        createdAt: now,
+      });
+    }
+
+    const existing = this.remoteRuntimeBindingsByGatewayId.get(input.gatewayId) ?? null;
+    const runtimeId = this.normalizeRuntimeField(input.runtimeId, existing?.runtimeId ?? DEFAULT_REMOTE_RUNTIME_ID, 'runtimeId');
+    const installationId = this.normalizeRuntimeField(
+      input.installationId,
+      existing?.installationId ?? DEFAULT_REMOTE_RUNTIME_INSTALLATION_ID,
+      'installationId',
+    );
+    const label = this.normalizeRuntimeField(input.label, existing?.label ?? DEFAULT_REMOTE_RUNTIME_LABEL, 'label');
+    const source = this.normalizeRuntimeField(input.source, existing?.source ?? DEFAULT_REMOTE_RUNTIME_SOURCE, 'source');
+
+    const binding: RemoteRuntimeBindingRecord = existing
+      ? {
+          ...existing,
+          bridgeCredentialId: claimedCredential.id,
+          installationId,
+          runtimeId,
+          label,
+          source,
+          metadata: input.metadata ?? existing.metadata,
+          updatedAt: now,
+        }
+      : {
+          id: `remote-runtime-${randomUUID()}`,
+          bridgeCredentialId: claimedCredential.id,
+          gatewayId: input.gatewayId,
+          installationId,
+          runtimeId,
+          label,
+          source,
+          metadata: input.metadata ?? {},
+          lastHeartbeatAt: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+    this.remoteRuntimeBindingsByGatewayId.set(binding.gatewayId, binding);
+    this.appendAuditRecord({
+      actorGatewayId: input.gatewayId,
+      targetGatewayId: claimedCredential.createdByGatewayId,
+      action: existing ? 'runtime.remote_rebound' : 'runtime.remote_bound',
+      metadata: {
+        runtimeId: binding.runtimeId,
+        installationId: binding.installationId,
+        label: binding.label,
+        source: binding.source,
+        bridgeCredentialId: binding.bridgeCredentialId,
+      },
+      createdAt: now,
+    });
+
+    return {
+      runtime: this.getRemoteRuntimeBindingByGatewayId(input.gatewayId)!,
+      bridgeCredential: { ...claimedCredential },
+      created: !existing,
+    };
+  }
+
+  getRemoteRuntimeBindingByGatewayId(gatewayId: string) {
+    const binding = this.remoteRuntimeBindingsByGatewayId.get(gatewayId);
+    if (!binding) {
+      return null;
+    }
+
+    return {
+      binding: { ...binding },
+      status: this.derivePresenceStatus(binding.lastHeartbeatAt),
+    };
+  }
+
   seedLocalReefSandbox(input: SeedLocalReefInput): LocalReefSeedResult {
     this.assertPrimaryOwnerGateway(input.ownerGatewayId);
 
@@ -1240,6 +1512,50 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
 
     return {
       runtime: this.getLocalRuntimeBinding()!,
+      presence,
+    };
+  }
+
+  heartbeatRemoteRuntime(input: HeartbeatRemoteRuntimeInput) {
+    const binding = this.remoteRuntimeBindingsByGatewayId.get(input.gatewayId);
+    if (!binding) {
+      throw new Error('remote runtime binding not found');
+    }
+
+    const runtimeId = input.runtimeId?.trim();
+    if (runtimeId && runtimeId !== binding.runtimeId) {
+      throw new Error('remote runtime binding does not match runtimeId');
+    }
+
+    const now = new Date().toISOString();
+    const nextBinding: RemoteRuntimeBindingRecord = {
+      ...binding,
+      lastHeartbeatAt: now,
+      metadata: input.metadata
+        ? {
+            ...binding.metadata,
+            ...input.metadata,
+          }
+        : binding.metadata,
+      updatedAt: now,
+    };
+    this.remoteRuntimeBindingsByGatewayId.set(nextBinding.gatewayId, nextBinding);
+
+    const presence = this.heartbeatPresence(input.gatewayId);
+    this.appendAuditRecord({
+      actorGatewayId: input.gatewayId,
+      targetGatewayId: nextBinding.gatewayId,
+      action: 'runtime.remote_heartbeat',
+      metadata: {
+        runtimeId: nextBinding.runtimeId,
+        installationId: nextBinding.installationId,
+        connectionType: input.connectionType ?? null,
+      },
+      createdAt: now,
+    });
+
+    return {
+      runtime: this.getRemoteRuntimeBindingByGatewayId(input.gatewayId)!,
       presence,
     };
   }
@@ -2232,6 +2548,12 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
   }
 
+  private assertHostedOwnerGateway(gatewayId: string) {
+    if (!this.hostedOwnerGatewayId || this.hostedOwnerGatewayId !== gatewayId || !this.gatewaysById.has(gatewayId)) {
+      throw new Error('hosted runtime bridge credential requires the hosted owner gateway');
+    }
+  }
+
   private normalizeRuntimeField(value: string | undefined, fallback: string, fieldName: 'installationId' | 'runtimeId' | 'label' | 'source') {
     const normalized = value === undefined ? fallback : value.trim();
     if (!normalized) {
@@ -2934,6 +3256,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       localSessions: [...this.localSessionsByToken.values()],
       hostedSessions: [...this.hostedSessionsByToken.values()],
       localRuntimeBinding: this.localRuntimeBinding,
+      remoteRuntimeBridgeCredentials: [...this.remoteRuntimeBridgeCredentialsById.values()],
+      remoteRuntimeBindings: [...this.remoteRuntimeBindingsByGatewayId.values()],
       presenceHeartbeats: [...this.lastSeenAtByGatewayId.entries()].map(([gatewayId, lastSeenAt]) => ({
         gatewayId,
         lastSeenAt,
@@ -2982,6 +3306,13 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       this.hostedSessionsByToken.set(session.token, session);
     }
     this.localRuntimeBinding = snapshot.localRuntimeBinding ?? null;
+    for (const credential of snapshot.remoteRuntimeBridgeCredentials ?? []) {
+      this.remoteRuntimeBridgeCredentialsById.set(credential.id, credential);
+      this.remoteRuntimeBridgeCredentialsByToken.set(credential.token, credential);
+    }
+    for (const binding of snapshot.remoteRuntimeBindings ?? []) {
+      this.remoteRuntimeBindingsByGatewayId.set(binding.gatewayId, binding);
+    }
     for (const presenceRecord of snapshot.presenceHeartbeats) {
       this.lastSeenAtByGatewayId.set(presenceRecord.gatewayId, presenceRecord.lastSeenAt);
     }
@@ -3033,6 +3364,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.tokensToGatewayId.clear();
     this.localSessionsByToken.clear();
     this.hostedSessionsByToken.clear();
+    this.remoteRuntimeBridgeCredentialsById.clear();
+    this.remoteRuntimeBridgeCredentialsByToken.clear();
+    this.remoteRuntimeBindingsByGatewayId.clear();
     this.friendRequestsById.clear();
     this.friendshipsById.clear();
     this.friendScopesByKey.clear();

@@ -125,6 +125,28 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.bindLocalRuntime(...args));
   }
 
+  createRemoteRuntimeBridgeCredential(
+    ...args: Parameters<GatewayStore['createRemoteRuntimeBridgeCredential']>
+  ): ReturnType<GatewayStore['createRemoteRuntimeBridgeCredential']> {
+    return this.runMutation(() => this.inner.createRemoteRuntimeBridgeCredential(...args));
+  }
+
+  revokeRemoteRuntimeBridgeCredential(
+    ...args: Parameters<GatewayStore['revokeRemoteRuntimeBridgeCredential']>
+  ): ReturnType<GatewayStore['revokeRemoteRuntimeBridgeCredential']> {
+    return this.runMutation(() => this.inner.revokeRemoteRuntimeBridgeCredential(...args));
+  }
+
+  bindRemoteRuntime(...args: Parameters<GatewayStore['bindRemoteRuntime']>): ReturnType<GatewayStore['bindRemoteRuntime']> {
+    return this.runMutation(() => this.inner.bindRemoteRuntime(...args));
+  }
+
+  getRemoteRuntimeBindingByGatewayId(
+    ...args: Parameters<GatewayStore['getRemoteRuntimeBindingByGatewayId']>
+  ): ReturnType<GatewayStore['getRemoteRuntimeBindingByGatewayId']> {
+    return this.inner.getRemoteRuntimeBindingByGatewayId(...args);
+  }
+
   seedLocalReefSandbox(
     ...args: Parameters<GatewayStore['seedLocalReefSandbox']>
   ): ReturnType<GatewayStore['seedLocalReefSandbox']> {
@@ -259,6 +281,12 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     ...args: Parameters<GatewayStore['heartbeatLocalRuntime']>
   ): ReturnType<GatewayStore['heartbeatLocalRuntime']> {
     return this.runMutation(() => this.inner.heartbeatLocalRuntime(...args));
+  }
+
+  heartbeatRemoteRuntime(
+    ...args: Parameters<GatewayStore['heartbeatRemoteRuntime']>
+  ): ReturnType<GatewayStore['heartbeatRemoteRuntime']> {
+    return this.runMutation(() => this.inner.heartbeatRemoteRuntime(...args));
   }
 
   canViewPresence(
