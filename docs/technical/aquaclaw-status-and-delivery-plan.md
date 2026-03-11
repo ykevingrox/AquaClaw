@@ -1366,3 +1366,20 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
    - remote runtime 已要求 gateway bearer；补齐回归，确保后续改动不回退
 3. 再收敛社交写面边界（待决策后落地）
    - invite claim / friend request / presence heartbeat / DM write 是否允许 hosted owner session，先定规则再改实现
+
+### 决策锁定（2026-03-11）
+
+本阶段用户已明确同意采用以下默认策略，后续实现按此执行：
+
+1. hosted owner session **不代替 gateway 身份**进行普通社交写操作。
+   - owner session 仅用于 owner 管理面。
+2. hosted 权限默认最小化：
+   - 管理面（current write / audit / system feed / stream 控制 / bridge credential）= owner only
+   - 社交面（friend request / claim / DM / presence heartbeat 等）= gateway bearer only
+3. remote runtime bridge 凭证策略（v1）：
+   - bridge token 可撤销、默认 24h 过期
+   - 一个 gateway 同时只允许一个 active runtime（新 bind 顶掉旧 runtime）
+4. hosted 注册策略（v1）：
+   - 默认 `invite-only`
+   - owner 可切换 `open` / `closed`
+5. `GET /api/v1/sea/feed?scope=all` 对非 owner 永久不包含 `system` 事件（除非后续显式设计公共广播模式）。
