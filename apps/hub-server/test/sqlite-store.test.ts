@@ -52,6 +52,40 @@ function exerciseCoreSeam(store: GatewayStore) {
     },
   });
 
+  const hostedOwner = store.bootstrapHostedSession({
+    displayName: 'SQLite Hosted Owner',
+    handle: 'sqlite-hosted-owner',
+  }).gateway;
+  const remoteGateway = registerGateway(store, {
+    displayName: 'SQLite Remote Runtime',
+    handle: 'sqlite-remote-runtime',
+  });
+  const bridgeCredential = store.createRemoteRuntimeBridgeCredential({
+    createdByGatewayId: hostedOwner.id,
+    label: 'SQLite Bridge',
+  });
+  store.bindRemoteRuntime({
+    gatewayId: remoteGateway.id,
+    bridgeToken: bridgeCredential.token,
+    installationId: 'sqlite-remote-install',
+    runtimeId: 'sqlite-remote-runtime',
+    label: 'SQLite Remote Runtime',
+    source: 'parity-test',
+  });
+  store.heartbeatRemoteRuntime({
+    gatewayId: remoteGateway.id,
+    runtimeId: 'sqlite-remote-runtime',
+    connectionType: 'sqlite_test',
+    metadata: {
+      source: 'parity-test-heartbeat',
+    },
+  });
+  const remoteRuntime = store.getRemoteRuntimeBindingByGatewayId(remoteGateway.id);
+  const revokedBridgeCredential = store.revokeRemoteRuntimeBridgeCredential({
+    credentialId: bridgeCredential.id,
+    revokedByGatewayId: hostedOwner.id,
+  });
+
   return {
     current: {
       key: store.getCurrent().key,
@@ -79,6 +113,16 @@ function exerciseCoreSeam(store: GatewayStore) {
       summary: scene.summary,
       tone: scene.tone,
     })),
+    remoteRuntime: {
+      status: remoteRuntime?.status ?? null,
+      runtimeId: remoteRuntime?.binding.runtimeId ?? null,
+      installationId: remoteRuntime?.binding.installationId ?? null,
+      source: remoteRuntime?.binding.source ?? null,
+      metadata: remoteRuntime?.binding.metadata ?? null,
+      claimedByBoundGateway: bridgeCredential.claimedByGatewayId === remoteGateway.id,
+      revoked: revokedBridgeCredential.revokedAt !== null,
+      presenceStatus: store.getPresence(remoteGateway.id).status,
+    },
     mineEventTypes: store.listSeaFeed({
       viewerGatewayId: alpha.id,
       scope: 'mine',

@@ -138,3 +138,124 @@ test('GatewayStore scene seam writes owner-visible private scenes directly', () 
   assert.equal(sceneEvent.metadata.sceneId, scene.id);
   assert.equal(sceneEvent.metadata.source, 'store-test');
 });
+
+
+test('GatewayStore remote runtime bridge credential seam requires hosted owner identity', () => {
+  const store: GatewayStore = createGatewayStore();
+  const hostedOwner = store.bootstrapHostedSession({
+    displayName: 'Hosted Store Owner',
+    handle: 'hosted-store-owner',
+  }).gateway;
+  const outsider = registerGateway(store, {
+    displayName: 'Store Outsider',
+    handle: 'store-outsider',
+  });
+
+  const credential = store.createRemoteRuntimeBridgeCredential({
+    createdByGatewayId: hostedOwner.id,
+    label: 'Hosted Remote Bridge',
+  });
+  assert.equal(typeof credential.token, 'string');
+  assert.equal(credential.claimedByGatewayId, null);
+
+  assert.throws(
+    () =>
+      store.createRemoteRuntimeBridgeCredential({
+        createdByGatewayId: outsider.id,
+      }),
+    /hosted runtime bridge credential requires the hosted owner gateway/,
+  );
+});
+
+test('GatewayStore remote runtime seam supports claim, heartbeat, and revoke flow', () => {
+  const store: GatewayStore = createGatewayStore();
+  const hostedOwner = store.bootstrapHostedSession({
+    displayName: 'Hosted Runtime Owner',
+    handle: 'hosted-runtime-owner-store',
+  }).gateway;
+  const remoteGateway = registerGateway(store, {
+    displayName: 'Remote Runtime Gateway',
+    handle: 'remote-runtime-gateway-store',
+  });
+  const anotherGateway = registerGateway(store, {
+    displayName: 'Another Runtime Gateway',
+    handle: 'another-runtime-gateway-store',
+  });
+
+  const credential = store.createRemoteRuntimeBridgeCredential({
+    createdByGatewayId: hostedOwner.id,
+    label: 'Hosted Bridge Token',
+    metadata: {
+      source: 'store-test',
+    },
+  });
+
+  const bind = store.bindRemoteRuntime({
+    gatewayId: remoteGateway.id,
+    bridgeToken: credential.token,
+    installationId: 'remote-install-store',
+    runtimeId: 'remote-runtime-store',
+    label: 'Remote Runtime Store',
+    source: 'store_bind_test',
+    metadata: {
+      region: 'apac',
+    },
+  });
+
+  assert.equal(bind.created, true);
+  assert.equal(bind.bridgeCredential.claimedByGatewayId, remoteGateway.id);
+  assert.equal(bind.runtime.binding.runtimeId, 'remote-runtime-store');
+  assert.equal(bind.runtime.status, 'offline');
+
+  const heartbeat = store.heartbeatRemoteRuntime({
+    gatewayId: remoteGateway.id,
+    runtimeId: 'remote-runtime-store',
+    connectionType: 'openclaw_remote',
+    metadata: {
+      source: 'heartbeat-test',
+    },
+  });
+  assert.equal(heartbeat.runtime.status, 'online');
+  assert.equal(heartbeat.presence.status, 'online');
+
+  const runtime = store.getRemoteRuntimeBindingByGatewayId(remoteGateway.id);
+  assert.ok(runtime);
+  assert.equal(runtime.binding.installationId, 'remote-install-store');
+  assert.equal(runtime.binding.metadata.region, 'apac');
+  assert.equal(runtime.binding.metadata.source, 'heartbeat-test');
+
+  assert.throws(
+    () =>
+      store.bindRemoteRuntime({
+        gatewayId: anotherGateway.id,
+        bridgeToken: credential.token,
+      }),
+    /remote runtime bridge credential already claimed/,
+  );
+
+  const revoked = store.revokeRemoteRuntimeBridgeCredential({
+    credentialId: credential.id,
+    revokedByGatewayId: hostedOwner.id,
+  });
+  assert.equal(typeof revoked.revokedAt, 'string');
+  assert.equal(revoked.revokedByGatewayId, hostedOwner.id);
+
+  const replacementCredential = store.createRemoteRuntimeBridgeCredential({
+    createdByGatewayId: hostedOwner.id,
+    label: 'Second Hosted Bridge Token',
+  });
+  const boundAnother = store.bindRemoteRuntime({
+    gatewayId: anotherGateway.id,
+    bridgeToken: replacementCredential.token,
+  });
+  assert.equal(boundAnother.created, true);
+
+  assert.throws(
+    () =>
+      store.bindRemoteRuntime({
+        gatewayId: remoteGateway.id,
+        bridgeToken: credential.token,
+      }),
+    /remote runtime bridge credential revoked/,
+  );
+});
