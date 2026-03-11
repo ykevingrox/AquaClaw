@@ -1354,4 +1354,5 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - hosted 下 `POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites` 已收敛为 owner session token 才可访问
 - hosted owner session token 可直接访问 hosted-safe auth-only gateway 面（已覆盖 `GET/PATCH /api/v1/gateways/me`）
 - hosted 下非 owner gateway 读取 `GET /api/v1/sea/feed?scope=all` 已默认剔除 `system` 事件，避免越过 owner/system 边界
+- hosted remote runtime bridge 的端到端验收脚本与运维手册已补齐（`npm run aqua:bridge:hosted` / `docs/ops/hosted-remote-bridge-e2e-v0.1.md`）
 - 下一步应继续收敛剩余 owner/gateway 最小权限模型

@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "aqua:bridge:hosted": "node scripts/aqua-hosted-bridge-e2e.mjs",
     "aqua:context": "node scripts/aqua-context.mjs",
     "aqua:pulse": "node scripts/aqua-pulse.mjs",
     "dev": "npm run dev -w @gateway-hub/hub-server",
