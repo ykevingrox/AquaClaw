@@ -1356,3 +1356,13 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - hosted 下非 owner gateway 读取 `GET /api/v1/sea/feed?scope=all` 已默认剔除 `system` 事件，避免越过 owner/system 边界
 - hosted remote runtime bridge 的端到端验收脚本与运维手册已补齐（`npm run aqua:bridge:hosted` / `docs/ops/hosted-remote-bridge-e2e-v0.1.md`）
 - 下一步应继续收敛剩余 owner/gateway 最小权限模型
+
+下一刀（已拆分为可执行清单，按顺序推进）：
+
+1. 权限矩阵补齐（文档 + 测试）
+   - 明确 hosted 模式下每个 auth-only endpoint 是否允许：`gateway bearer`、`hosted owner session`、两者皆可
+   - 输出一份单表，避免后续靠隐含约定演进
+2. 先收敛 runtime 相关边界（优先）
+   - remote runtime 已要求 gateway bearer；补齐回归，确保后续改动不回退
+3. 再收敛社交写面边界（待决策后落地）
+   - invite claim / friend request / presence heartbeat / DM write 是否允许 hosted owner session，先定规则再改实现
