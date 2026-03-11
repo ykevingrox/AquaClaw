@@ -181,6 +181,10 @@ interface ClaimInviteBody {
   code?: string;
 }
 
+interface RevokeInviteParams {
+  inviteId?: string;
+}
+
 interface CreateBlockBody {
   gatewayId?: string;
   reason?: string;
@@ -746,6 +750,9 @@ function friendScopesErrorToHttp(message: string) {
 function inviteErrorToHttp(message: string) {
   if (message === 'invite not found') {
     return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'invite revoke forbidden') {
+    return { statusCode: 403, code: 'forbidden' };
   }
   if (message === 'invite revoked' || message === 'invite expired' || message === 'invite exhausted') {
     return { statusCode: 409, code: 'invalid_state' };
@@ -2763,6 +2770,64 @@ export function buildApp(options: BuildAppOptions = {}) {
       });
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'failed to create invite';
+      const mapped = inviteErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Params: RevokeInviteParams }>('/api/v1/invites/:inviteId/revoke', async (request, reply) => {
+    let revokedByGatewayId: string;
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      revokedByGatewayId = hostedOwner.session.gateway.id;
+    } else {
+      const result = getAuthedGateway(store, request.headers.authorization);
+      if ('error' in result) {
+        return reply.code(401).send({ ok: false, error: result.error });
+      }
+      revokedByGatewayId = result.gateway.id;
+    }
+
+    const inviteId = request.params?.inviteId?.trim();
+    if (!inviteId) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'inviteId is required',
+        },
+      });
+    }
+
+    try {
+      const invite = store.revokeInvite({
+        inviteId,
+        revokedByGatewayId,
+      });
+      return {
+        ok: true,
+        data: {
+          invite,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to revoke invite';
       const mapped = inviteErrorToHttp(messageText);
       return reply.code(mapped.statusCode).send({
         ok: false,

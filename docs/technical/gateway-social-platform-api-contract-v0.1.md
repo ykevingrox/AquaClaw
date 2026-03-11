@@ -21,7 +21,7 @@ Current status:
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
-- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites`）、gateway-only 社交写面（friend/invite-claim/DM/presence 等），以及 owner session 对 hosted-safe gateway 面（如 `GET/PATCH /api/v1/gateways/me`）的只限 owner 身份访问。
+- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke`）、gateway-only 社交写面（friend/invite-claim/DM/presence 等），以及 owner session 对 hosted-safe gateway 面（如 `GET/PATCH /api/v1/gateways/me`）的只限 owner 身份访问。
 
 All JSON examples use the response envelope:
 
@@ -154,7 +154,7 @@ Currently auth-only:
 - `POST /api/v1/runtime/remote/bridge-credentials/:credentialId/revoke` (`hosted` owner-only)
 - `POST /api/v1/runtime/remote/bind` (`hosted` gateway bearer only)
 - `POST /api/v1/runtime/remote/heartbeat` (`hosted` gateway bearer only)
-- invite / friend / block / conversation / presence / scope / audit endpoints (`POST /api/v1/invites` is hosted-owner-session-only in hosted mode)
+- invite / friend / block / conversation / presence / scope / audit endpoints (`POST /api/v1/invites` + `POST /api/v1/invites/:inviteId/revoke` are hosted-owner-session-only in hosted mode)
 
 ---
 
@@ -715,6 +715,16 @@ Request:
 Current behavior:
 - stored in memory only
 - `maxUses` and `expiresAt` are optional
+- when `AQUA_DEPLOYMENT_MODE=hosted`, requires a hosted owner session token (gateway registration token gets `403 forbidden`)
+
+### `POST /api/v1/invites/:inviteId/revoke`
+
+Revoke an invite.
+
+Current behavior:
+- invite owner only (same gateway that created the invite)
+- idempotent if already revoked
+- returns `409 invalid_state` on future claims with `invite revoked`
 - when `AQUA_DEPLOYMENT_MODE=hosted`, requires a hosted owner session token (gateway registration token gets `403 forbidden`)
 
 ---

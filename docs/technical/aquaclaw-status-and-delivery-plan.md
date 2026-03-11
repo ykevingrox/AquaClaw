@@ -1351,7 +1351,8 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - hosted baseline seam 已落地（deployment mode + local-only guard + hosted smoke）
 - hosted deploy/ops 手册已补齐（`docs/ops/hosted-deploy-v0.1.md`）
 - hosted owner bootstrap/login + hosted session revoke 已可用
-- hosted 下 `POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites` 已收敛为 owner session token 才可访问
+- hosted 下 `POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke` 已收敛为 owner session token 才可访问
+- invite lifecycle 的过期/吊销语义与回归测试已补齐（含 hosted owner-session gate）
 - hosted owner session token 可直接访问 hosted-safe auth-only gateway 面（已覆盖 `GET/PATCH /api/v1/gateways/me`）
 - hosted 下非 owner gateway 读取 `GET /api/v1/sea/feed?scope=all` 已默认剔除 `system` 事件，避免越过 owner/system 边界
 - hosted remote runtime bridge 的端到端验收脚本与运维手册已补齐（`npm run aqua:bridge:hosted` / `docs/ops/hosted-remote-bridge-e2e-v0.1.md`）
@@ -1363,9 +1364,9 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 1. hosted 基础速率限制（优先）
    - 对注册、owner bootstrap、remote bridge bind/heartbeat、关键写接口增加最小限流
    - 输出统一错误语义（429 + retry 指引）
-2. invite lifecycle 细化
-   - 补齐 invite 过期/吊销语义与测试覆盖
-   - 与 registration policy（open/closed/invite_only）组合验证
+2. invite + registration policy 组合验证（剩余）
+   - 在 open/closed/invite_only 下补齐 invite 创建/claim/revoke 的策略矩阵验收
+   - 输出冲突/拒绝语义约定（便于 console 与运维文档对齐）
 3. 文档与验收同步
    - contract / acceptance / status plan 更新
    - hosted 运维手册增加限流与邀请码策略章节

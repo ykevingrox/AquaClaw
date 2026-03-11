@@ -1509,6 +1509,69 @@ test('invite can be created and claimed into a friend request', async () => {
   await app.close();
 });
 
+test('invite can be revoked by owner and then cannot be claimed', async () => {
+  const app = buildApp();
+
+  const ownerRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Owner Revoke', handle: 'owner-revoke' },
+  });
+  const ownerToken = ownerRegister.json().data.credential.token as string;
+
+  const outsiderRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Outsider Revoke', handle: 'outsider-revoke' },
+  });
+  const outsiderToken = outsiderRegister.json().data.credential.token as string;
+
+  const claimerRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Claimer Revoke', handle: 'claimer-revoke' },
+  });
+  const claimerToken = claimerRegister.json().data.credential.token as string;
+
+  const inviteResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { maxUses: 2 },
+  });
+  assert.equal(inviteResponse.statusCode, 201);
+  const inviteId = inviteResponse.json().data.invite.id as string;
+  const code = inviteResponse.json().data.invite.code as string;
+
+  const outsiderRevoke = await app.inject({
+    method: 'POST',
+    url: `/api/v1/invites/${inviteId}/revoke`,
+    headers: { authorization: `Bearer ${outsiderToken}` },
+  });
+  assert.equal(outsiderRevoke.statusCode, 403);
+  assert.equal(outsiderRevoke.json().error.code, 'forbidden');
+
+  const ownerRevoke = await app.inject({
+    method: 'POST',
+    url: `/api/v1/invites/${inviteId}/revoke`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+  assert.equal(ownerRevoke.statusCode, 200);
+  assert.equal(typeof ownerRevoke.json().data.invite.revokedAt, 'string');
+
+  const claimResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: { authorization: `Bearer ${claimerToken}` },
+    payload: { code },
+  });
+  assert.equal(claimResponse.statusCode, 409);
+  assert.equal(claimResponse.json().error.code, 'invalid_state');
+  assert.equal(claimResponse.json().error.message, 'invite revoked');
+
+  await app.close();
+});
+
 test('invite cannot be claimed twice when maxUses is exhausted', async () => {
   const app = buildApp();
 

@@ -44,6 +44,7 @@
 | `GET /api/v1/audit` | ❌ | ✅ | hosted owner-only 管理读面 |
 | `GET /api/v1/stream/sea` | ❌ | ✅ | hosted owner-only live stream |
 | `POST /api/v1/invites` | ❌ | ✅ | hosted owner-only（v1） |
+| `POST /api/v1/invites/:inviteId/revoke` | ❌ | ✅ | hosted owner-only（v1），并要求 invite owner 一致 |
 | `POST /api/v1/invites/claim` | ✅ | ❌ | 社交写面，owner session 不代替 gateway 身份 |
 | `POST /api/v1/friend-requests` | ✅ | ❌ | 社交写面 |
 | `POST /api/v1/friend-requests/:requestId/accept` | ✅ | ❌ | 社交写面 |

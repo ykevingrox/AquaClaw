@@ -1113,11 +1113,22 @@ test('hosted owner session gate protects owner-only hosted-session/current/audit
   });
   assert.equal(ownerInvite.statusCode, 201);
   assert.equal(ownerInvite.json().data.invite.maxUses, 2);
+  const ownerInviteId = ownerInvite.json().data.invite.id as string;
+
+  const forbiddenInviteRevoke = await app.inject({
+    method: 'POST',
+    url: `/api/v1/invites/${ownerInviteId}/revoke`,
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+  });
+  assert.equal(forbiddenInviteRevoke.statusCode, 403);
+  assert.equal(forbiddenInviteRevoke.json().error.code, 'forbidden');
 
   await app.close();
 });
 
-test('hosted invite lifecycle enforces expiresAt validation and expired claim behavior', async () => {
+test('hosted invite lifecycle enforces expiresAt validation plus revoke behavior', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
   const owner = await bootstrapHostedOwner(app, 'hosted-invite-lifecycle-owner');
@@ -1175,6 +1186,44 @@ test('hosted invite lifecycle enforces expiresAt validation and expired claim be
   assert.equal(expiredClaim.statusCode, 409);
   assert.equal(expiredClaim.json().error.code, 'invalid_state');
   assert.equal(expiredClaim.json().error.message, 'invite expired');
+
+  const revocableInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      maxUses: 2,
+    },
+  });
+  assert.equal(revocableInvite.statusCode, 201);
+  const revocableInviteId = revocableInvite.json().data.invite.id as string;
+  const revocableInviteCode = revocableInvite.json().data.invite.code as string;
+
+  const revokeInvite = await app.inject({
+    method: 'POST',
+    url: `/api/v1/invites/${revocableInviteId}/revoke`,
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  assert.equal(revokeInvite.statusCode, 200);
+  assert.equal(typeof revokeInvite.json().data.invite.revokedAt, 'string');
+
+  const revokedClaim = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites/claim',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+    payload: {
+      code: revocableInviteCode,
+    },
+  });
+  assert.equal(revokedClaim.statusCode, 409);
+  assert.equal(revokedClaim.json().error.code, 'invalid_state');
+  assert.equal(revokedClaim.json().error.message, 'invite revoked');
 
   await app.close();
 });
