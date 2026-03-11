@@ -121,6 +121,25 @@ async function runHostedSmoke(app: ReturnType<typeof buildApp>) {
   assert.equal(typeof current.json().data.current.key, 'string');
   assert.equal(typeof current.json().data.current.tone, 'string');
 
+  const ownerBootstrap = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-hosted',
+    payload: {
+      bootstrapKey: 'hosted-smoke-secret',
+      displayName: 'Hosted Smoke Owner',
+      handle: 'hosted-smoke-owner',
+    },
+  });
+  assert.equal(ownerBootstrap.statusCode, 201);
+  const ownerToken = ownerBootstrap.json().data.credential.token as string;
+
+  const ownerMe = await app.inject({
+    method: 'GET',
+    url: '/api/v1/session/hosted/me',
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+  assert.equal(ownerMe.statusCode, 200);
+
   const register = await app.inject({
     method: 'POST',
     url: '/api/v1/gateways/register',
@@ -140,6 +159,36 @@ async function runHostedSmoke(app: ReturnType<typeof buildApp>) {
   assert.equal(me.statusCode, 200);
   assert.equal(me.json().data.gateway.handle, 'hosted-smoke-gateway');
 
+  const guestCurrentWrite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: { authorization: `Bearer ${token}` },
+    payload: {
+      key: 'hosted-smoke-current',
+      label: 'Hosted Smoke Current',
+      summary: 'Only hosted owner should set this current.',
+      tone: 'calm',
+      startsAt: new Date(Date.now() - 60_000).toISOString(),
+      endsAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    },
+  });
+  assert.equal(guestCurrentWrite.statusCode, 403);
+
+  const ownerCurrentWrite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: {
+      key: 'hosted-smoke-current',
+      label: 'Hosted Smoke Current',
+      summary: 'Hosted owner session writes the system current in hosted smoke.',
+      tone: 'calm',
+      startsAt: new Date(Date.now() - 60_000).toISOString(),
+      endsAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    },
+  });
+  assert.equal(ownerCurrentWrite.statusCode, 201);
+
   const seaFeed = await app.inject({
     method: 'GET',
     url: '/api/v1/sea/feed?scope=mine',
@@ -147,12 +196,86 @@ async function runHostedSmoke(app: ReturnType<typeof buildApp>) {
   });
   assert.equal(seaFeed.statusCode, 200);
   assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'gateway.registered'), true);
+  assert.equal(seaFeed.json().data.items.some((item: { visibility: string }) => item.visibility === 'system'), false);
+
+  const createBridgeCredential = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bridge-credentials',
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: {
+      label: 'hosted-smoke-bridge',
+    },
+  });
+  assert.equal(createBridgeCredential.statusCode, 201);
+  const bridgeToken = createBridgeCredential.json().data.credential.token as string;
+
+  const bindRemote = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bind',
+    headers: { authorization: `Bearer ${token}` },
+    payload: {
+      bridgeToken,
+      runtimeId: 'hosted-smoke-runtime',
+    },
+  });
+  assert.equal(bindRemote.statusCode, 201);
+
+  const ownerRemoteMe = await app.inject({
+    method: 'GET',
+    url: '/api/v1/runtime/remote/me',
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+  assert.equal(ownerRemoteMe.statusCode, 403);
+
+  const remoteMe = await app.inject({
+    method: 'GET',
+    url: '/api/v1/runtime/remote/me',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(remoteMe.statusCode, 200);
+  assert.equal(remoteMe.json().data.runtime.runtimeId, 'hosted-smoke-runtime');
+
+  const remoteHeartbeat = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/heartbeat',
+    headers: { authorization: `Bearer ${token}` },
+    payload: {
+      runtimeId: 'hosted-smoke-runtime',
+      connectionType: 'smoke_remote_runtime',
+    },
+  });
+  assert.equal(remoteHeartbeat.statusCode, 200);
+  assert.equal(remoteHeartbeat.json().data.runtime.status, 'online');
+
+  const guestInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: { authorization: `Bearer ${token}` },
+    payload: {
+      maxUses: 1,
+    },
+  });
+  assert.equal(guestInvite.statusCode, 403);
+
+  const ownerInvite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: {
+      maxUses: 2,
+    },
+  });
+  assert.equal(ownerInvite.statusCode, 201);
+  assert.equal(ownerInvite.json().data.invite.maxUses, 2);
 
   for (const endpoint of localOnlyEndpoints) {
     await assertHostedLocalGuard(app, endpoint);
   }
 
-  return 'health=1 current=1 register=1 me=1 sea_feed=1 local_mode_guards=7';
+  return (
+    'health=1 current=1 hosted_owner_bootstrap=1 hosted_owner_me=1 register=1 me=1 current_owner_gate=1 sea_feed=1 ' +
+    'remote_bridge=1 remote_runtime_bind=1 remote_runtime_me=1 remote_runtime_heartbeat=1 invite_owner_gate=1 local_mode_guards=7'
+  );
 }
 
 async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) {
@@ -479,6 +602,8 @@ const store = createGatewayStore({
 const app = buildApp({
   store,
   deploymentMode: config.deploymentMode,
+  hostedOwnerBootstrapKey:
+    config.deploymentMode === 'hosted' ? (config.hostedOwnerBootstrapKey ?? 'hosted-smoke-secret') : undefined,
 });
 const baseUrl = await app.listen({
   host: '127.0.0.1',
