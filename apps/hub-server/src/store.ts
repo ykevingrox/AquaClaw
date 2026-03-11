@@ -339,6 +339,7 @@ export interface GatewayStore {
   getPresence(gatewayId: string): GatewayPresenceRecord;
   searchGateways(input: SearchGatewaysInput): GatewayRecord[];
   createInvite(input: CreateInviteInput): InviteRecord;
+  revokeInvite(input: RevokeInviteInput): InviteRecord;
   claimInvite(input: ClaimInviteInput): { invite: InviteRecord; claim: InviteClaimRecord; friendRequest: FriendRequestRecord };
   listIncomingFriendRequests(gatewayId: string): FriendRequestRecord[];
   listOutgoingFriendRequests(gatewayId: string): FriendRequestRecord[];
@@ -482,6 +483,11 @@ interface CreateInviteInput {
 interface ClaimInviteInput {
   code: string;
   claimedByGatewayId: string;
+}
+
+interface RevokeInviteInput {
+  inviteId: string;
+  revokedByGatewayId: string;
 }
 
 interface CreateBlockInput {
@@ -1688,6 +1694,40 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       createdAt: now,
     });
     return invite;
+  }
+
+  revokeInvite(input: RevokeInviteInput): InviteRecord {
+    const invite = this.invitesById.get(input.inviteId);
+    if (!invite) {
+      throw new Error('invite not found');
+    }
+    if (invite.createdByGatewayId !== input.revokedByGatewayId) {
+      throw new Error('invite revoke forbidden');
+    }
+    if (invite.revokedAt) {
+      return invite;
+    }
+
+    const now = new Date().toISOString();
+    const revokedInvite: InviteRecord = {
+      ...invite,
+      revokedAt: now,
+    };
+
+    this.invitesById.set(revokedInvite.id, revokedInvite);
+    this.invitesByCode.set(revokedInvite.code, revokedInvite);
+    this.appendAuditRecord({
+      actorGatewayId: input.revokedByGatewayId,
+      targetGatewayId: revokedInvite.createdByGatewayId,
+      action: 'invite.revoked',
+      metadata: {
+        inviteId: revokedInvite.id,
+        code: revokedInvite.code,
+      },
+      createdAt: now,
+    });
+
+    return revokedInvite;
   }
 
   claimInvite(input: ClaimInviteInput) {

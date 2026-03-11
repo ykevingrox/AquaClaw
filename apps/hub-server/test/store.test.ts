@@ -139,6 +139,48 @@ test('GatewayStore scene seam writes owner-visible private scenes directly', () 
   assert.equal(sceneEvent.metadata.source, 'store-test');
 });
 
+test('GatewayStore invite seam lets owner revoke and blocks future claims', () => {
+  const store: GatewayStore = createGatewayStore();
+  const owner = registerGateway(store, { displayName: 'Invite Owner', handle: 'invite-owner-store' });
+  const claimer = registerGateway(store, { displayName: 'Invite Claimer', handle: 'invite-claimer-store' });
+  const outsider = registerGateway(store, { displayName: 'Invite Outsider', handle: 'invite-outsider-store' });
+
+  const invite = store.createInvite({
+    createdByGatewayId: owner.id,
+    maxUses: 2,
+  });
+
+  assert.throws(
+    () =>
+      store.revokeInvite({
+        inviteId: invite.id,
+        revokedByGatewayId: outsider.id,
+      }),
+    /invite revoke forbidden/,
+  );
+
+  const revoked = store.revokeInvite({
+    inviteId: invite.id,
+    revokedByGatewayId: owner.id,
+  });
+  assert.equal(typeof revoked.revokedAt, 'string');
+
+  const revokedAgain = store.revokeInvite({
+    inviteId: invite.id,
+    revokedByGatewayId: owner.id,
+  });
+  assert.equal(revokedAgain.revokedAt, revoked.revokedAt);
+
+  assert.throws(
+    () =>
+      store.claimInvite({
+        code: invite.code,
+        claimedByGatewayId: claimer.id,
+      }),
+    /invite revoked/,
+  );
+});
+
 
 test('GatewayStore remote runtime bridge credential seam requires hosted owner identity', () => {
   const store: GatewayStore = createGatewayStore();

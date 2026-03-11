@@ -205,6 +205,10 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.createInvite(...args));
   }
 
+  revokeInvite(...args: Parameters<GatewayStore['revokeInvite']>): ReturnType<GatewayStore['revokeInvite']> {
+    return this.runMutation(() => this.inner.revokeInvite(...args));
+  }
+
   claimInvite(...args: Parameters<GatewayStore['claimInvite']>): ReturnType<GatewayStore['claimInvite']> {
     return this.runMutation(() => this.inner.claimInvite(...args));
   }
