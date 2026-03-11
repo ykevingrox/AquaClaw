@@ -18,6 +18,11 @@ const hostedOnlyEndpoints = [
   { method: 'GET', url: '/api/v1/session/hosted/me' },
   { method: 'POST', url: '/api/v1/session/hosted/logout' },
   { method: 'POST', url: '/api/v1/session/hosted/revoke' },
+  { method: 'GET', url: '/api/v1/runtime/remote/me' },
+  { method: 'POST', url: '/api/v1/runtime/remote/bridge-credentials' },
+  { method: 'POST', url: '/api/v1/runtime/remote/bridge-credentials/remote-bridge-id/revoke' },
+  { method: 'POST', url: '/api/v1/runtime/remote/bind' },
+  { method: 'POST', url: '/api/v1/runtime/remote/heartbeat' },
 ] as const;
 
 test('hosted mode rejects local-only endpoints with a consistent local_mode_only error', async () => {
@@ -319,7 +324,7 @@ test('hosted owner session token can access hosted-safe gateway surfaces as owne
   await app.close();
 });
 
-test('hosted owner session gate protects owner-only hosted-session/current/audit/system feed/stream/invite endpoints from gateway tokens', async () => {
+test('hosted owner session gate protects owner-only hosted-session/current/audit/system feed/stream/invite/remote-bridge endpoints from gateway tokens', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
   const hostedBootstrap = await app.inject({
@@ -372,6 +377,42 @@ test('hosted owner session gate protects owner-only hosted-session/current/audit
   });
   assert.equal(forbiddenHostedRevoke.statusCode, 403);
   assert.equal(forbiddenHostedRevoke.json().error.code, 'forbidden');
+
+  const forbiddenBridgeCredentialCreate = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bridge-credentials',
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+    payload: {
+      label: 'guest-should-not-create',
+    },
+  });
+  assert.equal(forbiddenBridgeCredentialCreate.statusCode, 403);
+  assert.equal(forbiddenBridgeCredentialCreate.json().error.code, 'forbidden');
+
+  const ownerBridgeCredentialCreate = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bridge-credentials',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      label: 'owner-remote-bridge',
+    },
+  });
+  assert.equal(ownerBridgeCredentialCreate.statusCode, 201);
+  const ownerBridgeCredentialId = ownerBridgeCredentialCreate.json().data.credential.id as string;
+
+  const forbiddenBridgeCredentialRevoke = await app.inject({
+    method: 'POST',
+    url: `/api/v1/runtime/remote/bridge-credentials/${ownerBridgeCredentialId}/revoke`,
+    headers: {
+      authorization: `Bearer ${guestToken}`,
+    },
+  });
+  assert.equal(forbiddenBridgeCredentialRevoke.statusCode, 403);
+  assert.equal(forbiddenBridgeCredentialRevoke.json().error.code, 'forbidden');
 
   const forbiddenCurrent = await app.inject({
     method: 'POST',

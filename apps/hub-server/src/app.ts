@@ -45,6 +45,24 @@ interface BindLocalRuntimeBody {
   metadata?: Record<string, unknown>;
 }
 
+interface CreateRemoteRuntimeBridgeCredentialBody {
+  label?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface RevokeRemoteRuntimeBridgeCredentialParams {
+  credentialId: string;
+}
+
+interface BindRemoteRuntimeBody {
+  bridgeToken?: string;
+  installationId?: string;
+  runtimeId?: string;
+  label?: string;
+  source?: string;
+  metadata?: Record<string, unknown>;
+}
+
 interface UpdateMeBody {
   displayName?: string;
   bio?: string;
@@ -113,6 +131,7 @@ interface PresenceHeartbeatBody {
 }
 
 interface RuntimeHeartbeatBody {
+  runtimeId?: string;
   connectionType?: string;
   metadata?: Record<string, unknown>;
 }
@@ -444,6 +463,52 @@ function toLocalRuntimeSummary(
   };
 }
 
+function toRemoteRuntimeSummary(
+  store: GatewayStore,
+  runtime: {
+    binding: {
+      id: string;
+      bridgeCredentialId: string;
+      installationId: string;
+      runtimeId: string;
+      gatewayId: string;
+      label: string;
+      source: string;
+      metadata: Record<string, unknown>;
+      lastHeartbeatAt: string | null;
+      createdAt: string;
+      updatedAt: string;
+    };
+    status: 'online' | 'recently_active' | 'offline';
+  },
+) {
+  const gateway = store.findById(runtime.binding.gatewayId);
+  const presence = gateway ? store.getPresence(gateway.id) : null;
+
+  return {
+    runtime: {
+      id: runtime.binding.id,
+      bridgeCredentialId: runtime.binding.bridgeCredentialId,
+      installationId: runtime.binding.installationId,
+      runtimeId: runtime.binding.runtimeId,
+      label: runtime.binding.label,
+      source: runtime.binding.source,
+      status: runtime.status,
+      lastHeartbeatAt: runtime.binding.lastHeartbeatAt,
+      metadata: runtime.binding.metadata,
+      createdAt: runtime.binding.createdAt,
+      updatedAt: runtime.binding.updatedAt,
+    },
+    gateway: gateway ? toGatewaySummary(gateway) : null,
+    presence: presence
+      ? {
+          status: presence.status,
+          lastSeenAt: presence.lastSeenAt,
+        }
+      : null,
+  };
+}
+
 function parsePositiveIntegerQuery(value: string | undefined) {
   if (value === undefined) {
     return { value: undefined } as const;
@@ -588,6 +653,23 @@ function localRuntimeErrorToHttp(message: string) {
   }
   if (message === 'local runtime binding requires the primary owner gateway') {
     return { statusCode: 403, code: 'forbidden' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function remoteRuntimeErrorToHttp(message: string) {
+  if (message === 'gateway not found' || message === 'remote runtime bridge credential not found' || message === 'remote runtime binding not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'hosted runtime bridge credential requires the hosted owner gateway') {
+    return { statusCode: 403, code: 'forbidden' };
+  }
+  if (
+    message === 'remote runtime bridge credential revoked' ||
+    message === 'remote runtime bridge credential already claimed' ||
+    message === 'remote runtime binding does not match runtimeId'
+  ) {
+    return { statusCode: 409, code: 'invalid_state' };
   }
   return { statusCode: 400, code: 'validation_failed' };
 }
@@ -1120,6 +1202,353 @@ export function buildApp(options: BuildAppOptions = {}) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'failed to heartbeat local runtime';
       const mapped = localRuntimeErrorToHttp(message);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message,
+        },
+      });
+    }
+  });
+
+  app.get('/api/v1/runtime/remote/me', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const runtime = store.getRemoteRuntimeBindingByGatewayId(result.gateway.id);
+    if (!runtime) {
+      return reply.code(404).send({
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: 'remote runtime binding not found',
+        },
+      });
+    }
+
+    return {
+      ok: true,
+      data: toRemoteRuntimeSummary(store, runtime),
+    };
+  });
+
+  app.post<{ Body: CreateRemoteRuntimeBridgeCredentialBody }>('/api/v1/runtime/remote/bridge-credentials', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+    if (!hostedOwner.ok) {
+      const endpointError = hostedOwner.error;
+      return reply.code(endpointError.statusCode).send({
+        ok: false,
+        error: {
+          code: endpointError.code,
+          message: endpointError.message,
+        },
+      });
+    }
+
+    const { label, metadata } = request.body ?? {};
+    if (label !== undefined && (typeof label !== 'string' || !label.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'label must be a non-empty string when provided',
+        },
+      });
+    }
+    if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'metadata must be an object when provided',
+        },
+      });
+    }
+
+    try {
+      const credential = store.createRemoteRuntimeBridgeCredential({
+        createdByGatewayId: hostedOwner.session.gateway.id,
+        label,
+        metadata,
+      });
+
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          credential: {
+            id: credential.id,
+            token: credential.token,
+            createdByGatewayId: credential.createdByGatewayId,
+            claimedByGatewayId: credential.claimedByGatewayId,
+            label: credential.label,
+            metadata: credential.metadata,
+            revokedAt: credential.revokedAt,
+            revokedByGatewayId: credential.revokedByGatewayId,
+            createdAt: credential.createdAt,
+            updatedAt: credential.updatedAt,
+          },
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to create remote runtime bridge credential';
+      const mapped = remoteRuntimeErrorToHttp(message);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message,
+        },
+      });
+    }
+  });
+
+  app.post<{ Params: RevokeRemoteRuntimeBridgeCredentialParams }>(
+    '/api/v1/runtime/remote/bridge-credentials/:credentialId/revoke',
+    async (request, reply) => {
+      if (deploymentMode !== 'hosted') {
+        return sendHostedModeOnly(reply);
+      }
+
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+
+      const credentialId = request.params?.credentialId?.trim();
+      if (!credentialId) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'validation_failed',
+            message: 'credentialId is required',
+          },
+        });
+      }
+
+      try {
+        const credential = store.revokeRemoteRuntimeBridgeCredential({
+          credentialId,
+          revokedByGatewayId: hostedOwner.session.gateway.id,
+        });
+
+        return {
+          ok: true,
+          data: {
+            credential: {
+              id: credential.id,
+              createdByGatewayId: credential.createdByGatewayId,
+              claimedByGatewayId: credential.claimedByGatewayId,
+              label: credential.label,
+              metadata: credential.metadata,
+              revokedAt: credential.revokedAt,
+              revokedByGatewayId: credential.revokedByGatewayId,
+              createdAt: credential.createdAt,
+              updatedAt: credential.updatedAt,
+            },
+          },
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'failed to revoke remote runtime bridge credential';
+        const mapped = remoteRuntimeErrorToHttp(message);
+        return reply.code(mapped.statusCode).send({
+          ok: false,
+          error: {
+            code: mapped.code,
+            message,
+          },
+        });
+      }
+    },
+  );
+
+  app.post<{ Body: BindRemoteRuntimeBody }>('/api/v1/runtime/remote/bind', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const { bridgeToken, installationId, runtimeId, label, source, metadata } = request.body ?? {};
+
+    if (typeof bridgeToken !== 'string' || !bridgeToken.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'bridgeToken is required',
+        },
+      });
+    }
+    if (installationId !== undefined && (typeof installationId !== 'string' || !installationId.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'installationId must be a non-empty string when provided',
+        },
+      });
+    }
+    if (runtimeId !== undefined && (typeof runtimeId !== 'string' || !runtimeId.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'runtimeId must be a non-empty string when provided',
+        },
+      });
+    }
+    if (label !== undefined && (typeof label !== 'string' || !label.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'label must be a non-empty string when provided',
+        },
+      });
+    }
+    if (source !== undefined && (typeof source !== 'string' || !source.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'source must be a non-empty string when provided',
+        },
+      });
+    }
+    if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'metadata must be an object when provided',
+        },
+      });
+    }
+
+    try {
+      const runtime = store.bindRemoteRuntime({
+        bridgeToken,
+        gatewayId: result.gateway.id,
+        installationId,
+        runtimeId,
+        label,
+        source,
+        metadata,
+      });
+
+      return reply.code(runtime.created ? 201 : 200).send({
+        ok: true,
+        data: {
+          ...toRemoteRuntimeSummary(store, runtime.runtime),
+          bridgeCredential: {
+            id: runtime.bridgeCredential.id,
+            createdByGatewayId: runtime.bridgeCredential.createdByGatewayId,
+            claimedByGatewayId: runtime.bridgeCredential.claimedByGatewayId,
+            label: runtime.bridgeCredential.label,
+            metadata: runtime.bridgeCredential.metadata,
+            revokedAt: runtime.bridgeCredential.revokedAt,
+            revokedByGatewayId: runtime.bridgeCredential.revokedByGatewayId,
+            createdAt: runtime.bridgeCredential.createdAt,
+            updatedAt: runtime.bridgeCredential.updatedAt,
+          },
+          created: runtime.created,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to bind remote runtime';
+      const mapped = remoteRuntimeErrorToHttp(message);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: RuntimeHeartbeatBody }>('/api/v1/runtime/remote/heartbeat', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const runtimeId = request.body?.runtimeId?.trim();
+    if (request.body?.runtimeId !== undefined && !runtimeId) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'runtimeId must be a non-empty string when provided',
+        },
+      });
+    }
+
+    const connectionType = request.body?.connectionType?.trim();
+    if (request.body?.connectionType !== undefined && !connectionType) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'connectionType must be a non-empty string when provided',
+        },
+      });
+    }
+
+    const metadata = request.body?.metadata;
+    if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'metadata must be an object when provided',
+        },
+      });
+    }
+
+    try {
+      const runtime = store.heartbeatRemoteRuntime({
+        gatewayId: result.gateway.id,
+        runtimeId,
+        connectionType: connectionType ?? null,
+        metadata,
+      });
+
+      return {
+        ok: true,
+        data: {
+          ...toRemoteRuntimeSummary(store, runtime.runtime),
+          connectionType: connectionType ?? null,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to heartbeat remote runtime';
+      const mapped = remoteRuntimeErrorToHttp(message);
       return reply.code(mapped.statusCode).send({
         ok: false,
         error: {

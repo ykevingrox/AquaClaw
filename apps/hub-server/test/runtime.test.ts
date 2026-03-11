@@ -20,6 +20,29 @@ async function bootstrapLocalSession(app: ReturnType<typeof buildApp>) {
   };
 }
 
+async function bootstrapHostedOwnerSession(app: ReturnType<typeof buildApp>) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-hosted',
+    payload: {
+      bootstrapKey: 'hosted-secret',
+      displayName: 'Hosted Owner Runtime',
+      handle: 'hosted-owner-runtime',
+    },
+  });
+
+  assert.equal(response.statusCode, 201);
+  return response.json().data as {
+    gateway: {
+      id: string;
+      handle: string;
+    };
+    credential: {
+      token: string;
+    };
+  };
+}
+
 test('local runtime bind creates a stable binding and get returns its summary', async () => {
   const app = buildApp();
   const owner = await bootstrapLocalSession(app);
@@ -136,6 +159,144 @@ test('local runtime endpoints require a local owner session instead of a manual 
     });
     assert.equal(response.statusCode, 401);
   }
+
+  await app.close();
+});
+
+test('hosted remote runtime bridge flow supports create-bind-heartbeat-revoke lifecycle', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwnerSession(app);
+
+  const registerRemote = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Remote Runtime Gateway',
+      handle: 'hosted-remote-runtime-gateway',
+    },
+  });
+  assert.equal(registerRemote.statusCode, 201);
+  const remoteGatewayToken = registerRemote.json().data.credential.token as string;
+
+  const createBridgeCredential = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bridge-credentials',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      label: 'hosted-remote-bridge',
+      metadata: {
+        issuedBy: 'runtime-test',
+      },
+    },
+  });
+  assert.equal(createBridgeCredential.statusCode, 201);
+  const bridgeCredential = createBridgeCredential.json().data.credential as {
+    id: string;
+    token: string;
+    label: string;
+  };
+
+  const bindRemote = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bind',
+    headers: {
+      authorization: `Bearer ${remoteGatewayToken}`,
+    },
+    payload: {
+      bridgeToken: bridgeCredential.token,
+      installationId: 'remote-installation-slice-a',
+      runtimeId: 'remote-runtime-slice-a',
+      label: 'Remote Runtime Slice A',
+      source: 'runtime_remote_bind_test',
+      metadata: {
+        host: 'remote-node-a',
+      },
+    },
+  });
+  assert.equal(bindRemote.statusCode, 201);
+  assert.equal(bindRemote.json().data.created, true);
+  assert.equal(bindRemote.json().data.runtime.runtimeId, 'remote-runtime-slice-a');
+  assert.equal(bindRemote.json().data.runtime.bridgeCredentialId, bridgeCredential.id);
+  assert.equal(bindRemote.json().data.presence.status, 'offline');
+
+  const getRemote = await app.inject({
+    method: 'GET',
+    url: '/api/v1/runtime/remote/me',
+    headers: {
+      authorization: `Bearer ${remoteGatewayToken}`,
+    },
+  });
+  assert.equal(getRemote.statusCode, 200);
+  assert.equal(getRemote.json().data.runtime.runtimeId, 'remote-runtime-slice-a');
+
+  const heartbeatRemote = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/heartbeat',
+    headers: {
+      authorization: `Bearer ${remoteGatewayToken}`,
+    },
+    payload: {
+      runtimeId: 'remote-runtime-slice-a',
+      connectionType: 'openclaw_remote',
+      metadata: {
+        source: 'runtime-remote-test',
+      },
+    },
+  });
+  assert.equal(heartbeatRemote.statusCode, 200);
+  assert.equal(heartbeatRemote.json().data.runtime.status, 'online');
+  assert.equal(heartbeatRemote.json().data.presence.status, 'online');
+  assert.equal(heartbeatRemote.json().data.connectionType, 'openclaw_remote');
+
+  const wrongRuntimeHeartbeat = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/heartbeat',
+    headers: {
+      authorization: `Bearer ${remoteGatewayToken}`,
+    },
+    payload: {
+      runtimeId: 'wrong-runtime-id',
+    },
+  });
+  assert.equal(wrongRuntimeHeartbeat.statusCode, 409);
+  assert.equal(wrongRuntimeHeartbeat.json().error.code, 'invalid_state');
+
+  const revokeBridgeCredential = await app.inject({
+    method: 'POST',
+    url: `/api/v1/runtime/remote/bridge-credentials/${bridgeCredential.id}/revoke`,
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(revokeBridgeCredential.statusCode, 200);
+  assert.equal(typeof revokeBridgeCredential.json().data.credential.revokedAt, 'string');
+
+  const registerSecondRemote = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Second Remote Runtime Gateway',
+      handle: 'hosted-remote-runtime-gateway-two',
+    },
+  });
+  assert.equal(registerSecondRemote.statusCode, 201);
+  const secondRemoteGatewayToken = registerSecondRemote.json().data.credential.token as string;
+
+  const bindWithRevokedCredential = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/bind',
+    headers: {
+      authorization: `Bearer ${secondRemoteGatewayToken}`,
+    },
+    payload: {
+      bridgeToken: bridgeCredential.token,
+    },
+  });
+  assert.equal(bindWithRevokedCredential.statusCode, 409);
+  assert.equal(bindWithRevokedCredential.json().error.code, 'invalid_state');
 
   await app.close();
 });
