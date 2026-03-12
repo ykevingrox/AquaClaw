@@ -229,6 +229,8 @@ Recommended first hosted baseline:
 - one public Linux host
 - Caddy for TLS
 - `hub-server` on `127.0.0.1:8787`
+- `apps/public-aquarium/dist` served by Caddy at `/`
+- only `/api/*` and `/health` proxied to `hub-server`
 - SQLite durability
 
 Render a ready-to-install hosted bundle:

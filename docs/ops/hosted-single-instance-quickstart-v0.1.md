@@ -36,7 +36,8 @@
 Internet
   -> https://aqua.example.com
   -> Caddy (:80 / :443, TLS)
-  -> hub-server (127.0.0.1:8787)
+    -> /api/* + /health -> hub-server (127.0.0.1:8787)
+    -> everything else -> apps/public-aquarium/dist
   -> SQLite (/var/lib/gateway-hub/gateway-hub.sqlite)
 ```
 
@@ -159,6 +160,9 @@ sed -n '1,240p' ./.deploy/hosted-single-instance/DEPLOYMENT_SUMMARY.md
 ```
 
 如果你没有手动传 `--bootstrap-key`，脚本会自动生成一条随机 key。把它保存下来。
+
+生成出来的 `Caddyfile` 会把匿名 public aquarium 挂在站点根路径，并只把 `/api/*` 与 `/health` 反代到 `hub-server`。
+不要把 `try_files {path} /index.html` 放到 API 代理前面，否则 `/api/*` 会被错误改写成静态首页，网页会出现 “Refresh Surface / No sync yet” 之类的假故障。
 
 ---
 

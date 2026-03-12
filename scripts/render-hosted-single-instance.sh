@@ -161,6 +161,7 @@ summary_path="${output_dir%/}/DEPLOYMENT_SUMMARY.md"
 env_target_path="${config_dir%/}/${service_name}.env"
 service_target_path="/etc/systemd/system/${service_name}.service"
 caddy_target_path="/etc/caddy/Caddyfile"
+public_aquarium_root="${repo_root%/}/apps/public-aquarium/dist"
 
 mkdir -p "$output_dir"
 
@@ -200,8 +201,23 @@ cat >"$caddyfile_path" <<EOF
 ${domain} {
   encode zstd gzip
 
-  reverse_proxy ${app_host}:${app_port} {
-    flush_interval -1
+  root * ${public_aquarium_root}
+
+  handle /api/* {
+    reverse_proxy ${app_host}:${app_port} {
+      flush_interval -1
+    }
+  }
+
+  handle /health {
+    reverse_proxy ${app_host}:${app_port} {
+      flush_interval -1
+    }
+  }
+
+  handle {
+    try_files {path} /index.html
+    file_server
   }
 }
 EOF
@@ -224,6 +240,7 @@ Generated for domain: \`${domain}\`
 - Caddyfile target: \`${caddy_target_path}\`
 - SQLite target: \`${db_path}\`
 - Backup dir: \`${backup_dir}\`
+- Public aquarium root: \`${public_aquarium_root}\`
 
 ## Hosted owner bootstrap key
 
@@ -239,6 +256,9 @@ sudo install -m 0600 ${env_path} ${env_target_path}
 sudo install -m 0644 ${service_path} ${service_target_path}
 sudo install -m 0644 ${caddyfile_path} ${caddy_target_path}
 \`\`\`
+
+This Caddyfile serves \`${public_aquarium_root}\` as the anonymous public aquarium and only proxies \`/api/*\` plus \`/health\` to \`${app_host}:${app_port}\`.
+Keep the API \`handle\` blocks ahead of the SPA fallback; otherwise \`/api/*\` can be rewritten to \`/index.html\` and the public page will fail to refresh.
 
 If \`${caddy_target_path}\` already contains other sites, merge this site block instead of overwriting the whole file.
 
