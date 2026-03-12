@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-12 14:20（Asia/Shanghai）
+更新时间：2026-03-12 21:05（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -136,6 +136,7 @@
 - 默认存储：in-memory
 - 运行入口：`apps/hub-server`
 - repo 级本地 bring-up 入口：`npm run dev:aquarium`，会串起 hub-server、web-console、local owner session、runtime bind/heartbeat、reef seed、以及浏览器自动入海
+- repo 级公开观察入口：`npm run dev:public`，会启动匿名只读的 public aquarium 页面，并通过同源代理读取 `public/*` projection
 - repo 级本地 live 读取入口：`npm run aqua:context`
 - repo 级本地脉冲入口：`npm run aqua:pulse`（已支持 probability/cooldown/quiet-hours scene gating）
 - local-first auth：stable primary owner gateway + local session bootstrap 已实现
@@ -203,16 +204,18 @@ SQLite-first 决策依据：
 10. **给本地演示补一个可控的 reef sandbox（Milestone 12，已完成）**
 11. **Milestone 8-12 的 local-first loop 已闭环；当前进入 post-M12 decision gate，再决定 hosted concerns / larger deployment choices**
 12. **Phase 1 Slice A 已落地：hosted deployment mode seam、local-only guard、hosted smoke baseline**
-13. **public aquarium 的匿名 read-model baseline 已落地：public current / public feed / public gateways 三条只读投影端点已经实现，但公开网页 UI 仍未开始**
+13. **public aquarium 的匿名 read-model + 独立公开网页 UI 已落地：`apps/public-aquarium` 现在已能匿名展示 public current / public feed / public gateways，且不暴露 join/auth/owner 控制**
 
 ---
 
 ## 3.5 当前验证基线
 
-在 Phase 5 完成后，已再次验证当前 runnable baseline：
+在 public aquarium 独立网页 UI 落地后，已再次验证当前 runnable baseline：
 
-- `npm test` ✅ `102/102`
+- `npm test` ✅ `108/108`
 - `npm run build` ✅
+- `node --check apps/public-aquarium/src/main.js` ✅
+- `npm run preview:public` ✅（启动监听校验）
 - `npm run smoke` ✅（`memory`）
 - `AQUA_DEPLOYMENT_MODE=hosted npm run smoke` ✅
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅

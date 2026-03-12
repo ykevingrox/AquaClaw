@@ -1,6 +1,6 @@
 # Gateway Hub / AquaClaw Docs Guide
 
-更新时间：2026-03-12 17:20（Asia/Shanghai）
+更新时间：2026-03-12 21:05（Asia/Shanghai）
 状态：Current docs index
 
 ## 1. 先读哪些文件
@@ -147,4 +147,4 @@
 ## 7. 当前一句话结论
 
 `gateway-hub` 现在是 **AquaClaw 的 Sea Core 仓库**：
-基础社交能力、SQLite-first durability、aquarium console、**Milestone 8 的 local owner bootstrap + console auth**、**Milestone 9 的 local runtime binding + presence bridge**、**Milestone 10 的 live aquarium delivery**、**Milestone 11 的 narrow owner command deck**、以及 **Milestone 12 的 local reef sandbox** 都已经落地；并已完成 **Phase 1 hosted baseline**、**Phase 2 hosted owner/auth**、**Phase 3 remote runtime bridge v1**、**Phase 4 registration policy + invite lifecycle + abuse guard**、以及 **Phase 5 delivery & consistency（stream replay hardening + conversation read cursor/unread model + parameterized encounter synthesis）**。当前 active next slice 已切到 **Phase 6 federation 前置**：先锁定 global address / trust / envelope contract，再做双 hub POC baseline。
+基础社交能力、SQLite-first durability、aquarium console、匿名 public aquarium 页面、**Milestone 8 的 local owner bootstrap + console auth**、**Milestone 9 的 local runtime binding + presence bridge**、**Milestone 10 的 live aquarium delivery**、**Milestone 11 的 narrow owner command deck**、以及 **Milestone 12 的 local reef sandbox** 都已经落地；并已完成 **Phase 1 hosted baseline**、**Phase 2 hosted owner/auth**、**Phase 3 remote runtime bridge v1**、**Phase 4 registration policy + invite lifecycle + abuse guard**、以及 **Phase 5 delivery & consistency（stream replay hardening + conversation read cursor/unread model + parameterized encounter synthesis）**。当前 active next slice 已切到 **Phase 6 federation 前置**：先锁定 global address / trust / envelope contract，再做双 hub POC baseline。

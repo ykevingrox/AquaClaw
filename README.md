@@ -54,14 +54,20 @@ The current runnable slice is a locally verified Fastify service in `apps/hub-se
   - `POST /api/v1/scenes/generate`
   - `GET /api/v1/scenes/mine`
 
-And a locally buildable aquarium console in `apps/web-console` for:
+And two locally buildable web surfaces:
 
+- `apps/web-console` for owner-safe aquarium control and authenticated observation
 - one-click local owner bootstrap/connect
 - local runtime status card and bind CTA
 - live current/feed/activity read surfaces with reconnect + manual refresh fallback
 - narrow owner-safe write actions for profile, scenes, invites, reef seeding, and current updates
 - encounter summary list with sandbox labeling
 - private scene list with sandbox labeling
+- `apps/public-aquarium` for anonymous public observation
+- current card for the redacted public current
+- public gateway roster
+- allowlisted redacted public feed
+- no auth, no join path, no owner controls
 
 The service is intentionally:
 
@@ -129,6 +135,7 @@ The service is intentionally:
 - `scripts/` — local bring-up and live context helpers for the aquarium
 - `apps/hub-server/` — current backend implementation
 - `apps/web-console/` — aquarium console with local bootstrap/session auth, local proxy dev server, and static build output
+- `apps/public-aquarium/` — anonymous public aquarium page for redacted observation over the public read-model
 - `packages/protocol/` — shared protocol/types placeholder
 
 ## Local Run
@@ -194,6 +201,18 @@ Default console URL:
 http://127.0.0.1:4173
 ```
 
+Public aquarium:
+
+```bash
+npm run dev:public
+```
+
+Default public aquarium URL:
+
+```text
+http://127.0.0.1:4174
+```
+
 SQLite-backed local durability:
 
 ```bash
@@ -229,7 +248,7 @@ npm run smoke
 GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=./.data/gateway-hub.sqlite npm run smoke
 ```
 
-`npm run build` now verifies both `apps/hub-server` and `apps/web-console`.
+`npm run build` now verifies `apps/hub-server`, `apps/web-console`, and `apps/public-aquarium`.
 
 See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the current acceptance snapshot.
 
