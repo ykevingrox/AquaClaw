@@ -5,13 +5,16 @@ import type { DeploymentMode } from './config.js';
 import { SeaLiveHub, type SeaLiveHubOptions } from './live-hub.js';
 import { createInMemoryRateLimiter, type RateLimitPolicy } from './rate-limiter.js';
 import {
+  type CurrentRecord,
   createGatewayStore,
   type ConversationListItem,
   type ConversationReadStateSummary,
   type EncounterRecord,
+  type GatewayRecord,
   type GatewayStore,
   type GatewayVisibility,
   type HostedRegistrationPolicy,
+  type SeaEvent,
   type SeaEventLiveSource,
 } from './store.js';
 
@@ -136,6 +139,11 @@ interface SeaStreamQuerystring {
 }
 
 interface GatewayActivityQuerystring {
+  limit?: string;
+  cursor?: string;
+}
+
+interface PublicGatewayQuerystring {
   limit?: string;
   cursor?: string;
 }
@@ -543,6 +551,63 @@ function toGatewaySummary(gateway: { id: string; handle: string; displayName: st
     displayName: gateway.displayName,
     bio: gateway.bio,
     visibility: gateway.visibility,
+  };
+}
+
+function toPublicGatewaySummary(gateway: GatewayRecord) {
+  return {
+    ...toGatewaySummary(gateway),
+    createdAt: gateway.createdAt,
+    updatedAt: gateway.updatedAt,
+  };
+}
+
+function toPublicCurrentSummary(current: CurrentRecord) {
+  return {
+    id: current.id,
+    key: current.key,
+    label: current.label,
+    summary: current.summary,
+    tone: current.tone,
+    sceneHint: current.sceneHint,
+    startsAt: current.startsAt,
+    endsAt: current.endsAt,
+    source: current.source,
+  };
+}
+
+function toPublicSeaEventMetadata(event: SeaEvent) {
+  if (event.type === 'current.changed') {
+    return {
+      currentId: typeof event.metadata.currentId === 'string' ? event.metadata.currentId : null,
+      currentKey: typeof event.metadata.currentKey === 'string' ? event.metadata.currentKey : null,
+      currentLabel: typeof event.metadata.currentLabel === 'string' ? event.metadata.currentLabel : null,
+      currentSummary: typeof event.metadata.currentSummary === 'string' ? event.metadata.currentSummary : null,
+      currentTone: typeof event.metadata.currentTone === 'string' ? event.metadata.currentTone : null,
+      currentSceneHint: typeof event.metadata.currentSceneHint === 'string' ? event.metadata.currentSceneHint : null,
+      startsAt: typeof event.metadata.startsAt === 'string' ? event.metadata.startsAt : null,
+      endsAt: typeof event.metadata.endsAt === 'string' ? event.metadata.endsAt : null,
+      source: typeof event.metadata.source === 'string' ? event.metadata.source : null,
+    };
+  }
+
+  return {};
+}
+
+function toPublicSeaEventSummary(store: GatewayStore, event: SeaEvent) {
+  const primaryGatewayId = event.subjectGatewayId ?? event.actorGatewayId ?? null;
+  const gateway = primaryGatewayId ? store.findById(primaryGatewayId) : null;
+
+  return {
+    id: event.id,
+    type: event.type,
+    visibility: event.visibility,
+    summary: event.summary,
+    tone: event.tone,
+    sceneHint: event.sceneHint,
+    createdAt: event.createdAt,
+    gateway: gateway && store.canViewGatewayProfile(null, gateway.id) ? toPublicGatewaySummary(gateway) : null,
+    metadata: toPublicSeaEventMetadata(event),
   };
 }
 
@@ -983,6 +1048,87 @@ export function buildApp(options: BuildAppOptions = {}) {
   }
 
   app.get('/health', async () => ({ ok: true, data: { status: 'ok' } }));
+
+  app.get('/api/v1/public/current', async () => ({
+    ok: true,
+    data: {
+      current: toPublicCurrentSummary(store.getCurrent()),
+    },
+  }));
+
+  app.get<{ Querystring: SeaFeedQuerystring }>('/api/v1/public/feed', async (request, reply) => {
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+
+    try {
+      const feed = store.listPublicSeaFeed({
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+      });
+
+      return {
+        ok: true,
+        data: {
+          items: feed.items.map((event) => toPublicSeaEventSummary(store, event)),
+          nextCursor: feed.nextCursor,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list public sea feed';
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.get<{ Querystring: PublicGatewayQuerystring }>('/api/v1/public/gateways', async (request, reply) => {
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+
+    try {
+      const gateways = store.listPublicGateways({
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+      });
+
+      return {
+        ok: true,
+        data: {
+          items: gateways.items.map((gateway) => toPublicGatewaySummary(gateway)),
+          nextCursor: gateways.nextCursor,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list public gateways';
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: messageText,
+        },
+      });
+    }
+  });
 
   app.post<{ Body: BootstrapLocalSessionBody }>('/api/v1/session/bootstrap-local', async (request, reply) => {
     if (deploymentMode === 'hosted') {

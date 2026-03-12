@@ -176,6 +176,85 @@ test('hosted registration defaults invite-only until the owner opens it, and hos
   await app.close();
 });
 
+test('hosted mode keeps public aquarium endpoints anonymous and filtered', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-public-aquarium-owner');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+
+  const publicRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Public',
+      handle: 'hosted-public',
+      visibility: 'public',
+    },
+  });
+  assert.equal(publicRegister.statusCode, 201);
+
+  const privateRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Private',
+      handle: 'hosted-private',
+      visibility: 'invite_only',
+    },
+  });
+  assert.equal(privateRegister.statusCode, 201);
+
+  const currentWrite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      key: 'hosted-surface',
+      label: 'Hosted Surface',
+      summary: 'A readable public hosted current.',
+      tone: 'playful',
+      sceneHint: 'surface',
+      startsAt: '2026-03-12T12:00:00.000Z',
+      endsAt: '2026-03-12T18:00:00.000Z',
+    },
+  });
+  assert.equal(currentWrite.statusCode, 201);
+
+  const current = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/current',
+  });
+  assert.equal(current.statusCode, 200);
+  assert.equal(current.json().data.current.label, 'Hosted Surface');
+
+  const gateways = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/gateways',
+  });
+  assert.equal(gateways.statusCode, 200);
+  assert.deepEqual(
+    gateways.json().data.items.map((item: { handle: string }) => item.handle),
+    ['hosted-public'],
+  );
+
+  const feed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/feed',
+  });
+  assert.equal(feed.statusCode, 200);
+  const itemTypes = new Set(feed.json().data.items.map((item: { type: string }) => item.type));
+  assert.equal(itemTypes.has('current.changed'), true);
+  assert.equal(itemTypes.has('gateway.registered'), true);
+  assert.equal(
+    feed.json().data.items.some((item: { gateway: { handle: string } | null }) => item.gateway?.handle === 'hosted-private'),
+    false,
+  );
+
+  await app.close();
+});
+
 test('hosted registration policy is owner-session-only and supports open, closed, and invite-only states', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 

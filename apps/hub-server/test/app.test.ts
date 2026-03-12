@@ -184,6 +184,179 @@ test('public gateway profile can be fetched without auth', async () => {
   await app.close();
 });
 
+test('public aquarium endpoints expose only anonymous current, allowlisted public events, and public gateways', async () => {
+  const app = buildApp();
+
+  const alpha = await registerGateway(app, {
+    displayName: 'Alpha Public',
+    handle: 'alpha-public',
+    visibility: 'public',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Beta Invite',
+    handle: 'beta-invite',
+    visibility: 'invite_only',
+  });
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      toGatewayId: beta.gateway.id,
+    },
+  });
+  assert.equal(friendRequest.statusCode, 201);
+
+  const currentWrite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      key: 'public-tide',
+      label: 'Public Tide',
+      summary: 'The surface is readable and bright.',
+      tone: 'calm',
+      sceneHint: 'open-water',
+      startsAt: '2026-03-12T12:00:00.000Z',
+      endsAt: '2026-03-12T18:00:00.000Z',
+      metadata: {
+        ownerNote: 'should stay private',
+      },
+    },
+  });
+  assert.equal(currentWrite.statusCode, 201);
+
+  const update = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/gateways/me',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      bio: 'visible in the public aquarium',
+    },
+  });
+  assert.equal(update.statusCode, 200);
+
+  const current = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/current',
+  });
+  assert.equal(current.statusCode, 200);
+  assert.equal(current.json().data.current.label, 'Public Tide');
+  assert.equal('metadata' in current.json().data.current, false);
+
+  const gateways = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/gateways',
+  });
+  assert.equal(gateways.statusCode, 200);
+  assert.deepEqual(
+    gateways.json().data.items.map((item: { handle: string }) => item.handle),
+    ['alpha-public'],
+  );
+  assert.equal('status' in gateways.json().data.items[0], false);
+
+  const feed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/feed',
+  });
+  assert.equal(feed.statusCode, 200);
+  const items = feed.json().data.items as Array<{
+    type: string;
+    visibility: string;
+    gateway: { handle: string } | null;
+    metadata: Record<string, unknown>;
+    actorGatewayId?: string;
+  }>;
+  const itemTypes = new Set(items.map((item) => item.type));
+  assert.equal(itemTypes.has('gateway.registered'), true);
+  assert.equal(itemTypes.has('gateway.profile_updated'), true);
+  assert.equal(itemTypes.has('current.changed'), true);
+  assert.equal(itemTypes.has('friend_request.sent'), false);
+
+  const currentChanged = items.find((item) => item.type === 'current.changed');
+  assert.ok(currentChanged);
+  assert.equal(currentChanged.visibility, 'system');
+  assert.equal(currentChanged.gateway, null);
+  assert.equal(currentChanged.metadata.currentLabel, 'Public Tide');
+  assert.equal(currentChanged.metadata.currentSummary, 'The surface is readable and bright.');
+  assert.equal('changedByGatewayId' in currentChanged.metadata, false);
+  assert.equal('ownerNote' in currentChanged.metadata, false);
+  assert.equal('actorGatewayId' in currentChanged, false);
+
+  await app.close();
+});
+
+test('public aquarium stops exposing old public events after a gateway turns private', async () => {
+  const app = buildApp();
+
+  const gateway = await registerGateway(app, {
+    displayName: 'Turning Tide',
+    handle: 'turning-tide',
+    visibility: 'public',
+  });
+
+  const beforeFeed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/feed',
+  });
+  assert.equal(beforeFeed.statusCode, 200);
+  assert.equal(
+    beforeFeed.json().data.items.some((item: { gateway: { handle: string } | null }) => item.gateway?.handle === 'turning-tide'),
+    true,
+  );
+
+  const beforeGateways = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/gateways',
+  });
+  assert.equal(beforeGateways.statusCode, 200);
+  assert.equal(
+    beforeGateways.json().data.items.some((item: { handle: string }) => item.handle === 'turning-tide'),
+    true,
+  );
+
+  const update = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/gateways/me',
+    headers: {
+      authorization: `Bearer ${gateway.token}`,
+    },
+    payload: {
+      visibility: 'private',
+    },
+  });
+  assert.equal(update.statusCode, 200);
+
+  const afterFeed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/feed',
+  });
+  assert.equal(afterFeed.statusCode, 200);
+  assert.equal(
+    afterFeed.json().data.items.some((item: { gateway: { handle: string } | null }) => item.gateway?.handle === 'turning-tide'),
+    false,
+  );
+
+  const afterGateways = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/gateways',
+  });
+  assert.equal(afterGateways.statusCode, 200);
+  assert.equal(
+    afterGateways.json().data.items.some((item: { handle: string }) => item.handle === 'turning-tide'),
+    false,
+  );
+
+  await app.close();
+});
+
 test('private gateway profile is only visible to itself', async () => {
   const app = buildApp();
 

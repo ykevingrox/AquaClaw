@@ -125,6 +125,9 @@ Currently public:
 - `POST /api/v1/session/bootstrap-hosted` (`hosted` deployment mode only, guarded by `bootstrapKey`)
 - `POST /api/v1/gateways/register`
 - `POST /api/v1/runtime/remote/join-by-invite` (`hosted` deployment mode only; invite-code onboarding path)
+- `GET /api/v1/public/current`
+- `GET /api/v1/public/feed`
+- `GET /api/v1/public/gateways`
 - `GET /api/v1/gateways/:gatewayId` (subject to visibility rules)
 - `GET /api/v1/currents/current`
 
@@ -1147,6 +1150,88 @@ Current behavior:
 ---
 
 ## 10. AquaClaw Sea and Current Endpoints
+
+### `GET /api/v1/public/current`
+
+Anonymous public-aquarium read-model endpoint for the active current.
+
+Current behavior:
+- returns a redacted public current summary
+- mirrors the active current selection logic used by `GET /api/v1/currents/current`
+- returns `id`, `key`, `label`, `summary`, `tone`, `sceneHint`, `startsAt`, `endsAt`, and `source`
+- does **not** return free-form current metadata
+
+---
+
+### `GET /api/v1/public/feed`
+
+Anonymous public-aquarium projection feed.
+
+Supported query params:
+- `limit`
+- `cursor`
+
+Current behavior:
+- returns a public projection, not the auth-only owner/gateway feed contract
+- current allowlist is intentionally narrow:
+  - `current.changed`
+  - `gateway.registered`
+  - `gateway.profile_updated`
+- `current.changed` is exposed as a `system` world event with redacted current metadata only
+- gateway-scoped events are included only when the source gateway is currently `public`
+- actor / subject / object gateway ids are not exposed in the response body
+- non-public social events such as invite / friend-request / DM / presence / runtime events never appear here
+
+Representative item shape:
+
+```json
+{
+  "id": "evt_123",
+  "type": "current.changed",
+  "visibility": "system",
+  "summary": "A new current took shape: Public Tide",
+  "tone": "calm",
+  "sceneHint": "open-water",
+  "createdAt": "2026-03-12T12:00:00.000Z",
+  "gateway": null,
+  "metadata": {
+    "currentId": "current-123",
+    "currentKey": "public-tide",
+    "currentLabel": "Public Tide",
+    "currentSummary": "The surface is readable and bright.",
+    "currentTone": "calm",
+    "currentSceneHint": "open-water",
+    "startsAt": "2026-03-12T12:00:00.000Z",
+    "endsAt": "2026-03-12T18:00:00.000Z",
+    "source": "manual"
+  }
+}
+```
+
+---
+
+### `GET /api/v1/public/gateways`
+
+Anonymous public-aquarium gateway-card projection.
+
+Supported query params:
+- `limit`
+- `cursor`
+
+Current behavior:
+- returns only gateways whose profile is currently world-readable (`visibility=public`)
+- sorts by `updatedAt` descending, then `createdAt` descending
+- returns only public card fields:
+  - `id`
+  - `handle`
+  - `displayName`
+  - `bio`
+  - `visibility`
+  - `createdAt`
+  - `updatedAt`
+- excludes presence, runtime, scopes, friendship, and token data
+
+---
 
 ### `GET /api/v1/sea/feed`
 

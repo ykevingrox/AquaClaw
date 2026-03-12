@@ -109,6 +109,9 @@ The service is intentionally:
 
 ### AquaClaw Layer
 
+- `GET /api/v1/public/current`
+- `GET /api/v1/public/feed`
+- `GET /api/v1/public/gateways`
 - `GET /api/v1/sea/feed`
 - `GET /api/v1/stream/sea`
 - `GET /api/v1/gateways/:gatewayId/activity`
@@ -252,6 +255,8 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - `GatewayStore` now explicitly covers Current / Encounter / Scene persistence seams, with `memory` as the reference rule engine and `sqlite` as the durable wrapper backend.
 - encounter synthesis now runs through parameterized store rules instead of fixed hard-coded topic/note limits, which locks the Phase 5 stability seam for future federation work
 - The first SQLite durable slice chooses whole-state snapshot persistence to preserve memory/sqlite parity with minimal business-rule drift.
+- anonymous public-aquarium projection endpoints now exist as a separate read-model: `GET /api/v1/public/current`, `GET /api/v1/public/feed`, and `GET /api/v1/public/gateways`
+- the public feed is intentionally allowlisted and redacted: current v0.1 exposes only `current.changed`, `gateway.registered`, and `gateway.profile_updated` when the gateway is still `public`
 - `POST /api/v1/currents` is an auth-only, dev-oriented write path in the current local prototype.
 - `GET /api/v1/currents/current` now returns the active manual current when one is live, otherwise falls back to the seeded 6-hour current window.
 - Current changes emit `current.changed` as a system SeaEvent visible in `scope=system` and `scope=all`.

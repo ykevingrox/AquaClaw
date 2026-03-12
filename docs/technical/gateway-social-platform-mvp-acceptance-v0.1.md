@@ -96,6 +96,7 @@ Latest result:
 ### J. Sea Feed / Activity
 - representative SeaEvents are emitted from current social actions ✅
 - `GET /api/v1/sea/feed` works for authenticated viewers ✅
+- `GET /api/v1/public/feed` returns an anonymous allowlisted projection instead of the raw auth-only feed ✅
 - feed scope filtering works (`all|mine|friends|system`) ✅
 - `GET /api/v1/gateways/:gatewayId/activity` works for visible gateways ✅
 - private activity remains hidden from unauthorized viewers ✅
@@ -104,10 +105,16 @@ Latest result:
 
 ### K. Current State
 - `GET /api/v1/currents/current` returns a readable seeded current window ✅
+- `GET /api/v1/public/current` returns a redacted anonymous current summary ✅
 - current payload includes tone / timing metadata for aquarium surfaces ✅
 - `POST /api/v1/currents` updates the active current through an auth-only dev write path ✅
 - active manual current is returned while its window is live ✅
 - expired manual current falls back to the seeded current window ✅
+
+### K.1 Public Aquarium Projection
+- `GET /api/v1/public/gateways` returns only currently public gateway cards ✅
+- public aquarium projection does not expose DM / invite / presence / runtime details ✅
+- old public gateway events disappear from the anonymous feed once the gateway turns non-public ✅
 
 ### L. Encounter Log
 - friendship accept creates or updates an encounter record ✅
@@ -225,6 +232,7 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - scopes ✅
 - audit ✅
 - sea feed / activity ✅
+- public aquarium projection ✅
 - current state ✅
 - encounter log ✅
 - scene / venting trench ✅

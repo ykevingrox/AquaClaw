@@ -157,6 +157,11 @@ export interface SeaEventPage {
   nextCursor: string | null;
 }
 
+export interface GatewayPage {
+  items: GatewayRecord[];
+  nextCursor: string | null;
+}
+
 export interface CurrentRecord {
   id: string;
   key: string;
@@ -370,6 +375,7 @@ export interface GatewayStore {
   updateProfile(gatewayId: string, input: UpdateProfileInput): GatewayRecord;
   getPresence(gatewayId: string): GatewayPresenceRecord;
   searchGateways(input: SearchGatewaysInput): GatewayRecord[];
+  listPublicGateways(input?: ListPublicGatewaysInput): GatewayPage;
   createInvite(input: CreateInviteInput): InviteRecord;
   revokeInvite(input: RevokeInviteInput): InviteRecord;
   claimInvite(input: ClaimInviteInput): { invite: InviteRecord; claim: InviteClaimRecord; friendRequest: FriendRequestRecord };
@@ -406,6 +412,7 @@ export interface GatewayStore {
   isBlockedBetween(gatewayAId: string, gatewayBId: string): boolean;
   listAuditRecords(input?: ListAuditRecordsInput): AuditRecordPage;
   listSeaFeed(input: ListSeaFeedInput): SeaEventPage;
+  listPublicSeaFeed(input?: ListPublicSeaFeedInput): SeaEventPage;
   listGatewayActivity(input: ListGatewayActivityInput): SeaEventPage;
   canViewSeaEvent(viewerGatewayId: string, event: SeaEvent): boolean;
   getCurrent(): CurrentRecord;
@@ -522,6 +529,11 @@ interface SearchGatewaysInput {
   limit?: number;
 }
 
+interface ListPublicGatewaysInput {
+  cursor?: string;
+  limit?: number;
+}
+
 interface CreateMessageInput {
   conversationId: string;
   senderGatewayId: string;
@@ -574,6 +586,11 @@ interface ListSeaFeedInput {
   viewerGatewayId: string;
   includeSystemEvents?: boolean;
   scope?: SeaFeedScope;
+  cursor?: string;
+  limit?: number;
+}
+
+interface ListPublicSeaFeedInput {
   cursor?: string;
   limit?: number;
 }
@@ -690,6 +707,7 @@ const VALID_SEA_EVENT_TONES: SeaEventTone[] = ['calm', 'playful', 'reflective', 
 const ONLINE_THRESHOLD_MS = 90_000;
 const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
 const DEFAULT_AUDIT_PAGE_SIZE = 50;
+const DEFAULT_GATEWAY_PAGE_SIZE = 50;
 const DEFAULT_SEA_PAGE_SIZE = 50;
 const DEFAULT_SCENE_PAGE_SIZE = 50;
 const DEFAULT_LOCAL_OWNER_HANDLE = 'my-claw';
@@ -1739,6 +1757,20 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       .slice(0, limit);
   }
 
+  listPublicGateways(input: ListPublicGatewaysInput = {}): GatewayPage {
+    const visible = Array.from(this.gatewaysById.values())
+      .filter((gateway) => this.canViewGatewayProfile(null, gateway.id))
+      .sort((a, b) => {
+        const updatedAtComparison = b.updatedAt.localeCompare(a.updatedAt);
+        if (updatedAtComparison !== 0) {
+          return updatedAtComparison;
+        }
+        return b.createdAt.localeCompare(a.createdAt);
+      });
+
+    return this.paginateGateways(visible, input.cursor, input.limit);
+  }
+
   createInvite(input: CreateInviteInput): InviteRecord {
     if (!this.gatewaysById.has(input.createdByGatewayId)) {
       throw new Error('gateway not found');
@@ -2315,6 +2347,14 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
             return includeSystemEvents || event.visibility !== 'system';
         }
       });
+
+    return this.paginateSeaEvents(visible, input.cursor, input.limit);
+  }
+
+  listPublicSeaFeed(input: ListPublicSeaFeedInput = {}): SeaEventPage {
+    const visible = [...this.seaEvents]
+      .reverse()
+      .filter((event) => this.isSeaEventVisiblePublicly(event));
 
     return this.paginateSeaEvents(visible, input.cursor, input.limit);
   }
@@ -3187,6 +3227,20 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return { items, nextCursor };
   }
 
+  private paginateGateways(gateways: GatewayRecord[], cursor?: string, limit?: number): GatewayPage {
+    const normalizedCursor = cursor?.trim();
+    const startIndex = normalizedCursor ? gateways.findIndex((gateway) => gateway.id === normalizedCursor) + 1 : 0;
+    if (normalizedCursor && startIndex === 0) {
+      throw new Error('invalid public gateway cursor');
+    }
+
+    const pageSize = Math.min(Math.max(limit ?? DEFAULT_GATEWAY_PAGE_SIZE, 1), DEFAULT_GATEWAY_PAGE_SIZE);
+    const items = gateways.slice(startIndex, startIndex + pageSize);
+    const nextCursor =
+      startIndex + items.length < gateways.length && items.length > 0 ? items[items.length - 1]!.id : null;
+    return { items, nextCursor };
+  }
+
   private isGatewayInvolvedInSeaEvent(event: SeaEvent, gatewayId: string) {
     return event.actorGatewayId === gatewayId || event.subjectGatewayId === gatewayId || event.objectGatewayId === gatewayId;
   }
@@ -3236,6 +3290,27 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       return false;
     }
     return this.areFriends(viewerGatewayId, primaryGatewayId) && this.hasGrantedFriendScope(primaryGatewayId, viewerGatewayId, 'profile.read');
+  }
+
+  private isSeaEventVisiblePublicly(event: SeaEvent) {
+    if (event.type === 'current.changed') {
+      return event.visibility === 'system';
+    }
+
+    if (event.type !== 'gateway.registered' && event.type !== 'gateway.profile_updated') {
+      return false;
+    }
+
+    if (event.visibility !== 'public') {
+      return false;
+    }
+
+    const primaryGatewayId = this.seaEventPrimaryGatewayId(event);
+    if (!primaryGatewayId || !this.gatewaysById.has(primaryGatewayId)) {
+      return false;
+    }
+
+    return this.canViewGatewayProfile(null, primaryGatewayId);
   }
 
   private gatewayEventVisibility(gatewayId: string | null | undefined): SeaEventVisibility {

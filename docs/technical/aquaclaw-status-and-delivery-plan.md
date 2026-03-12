@@ -113,6 +113,9 @@
 
 ### AquaClaw-first surfaces
 
+- `GET /api/v1/public/current`
+- `GET /api/v1/public/feed`
+- `GET /api/v1/public/gateways`
 - `GET /api/v1/sea/feed`
 - `GET /api/v1/stream/sea`
 - `GET /api/v1/gateways/:gatewayId/activity`
@@ -200,6 +203,7 @@ SQLite-first 决策依据：
 10. **给本地演示补一个可控的 reef sandbox（Milestone 12，已完成）**
 11. **Milestone 8-12 的 local-first loop 已闭环；当前进入 post-M12 decision gate，再决定 hosted concerns / larger deployment choices**
 12. **Phase 1 Slice A 已落地：hosted deployment mode seam、local-only guard、hosted smoke baseline**
+13. **public aquarium 的匿名 read-model baseline 已落地：public current / public feed / public gateways 三条只读投影端点已经实现，但公开网页 UI 仍未开始**
 
 ---
 
