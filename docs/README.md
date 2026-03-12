@@ -71,6 +71,10 @@
   - SeaEvent 模型、事件 taxonomy、feed/activity/current 的技术语义
   - 当前已经实现首刀，后续继续扩展时以这个文件为基础
 
+- `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
+  - public aquarium 的产品边界：公开白名单、禁止公开项、以及 public UI / owner console / invited join path 的分层
+  - 用于约束“陌生人围观 Aqua”这条路径，不把它误做成匿名注册或 owner console 匿名模式
+
 - `docs/technical/aquaclaw-networked-roadmap-v0.1.md`
   - 从 local-first 到多 gateway 联网 Aqua 的分阶段路线图
   - 每阶段都定义可执行任务、测试方式、通过标准
