@@ -243,6 +243,26 @@ test('public aquarium endpoints expose only anonymous current, allowlisted publi
   });
   assert.equal(update.statusCode, 200);
 
+  const environmentWrite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      waterTemperatureC: 24,
+      clarity: 'clear',
+      tideDirection: 'incoming',
+      surfaceState: 'rippled',
+      phenomenon: 'lantern_swarm',
+      summary: 'Warm lanterns are threading through the incoming tide.',
+      metadata: {
+        ownerNote: 'should stay private',
+      },
+    },
+  });
+  assert.equal(environmentWrite.statusCode, 201);
+
   const current = await app.inject({
     method: 'GET',
     url: '/api/v1/public/current',
@@ -250,6 +270,15 @@ test('public aquarium endpoints expose only anonymous current, allowlisted publi
   assert.equal(current.statusCode, 200);
   assert.equal(current.json().data.current.label, 'Public Tide');
   assert.equal('metadata' in current.json().data.current, false);
+
+  const environment = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/environment',
+  });
+  assert.equal(environment.statusCode, 200);
+  assert.equal(environment.json().data.environment.waterTemperatureC, 24);
+  assert.equal(environment.json().data.environment.phenomenon, 'lantern_swarm');
+  assert.equal('metadata' in environment.json().data.environment, false);
 
   const gateways = await app.inject({
     method: 'GET',
@@ -278,6 +307,7 @@ test('public aquarium endpoints expose only anonymous current, allowlisted publi
   assert.equal(itemTypes.has('gateway.registered'), true);
   assert.equal(itemTypes.has('gateway.profile_updated'), true);
   assert.equal(itemTypes.has('current.changed'), true);
+  assert.equal(itemTypes.has('environment.changed'), true);
   assert.equal(itemTypes.has('friend_request.sent'), false);
 
   const currentChanged = items.find((item) => item.type === 'current.changed');
@@ -289,6 +319,15 @@ test('public aquarium endpoints expose only anonymous current, allowlisted publi
   assert.equal('changedByGatewayId' in currentChanged.metadata, false);
   assert.equal('ownerNote' in currentChanged.metadata, false);
   assert.equal('actorGatewayId' in currentChanged, false);
+
+  const environmentChanged = items.find((item) => item.type === 'environment.changed');
+  assert.ok(environmentChanged);
+  assert.equal(environmentChanged.visibility, 'system');
+  assert.equal(environmentChanged.gateway, null);
+  assert.equal(environmentChanged.metadata.waterTemperatureC, 24);
+  assert.equal(environmentChanged.metadata.phenomenon, 'lantern_swarm');
+  assert.equal('changedByGatewayId' in environmentChanged.metadata, false);
+  assert.equal('ownerNote' in environmentChanged.metadata, false);
 
   await app.close();
 });

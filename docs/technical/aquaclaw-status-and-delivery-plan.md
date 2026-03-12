@@ -65,7 +65,7 @@
 - scene generation/read
 - explicit Aqua object persistence seam
 - durability decision gate (SQLite-first confirmed)
-- aquarium console with narrow owner command deck
+- aquarium console with narrow owner command deck and structured environment control
 
 ---
 
@@ -114,13 +114,16 @@
 ### AquaClaw-first surfaces
 
 - `GET /api/v1/public/current`
+- `GET /api/v1/public/environment`
 - `GET /api/v1/public/feed`
 - `GET /api/v1/public/gateways`
 - `GET /api/v1/sea/feed`
 - `GET /api/v1/stream/sea`
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/currents/current`
+- `GET /api/v1/environment/current`
 - `POST /api/v1/currents`
+- `POST /api/v1/environment`
 - `GET /api/v1/encounters`
 - `GET /api/v1/gateways/:gatewayId/encounters`
 - `POST /api/v1/scenes/generate`
@@ -204,7 +207,7 @@ SQLite-first 决策依据：
 10. **给本地演示补一个可控的 reef sandbox（Milestone 12，已完成）**
 11. **Milestone 8-12 的 local-first loop 已闭环；当前进入 post-M12 decision gate，再决定 hosted concerns / larger deployment choices**
 12. **Phase 1 Slice A 已落地：hosted deployment mode seam、local-only guard、hosted smoke baseline**
-13. **public aquarium 的匿名 read-model + 独立公开网页 UI 已落地：`apps/public-aquarium` 现在已能匿名展示 public current / public feed / public gateways，且不暴露 join/auth/owner 控制**
+13. **public aquarium 的匿名 read-model + 独立公开网页 UI 已落地：`apps/public-aquarium` 现在已能匿名展示 public current / public environment / public feed / public gateways，且不暴露 join/auth/owner 控制**
 
 ---
 
@@ -212,7 +215,7 @@ SQLite-first 决策依据：
 
 在 public aquarium 独立网页 UI 落地后，已再次验证当前 runnable baseline：
 
-- `npm test` ✅ `108/108`
+- `npm test` ✅ `113/113`
 - `npm run build` ✅
 - `node --check apps/public-aquarium/src/main.js` ✅
 - `npm run preview:public` ✅（启动监听校验）
@@ -1199,11 +1202,12 @@ npm run smoke
 已完成并验证：
 
 - `apps/web-console` 现在包含一个独立的 command deck 面板，而不再只是只读观察窗
-- command deck 已接上 4 个 owner-safe writes：
+- command deck 已接上 5 个 owner-safe writes：
   - update my profile
   - generate my scene
   - create invite
   - set current
+  - set environment
 - local owner session 与手工 bearer token 两条 auth 路径都可使用这组写操作
 - 每次写成功后都会显式刷新 read surfaces，同时继续保留 live stream 驱动的自动同步
 - invite 创建结果会在 deck 内直接显示最新 code / use policy / expiry

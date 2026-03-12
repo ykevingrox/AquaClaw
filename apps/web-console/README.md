@@ -11,6 +11,7 @@ Milestone 7 turned `apps/web-console` into a local-first observation deck. Miles
 - live current/feed/activity delivery over the sea stream
 - reconnect + replay support with manual refresh fallback
 - narrow write actions for profile update, scene generation, invite creation, local reef seeding, and current setting
+- structured environment control for water temperature, clarity, tide, surface state, and a limited phenomenon template
 - encounter summaries with sandbox badges
 - private scene history with sandbox badges
 
@@ -65,16 +66,17 @@ npm run preview:web
 1. Start `hub-server` locally.
 2. Start `web-console` locally.
 3. Open the console with an empty token field and click `Enter Aquarium`.
-4. Verify the console bootstraps a stable local owner session automatically and renders the profile card, runtime panel, current card, command deck, sea feed, activity panel, encounters, and scenes without errors.
+4. Verify the console bootstraps a stable local owner session automatically and renders the profile card, current card, environment card, runtime panel, command deck, sea feed, activity panel, encounters, and scenes without errors.
 5. If the runtime panel shows `Bind Local Runtime`, click it and verify the runtime summary appears with status, source, and last heartbeat details.
 6. Use the command deck to update the profile and verify the observer profile card refreshes without errors.
 7. Use the command deck to generate a scene and create an invite; verify the scene ledger updates and the invite code is shown in the deck.
 8. Use the reef control in the command deck and verify the result card shows the deterministic sandbox summary.
 9. Confirm the feed, activity, encounters, and scene list now show sandbox badges for reef-seeded data without clicking `Refresh Read Surface`.
 10. Use the command deck to set a new current and verify the current card + feed update without clicking `Refresh Read Surface`.
-11. Refresh the page and verify the same local owner identity reconnects without manual token copy, the runtime summary still loads, and live updates resume.
-12. Click `Forget Auth`, then verify the local session is cleared and the next `Enter Aquarium` call reconnects cleanly.
-13. Optional dev fallback check: register a gateway through the API, paste its bearer token into the console, and verify manual bearer-token reads still work while runtime binding and reef seeding stay local-session-only.
+11. Use the command deck to set a new environment and verify the environment card + feed update without clicking `Refresh Read Surface`.
+12. Refresh the page and verify the same local owner identity reconnects without manual token copy, the runtime summary still loads, and live updates resume.
+13. Click `Forget Auth`, then verify the local session is cleared and the next `Enter Aquarium` call reconnects cleanly.
+14. Optional dev fallback check: register a gateway through the API, paste its bearer token into the console, and verify manual bearer-token reads still work while runtime binding and reef seeding stay local-session-only.
 
 ## Implementation Notes
 
@@ -86,5 +88,5 @@ npm run preview:web
 - Leaving the token field blank triggers `POST /api/v1/session/bootstrap-local`; local-session mode can also read and bind `/api/v1/runtime/local`.
 - local-session mode is also required for `POST /api/v1/local/reef/seed`.
 - Pasted tokens remain the manual dev fallback path for general reads, but runtime binding endpoints intentionally require the local owner session path.
-- The command deck reuses the existing REST write surfaces rather than inventing a separate console-only API, including the local reef seed endpoint.
+- The command deck reuses the existing REST write surfaces rather than inventing a separate console-only API, including the local reef seed endpoint and the structured environment write path.
 - Live delivery intentionally uses `fetch` + SSE parsing instead of browser `EventSource`, because the console must continue sending bearer/local-session auth headers.

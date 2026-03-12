@@ -36,6 +36,15 @@ const elements = {
   currentSetButton: document.querySelector('#current-set-button'),
   currentSummary: document.querySelector('#current-summary'),
   currentTone: document.querySelector('#current-tone'),
+  environmentClarity: document.querySelector('#environment-clarity'),
+  environmentCommandForm: document.querySelector('#environment-command-form'),
+  environmentPanel: document.querySelector('#environment-panel'),
+  environmentPhenomenon: document.querySelector('#environment-phenomenon'),
+  environmentSetButton: document.querySelector('#environment-set-button'),
+  environmentSummary: document.querySelector('#environment-summary'),
+  environmentSurfaceState: document.querySelector('#environment-surface-state'),
+  environmentTemperature: document.querySelector('#environment-temperature'),
+  environmentTideDirection: document.querySelector('#environment-tide-direction'),
   encounterPanel: document.querySelector('#encounter-panel'),
   feedNote: document.querySelector('#feed-note'),
   feedPanel: document.querySelector('#feed-panel'),
@@ -89,6 +98,8 @@ const commandState = {
   busy: false,
   currentDirty: false,
   currentId: null,
+  environmentDirty: false,
+  environmentId: null,
   enabled: false,
   gatewayId: null,
   profileDirty: false,
@@ -367,6 +378,20 @@ function formatWhen(value) {
   return `${dateTime.format(new Date(parsed))} · ${formatRelativeTime(value)}`;
 }
 
+function formatTemperature(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 'Unknown';
+  }
+  return `${value.toFixed(1).replace(/\.0$/, '')}C`;
+}
+
+function labelizeToken(value) {
+  return String(value ?? '')
+    .replaceAll('_', ' ')
+    .replaceAll('-', ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 function sandboxBadge(label = 'sandbox') {
   return `<span class="meta-pill sandbox-pill">${escapeHtml(label)}</span>`;
 }
@@ -451,6 +476,8 @@ function resetCommandDeck() {
   commandState.busy = false;
   commandState.currentDirty = false;
   commandState.currentId = null;
+  commandState.environmentDirty = false;
+  commandState.environmentId = null;
   commandState.gatewayId = null;
   commandState.profileDirty = false;
   elements.profileDisplayName.value = '';
@@ -465,6 +492,12 @@ function resetCommandDeck() {
   elements.currentTone.value = 'calm';
   elements.currentSceneHint.value = '';
   elements.currentDurationMinutes.value = '360';
+  elements.environmentTemperature.value = '18';
+  elements.environmentClarity.value = 'clear';
+  elements.environmentTideDirection.value = 'slack';
+  elements.environmentSurfaceState.value = 'glassy';
+  elements.environmentPhenomenon.value = 'none';
+  elements.environmentSummary.value = '';
   renderInviteResult(null);
   renderReefResult(null);
   setCommandStatus('Enter the aquarium to unlock the command deck.', 'neutral');
@@ -520,6 +553,26 @@ function hydrateCurrentForm(current, { force = false } = {}) {
   commandState.currentDirty = false;
 }
 
+function hydrateEnvironmentForm(environment, { force = false } = {}) {
+  const environmentChanged = commandState.environmentId !== environment.id;
+  if (environmentChanged) {
+    commandState.environmentId = environment.id;
+    commandState.environmentDirty = false;
+  }
+
+  if (!force && commandState.environmentDirty) {
+    return;
+  }
+
+  elements.environmentTemperature.value = String(environment.waterTemperatureC);
+  elements.environmentClarity.value = environment.clarity;
+  elements.environmentTideDirection.value = environment.tideDirection;
+  elements.environmentSurfaceState.value = environment.surfaceState;
+  elements.environmentPhenomenon.value = environment.phenomenon;
+  elements.environmentSummary.value = environment.source === 'manual' ? environment.summary : '';
+  commandState.environmentDirty = false;
+}
+
 function renderEmpty(element, message) {
   element.className = 'panel-body empty-state';
   element.innerHTML = escapeHtml(message);
@@ -562,6 +615,41 @@ function renderCurrent(current) {
     </div>
   `;
   elements.heroCurrent.textContent = `Current: ${current.label}`;
+}
+
+function renderEnvironment(environment) {
+  elements.environmentPanel.className = 'panel-body';
+  elements.environmentPanel.innerHTML = `
+    <div class="climate-card">
+      <div class="item-row">
+        <div>
+          <p class="current-label">Water temperature</p>
+          <h3>${escapeHtml(formatTemperature(environment.waterTemperatureC))}</h3>
+        </div>
+        <span class="type-pill">${escapeHtml(environment.source)}</span>
+      </div>
+      <p class="stack-subtitle">${escapeHtml(environment.summary)}</p>
+      <div class="climate-grid">
+        <div>
+          <span class="meta-label">Clarity</span>
+          <strong>${escapeHtml(labelizeToken(environment.clarity))}</strong>
+        </div>
+        <div>
+          <span class="meta-label">Tide</span>
+          <strong>${escapeHtml(labelizeToken(environment.tideDirection))}</strong>
+        </div>
+        <div>
+          <span class="meta-label">Surface</span>
+          <strong>${escapeHtml(labelizeToken(environment.surfaceState))}</strong>
+        </div>
+        <div>
+          <span class="meta-label">Phenomenon</span>
+          <strong>${escapeHtml(labelizeToken(environment.phenomenon))}</strong>
+        </div>
+      </div>
+      <p class="sync-mark">Updated: ${escapeHtml(formatWhen(environment.updatedAt))}</p>
+    </div>
+  `;
 }
 
 function renderProfile(me, syncedAt) {
@@ -775,6 +863,7 @@ function resetAquariumSurface() {
   resetCommandDeck();
   renderEmpty(elements.profilePanel, 'Your gateway summary appears here after local session or token auth succeeds.');
   renderEmpty(elements.currentPanel, 'The current card will appear here after the first sync.');
+  renderEmpty(elements.environmentPanel, 'The water report appears here after the first sync.');
   renderEmpty(elements.runtimePanel, 'Your local runtime summary will appear here after the first successful sync.');
   renderEmpty(elements.feedPanel, 'Sea events will stream into this panel after a successful read.');
   renderEmpty(elements.activityPanel, 'Choose a gateway id or accept your own default activity stream.');
@@ -803,6 +892,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
   const activityGatewayId = elements.activityGatewayId.value.trim() || gateway.id;
   const feedScope = elements.feedScope.value;
   const currentRequest = requestJson('/api/v1/currents/current', { apiOrigin, token });
+  const environmentRequest = requestJson('/api/v1/environment/current', { apiOrigin, token });
   const feedRequest = requestJson(`/api/v1/sea/feed?scope=${encodeURIComponent(feedScope)}&limit=12`, { apiOrigin, token });
   const encountersRequest = requestJson('/api/v1/encounters?limit=8', { apiOrigin, token });
   const scenesRequest = requestJson('/api/v1/scenes/mine?limit=8', { apiOrigin, token });
@@ -817,6 +907,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
 
   const results = await Promise.allSettled([
     currentRequest,
+    environmentRequest,
     feedRequest,
     encountersRequest,
     scenesRequest,
@@ -824,7 +915,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     runtimeRequest ?? Promise.resolve(null),
   ]);
 
-  const [currentResult, feedResult, encountersResult, scenesResult, activityResult, runtimeResult] = results;
+  const [currentResult, environmentResult, feedResult, encountersResult, scenesResult, activityResult, runtimeResult] = results;
   const syncedAt = new Date().toISOString();
   aquariumState.lastSyncedAt = syncedAt;
   renderProfile(gateway, syncedAt);
@@ -835,6 +926,13 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     hydrateCurrentForm(currentResult.value.data.current);
   } else {
     renderError(elements.currentPanel, currentResult.reason.message);
+  }
+
+  if (environmentResult.status === 'fulfilled') {
+    renderEnvironment(environmentResult.value.data.environment);
+    hydrateEnvironmentForm(environmentResult.value.data.environment);
+  } else {
+    renderError(elements.environmentPanel, environmentResult.reason.message);
   }
 
   if (feedResult.status === 'fulfilled') {
@@ -1272,6 +1370,30 @@ elements.currentDurationMinutes.addEventListener('input', () => {
   commandState.currentDirty = true;
 });
 
+elements.environmentTemperature.addEventListener('input', () => {
+  commandState.environmentDirty = true;
+});
+
+elements.environmentClarity.addEventListener('change', () => {
+  commandState.environmentDirty = true;
+});
+
+elements.environmentTideDirection.addEventListener('change', () => {
+  commandState.environmentDirty = true;
+});
+
+elements.environmentSurfaceState.addEventListener('change', () => {
+  commandState.environmentDirty = true;
+});
+
+elements.environmentPhenomenon.addEventListener('change', () => {
+  commandState.environmentDirty = true;
+});
+
+elements.environmentSummary.addEventListener('input', () => {
+  commandState.environmentDirty = true;
+});
+
 elements.profileCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void runDeckCommand(elements.profileSaveButton, 'Saving…', async ({ apiOrigin, token }) => {
@@ -1395,6 +1517,39 @@ elements.currentCommandForm.addEventListener('submit', (event) => {
 
     return {
       successMessage: `Set current to ${payload.data.current.label}.`,
+    };
+  });
+});
+
+elements.environmentCommandForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void runDeckCommand(elements.environmentSetButton, 'Settling…', async ({ apiOrigin, token }) => {
+    const waterTemperatureC = Number.parseFloat(elements.environmentTemperature.value.trim());
+
+    if (!Number.isFinite(waterTemperatureC) || waterTemperatureC < 0 || waterTemperatureC > 40) {
+      throw new Error('Water temperature must be between 0 and 40C.');
+    }
+
+    const payload = await requestJson('/api/v1/environment', {
+      apiOrigin,
+      token,
+      method: 'POST',
+      payload: {
+        waterTemperatureC,
+        clarity: elements.environmentClarity.value,
+        tideDirection: elements.environmentTideDirection.value,
+        surfaceState: elements.environmentSurfaceState.value,
+        phenomenon: elements.environmentPhenomenon.value,
+        summary: elements.environmentSummary.value.trim() || undefined,
+      },
+    });
+
+    hydrateEnvironmentForm(payload.data.environment, { force: true });
+
+    return {
+      successMessage: `Set environment to ${formatTemperature(payload.data.environment.waterTemperatureC)} and ${labelizeToken(
+        payload.data.environment.clarity,
+      ).toLowerCase()} water.`,
     };
   });
 });

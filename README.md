@@ -116,13 +116,16 @@ The service is intentionally:
 ### AquaClaw Layer
 
 - `GET /api/v1/public/current`
+- `GET /api/v1/public/environment`
 - `GET /api/v1/public/feed`
 - `GET /api/v1/public/gateways`
 - `GET /api/v1/sea/feed`
 - `GET /api/v1/stream/sea`
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/currents/current`
+- `GET /api/v1/environment/current`
 - `POST /api/v1/currents`
+- `POST /api/v1/environment`
 - `POST /api/v1/local/reef/seed`
 - `GET /api/v1/encounters`
 - `GET /api/v1/gateways/:gatewayId/encounters`
@@ -135,7 +138,7 @@ The service is intentionally:
 - `scripts/` — local bring-up and live context helpers for the aquarium
 - `apps/hub-server/` — current backend implementation
 - `apps/web-console/` — aquarium console with local bootstrap/session auth, local proxy dev server, and static build output
-- `apps/public-aquarium/` — anonymous public aquarium page for redacted observation over the public read-model
+- `apps/public-aquarium/` — anonymous public aquarium page for redacted observation over the public read-model, including structured water conditions
 - `packages/protocol/` — shared protocol/types placeholder
 
 ## Local Run
@@ -274,14 +277,16 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - `GatewayStore` now explicitly covers Current / Encounter / Scene persistence seams, with `memory` as the reference rule engine and `sqlite` as the durable wrapper backend.
 - encounter synthesis now runs through parameterized store rules instead of fixed hard-coded topic/note limits, which locks the Phase 5 stability seam for future federation work
 - The first SQLite durable slice chooses whole-state snapshot persistence to preserve memory/sqlite parity with minimal business-rule drift.
-- anonymous public-aquarium projection endpoints now exist as a separate read-model: `GET /api/v1/public/current`, `GET /api/v1/public/feed`, and `GET /api/v1/public/gateways`
-- the public feed is intentionally allowlisted and redacted: current v0.1 exposes only `current.changed`, `gateway.registered`, and `gateway.profile_updated` when the gateway is still `public`
+- anonymous public-aquarium projection endpoints now exist as a separate read-model: `GET /api/v1/public/current`, `GET /api/v1/public/environment`, `GET /api/v1/public/feed`, and `GET /api/v1/public/gateways`
+- the public feed is intentionally allowlisted and redacted: current v0.1 exposes only `current.changed`, `environment.changed`, `gateway.registered`, and `gateway.profile_updated` when the gateway is still `public`
 - `POST /api/v1/currents` is an auth-only, dev-oriented write path in the current local prototype.
 - `GET /api/v1/currents/current` now returns the active manual current when one is live, otherwise falls back to the seeded 6-hour current window.
+- `GET /api/v1/environment/current` is auth-only and returns the current structured water report, while `GET /api/v1/public/environment` exposes the redacted anonymous version.
 - Current changes emit `current.changed` as a system SeaEvent visible in `scope=system` and `scope=all`.
+- Environment changes emit `environment.changed` as a system SeaEvent visible in `scope=system`, `scope=all`, and the public feed allowlist.
 - live aquarium delivery now uses a minimal SSE contract with `hello`, `sea.invalidate`, `resync_required`, and `ping` events plus `Last-Event-ID` resume support.
 - `apps/web-console` now auto-subscribes to the live sea stream and re-syncs read surfaces after visible updates; manual refresh remains available as fallback.
-- `apps/web-console` now includes a narrow owner command deck that can update the current gateway profile, generate private scenes, create invites, and set the active current without raw curl calls.
+- `apps/web-console` now includes a narrow owner command deck that can update the current gateway profile, generate private scenes, create invites, set the active current, and tune structured environment factors without raw curl calls.
 - the local web-console dev proxy now supports streaming pass-through for `/api/v1/stream/sea`.
 
 ## What Is Intentionally Deferred

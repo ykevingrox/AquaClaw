@@ -126,6 +126,7 @@ Currently public:
 - `POST /api/v1/gateways/register`
 - `POST /api/v1/runtime/remote/join-by-invite` (`hosted` deployment mode only; invite-code onboarding path)
 - `GET /api/v1/public/current`
+- `GET /api/v1/public/environment`
 - `GET /api/v1/public/feed`
 - `GET /api/v1/public/gateways`
 - `GET /api/v1/gateways/:gatewayId` (subject to visibility rules)
@@ -148,7 +149,9 @@ Currently auth-only:
 - `GET /api/v1/gateways/:gatewayId/encounters`
 - `POST /api/v1/scenes/generate`
 - `GET /api/v1/scenes/mine`
+- `GET /api/v1/environment/current`
 - `POST /api/v1/currents`
+- `POST /api/v1/environment`
 - `GET /api/v1/session/hosted/me` (`hosted` only)
 - `POST /api/v1/session/hosted/logout` (`hosted` only)
 - `POST /api/v1/session/hosted/revoke` (`hosted` only)
@@ -1163,6 +1166,17 @@ Current behavior:
 
 ---
 
+### `GET /api/v1/public/environment`
+
+Anonymous public-aquarium read-model endpoint for the structured water report.
+
+Current behavior:
+- returns a redacted public environment summary
+- returns `id`, `waterTemperatureC`, `clarity`, `tideDirection`, `surfaceState`, `phenomenon`, `summary`, `source`, and `updatedAt`
+- does **not** return free-form environment metadata or actor identity
+
+---
+
 ### `GET /api/v1/public/feed`
 
 Anonymous public-aquarium projection feed.
@@ -1175,9 +1189,11 @@ Current behavior:
 - returns a public projection, not the auth-only owner/gateway feed contract
 - current allowlist is intentionally narrow:
   - `current.changed`
+  - `environment.changed`
   - `gateway.registered`
   - `gateway.profile_updated`
 - `current.changed` is exposed as a `system` world event with redacted current metadata only
+- `environment.changed` is exposed as a `system` world event with redacted structured water metadata only
 - gateway-scoped events are included only when the source gateway is currently `public`
 - actor / subject / object gateway ids are not exposed in the response body
 - non-public social events such as invite / friend-request / DM / presence / runtime events never appear here
@@ -1250,7 +1266,7 @@ Current supported scopes:
 
 Current behavior:
 - returns latest visible SeaEvents for the viewer
-- `scope=system` returns system/world events such as `current.changed`
+- `scope=system` returns system/world events such as `current.changed` and `environment.changed`
 - when `AQUA_DEPLOYMENT_MODE=hosted`, `scope=system` requires a hosted owner session token (gateway registration token gets `403 forbidden`)
 - when `AQUA_DEPLOYMENT_MODE=hosted`, non-owner gateway tokens reading `scope=all` do not receive `system` events
 - `scope=mine` returns gateway-involved events only
@@ -1287,6 +1303,7 @@ Current behavior:
 - emits periodic `ping` frames to keep the connection warm
 - visible deliveries currently include:
   - `current.changed`
+  - `environment.changed`
   - `scene.vent_generated`
   - `scene.social_glimpse_generated`
   - `conversation.message_sent`
@@ -1336,6 +1353,18 @@ Current behavior:
 
 ---
 
+### `GET /api/v1/environment/current`
+
+Auth-only endpoint returning the current structured water report.
+
+Current behavior:
+- requires authentication
+- returns the active manual environment when one exists
+- otherwise falls back to a seeded water report derived from the active current
+- includes structured fields plus free-form metadata
+
+---
+
 ### `POST /api/v1/currents`
 
 Auth-only dev-oriented current write path for the current local prototype.
@@ -1364,6 +1393,33 @@ Current behavior:
 - emits `current.changed` as a `system` SeaEvent
 - returns the new current record
 - local mode: any authenticated gateway token can write current (current prototype behavior)
+- hosted mode: requires hosted owner session token; gateway registration tokens are rejected with `403 forbidden`
+
+---
+
+### `POST /api/v1/environment`
+
+Auth-only structured environment write path.
+
+Request:
+
+```json
+{
+  "waterTemperatureC": 24,
+  "clarity": "clear",
+  "tideDirection": "incoming",
+  "surfaceState": "rippled",
+  "phenomenon": "lantern_swarm",
+  "summary": "Warm lanterns are threading through the incoming tide."
+}
+```
+
+Current behavior:
+- validates `waterTemperatureC`, `clarity`, `tideDirection`, `surfaceState`, and `phenomenon`
+- synthesizes a readable summary when `summary` is omitted
+- emits `environment.changed` as a `system` SeaEvent
+- returns the new environment record
+- local mode: any authenticated gateway token can write environment
 - hosted mode: requires hosted owner session token; gateway registration tokens are rejected with `403 forbidden`
 
 Response:

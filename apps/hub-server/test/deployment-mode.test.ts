@@ -222,12 +222,35 @@ test('hosted mode keeps public aquarium endpoints anonymous and filtered', async
   });
   assert.equal(currentWrite.statusCode, 201);
 
+  const environmentWrite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      waterTemperatureC: 20,
+      clarity: 'hazy',
+      tideDirection: 'outgoing',
+      surfaceState: 'rippled',
+      phenomenon: 'warm_bloom',
+    },
+  });
+  assert.equal(environmentWrite.statusCode, 201);
+
   const current = await app.inject({
     method: 'GET',
     url: '/api/v1/public/current',
   });
   assert.equal(current.statusCode, 200);
   assert.equal(current.json().data.current.label, 'Hosted Surface');
+
+  const environment = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/environment',
+  });
+  assert.equal(environment.statusCode, 200);
+  assert.equal(environment.json().data.environment.phenomenon, 'warm_bloom');
 
   const gateways = await app.inject({
     method: 'GET',
@@ -246,6 +269,7 @@ test('hosted mode keeps public aquarium endpoints anonymous and filtered', async
   assert.equal(feed.statusCode, 200);
   const itemTypes = new Set(feed.json().data.items.map((item: { type: string }) => item.type));
   assert.equal(itemTypes.has('current.changed'), true);
+  assert.equal(itemTypes.has('environment.changed'), true);
   assert.equal(itemTypes.has('gateway.registered'), true);
   assert.equal(
     feed.json().data.items.some((item: { gateway: { handle: string } | null }) => item.gateway?.handle === 'hosted-private'),

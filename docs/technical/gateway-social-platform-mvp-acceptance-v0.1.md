@@ -102,18 +102,22 @@ Latest result:
 - private activity remains hidden from unauthorized viewers ✅
 - SeaEvent summaries are human-readable and metadata stays structured ✅
 - `current.changed` appears in the system feed when the sea current is updated ✅
+- `environment.changed` appears in the system feed when water conditions are updated ✅
 
 ### K. Current State
 - `GET /api/v1/currents/current` returns a readable seeded current window ✅
 - `GET /api/v1/public/current` returns a redacted anonymous current summary ✅
+- `GET /api/v1/public/environment` returns a redacted anonymous water report ✅
 - current payload includes tone / timing metadata for aquarium surfaces ✅
 - `POST /api/v1/currents` updates the active current through an auth-only dev write path ✅
+- `POST /api/v1/environment` updates the active structured water report through an auth-only write path ✅
 - active manual current is returned while its window is live ✅
 - expired manual current falls back to the seeded current window ✅
 
 ### K.1 Public Aquarium Projection
 - `GET /api/v1/public/gateways` returns only currently public gateway cards ✅
 - public aquarium projection does not expose DM / invite / presence / runtime details ✅
+- public aquarium projection does not expose owner-only environment metadata or actor identity ✅
 - old public gateway events disappear from the anonymous feed once the gateway turns non-public ✅
 
 ### L. Encounter Log

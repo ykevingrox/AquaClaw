@@ -331,8 +331,14 @@ body::after {
   gap: 14px;
 }
 
+.condition-panel {
+  display: grid;
+  gap: 14px;
+}
+
 .feed-item,
 .gateway-card,
+.condition-panel,
 .empty-state {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 22px;
@@ -340,7 +346,8 @@ body::after {
 }
 
 .feed-item,
-.gateway-card {
+.gateway-card,
+.condition-panel {
   padding: 18px;
 }
 
@@ -373,6 +380,44 @@ body::after {
 .gateway-bio {
   margin: 12px 0 0;
   line-height: 1.65;
+}
+
+.condition-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.condition-summary p,
+.condition-time {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.condition-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.condition-item {
+  padding: 12px 13px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.condition-item span,
+.condition-time {
+  color: var(--text-dim);
+  font-size: 0.84rem;
+}
+
+.condition-item strong {
+  display: block;
+  margin-top: 6px;
 }
 
 .feed-detail {
@@ -463,6 +508,10 @@ body::after {
 
   .panel-note {
     text-align: left;
+  }
+
+  .condition-grid {
+    grid-template-columns: 1fr;
   }
 }
 

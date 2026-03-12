@@ -373,6 +373,7 @@ body::after {
 }
 
 .panel-command,
+.panel-environment,
 .panel-runtime,
 .panel-encounters,
 .panel-scenes {
@@ -428,6 +429,34 @@ body::after {
   border-radius: 40%;
   background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 65%);
   opacity: 0.4;
+}
+
+.climate-card {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 22px;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.03), rgba(8, 19, 28, 0.18));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.climate-card h3 {
+  margin: 6px 0 0;
+  font-size: 1.7rem;
+  line-height: 1.08;
+}
+
+.climate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.climate-grid div {
+  padding: 12px 13px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .current-head,
@@ -705,6 +734,10 @@ body::after {
   }
 
   .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .climate-grid {
     grid-template-columns: 1fr;
   }
 

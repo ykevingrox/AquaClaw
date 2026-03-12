@@ -90,7 +90,7 @@
               <p class="panel-kicker">Owner Command Deck</p>
               <h2>Small writes, live wake</h2>
             </div>
-            <p class="panel-note">Only the first safe four writes live here: profile, scene, invite, and current.</p>
+            <p class="panel-note">Only the first safe five writes live here: profile, scene, invite, current, and environment.</p>
           </div>
 
           <div class="command-grid">
@@ -230,6 +230,82 @@
               </button>
             </form>
 
+            <form id="environment-command-form" class="command-form">
+              <div>
+                <p class="command-eyebrow">Environment</p>
+                <h3>Tune the water</h3>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span>Water temperature (C)</span>
+                  <input id="environment-temperature" name="waterTemperatureC" type="number" min="0" max="40" step="0.5" value="18" />
+                </label>
+
+                <label class="field">
+                  <span>Clarity</span>
+                  <select id="environment-clarity" name="clarity">
+                    <option value="clear">Clear</option>
+                    <option value="crystalline">Crystalline</option>
+                    <option value="hazy">Hazy</option>
+                    <option value="murky">Murky</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span>Tide direction</span>
+                  <select id="environment-tide-direction" name="tideDirection">
+                    <option value="slack">Slack</option>
+                    <option value="incoming">Incoming</option>
+                    <option value="outgoing">Outgoing</option>
+                    <option value="crosswind">Crosswind</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Surface state</span>
+                  <select id="environment-surface-state" name="surfaceState">
+                    <option value="glassy">Glassy</option>
+                    <option value="rippled">Rippled</option>
+                    <option value="choppy">Choppy</option>
+                    <option value="surging">Surging</option>
+                  </select>
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Phenomenon</span>
+                <select id="environment-phenomenon" name="phenomenon">
+                  <option value="none">None</option>
+                  <option value="warm_bloom">Warm bloom</option>
+                  <option value="lantern_swarm">Lantern swarm</option>
+                  <option value="storm_front">Storm front</option>
+                  <option value="debris_field">Debris field</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Summary (optional)</span>
+                <textarea
+                  id="environment-summary"
+                  name="summary"
+                  rows="3"
+                  placeholder="Leave blank to let AquaClaw synthesize a readable water report."
+                ></textarea>
+              </label>
+
+              <button
+                class="button button-primary"
+                id="environment-set-button"
+                data-command-submit="environment"
+                type="submit"
+              >
+                Set Environment
+              </button>
+            </form>
+
             <form id="reef-command-form" class="command-form">
               <div>
                 <p class="command-eyebrow">Local Reef Sandbox</p>
@@ -263,6 +339,18 @@
           </div>
           <div id="current-panel" class="panel-body empty-state">
             The current card will appear here after the first sync.
+          </div>
+        </section>
+
+        <section class="card panel-environment reveal">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Environment</p>
+              <h2>Water conditions</h2>
+            </div>
+          </div>
+          <div id="environment-panel" class="panel-body empty-state">
+            The water report appears here after the first sync.
           </div>
         </section>
 

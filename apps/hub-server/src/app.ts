@@ -9,6 +9,7 @@ import {
   createGatewayStore,
   type ConversationListItem,
   type ConversationReadStateSummary,
+  type EnvironmentRecord,
   type EncounterRecord,
   type GatewayRecord,
   type GatewayStore,
@@ -195,6 +196,16 @@ interface SetCurrentBody {
   sceneHint?: string | null;
   startsAt?: string;
   endsAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface SetEnvironmentBody {
+  waterTemperatureC?: number;
+  clarity?: string;
+  tideDirection?: string;
+  surfaceState?: string;
+  phenomenon?: string;
+  summary?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -576,6 +587,35 @@ function toPublicCurrentSummary(current: CurrentRecord) {
   };
 }
 
+function toEnvironmentSummary(environment: EnvironmentRecord) {
+  return {
+    id: environment.id,
+    waterTemperatureC: environment.waterTemperatureC,
+    clarity: environment.clarity,
+    tideDirection: environment.tideDirection,
+    surfaceState: environment.surfaceState,
+    phenomenon: environment.phenomenon,
+    summary: environment.summary,
+    source: environment.source,
+    updatedAt: environment.updatedAt,
+    metadata: environment.metadata,
+  };
+}
+
+function toPublicEnvironmentSummary(environment: EnvironmentRecord) {
+  return {
+    id: environment.id,
+    waterTemperatureC: environment.waterTemperatureC,
+    clarity: environment.clarity,
+    tideDirection: environment.tideDirection,
+    surfaceState: environment.surfaceState,
+    phenomenon: environment.phenomenon,
+    summary: environment.summary,
+    source: environment.source,
+    updatedAt: environment.updatedAt,
+  };
+}
+
 function toPublicSeaEventMetadata(event: SeaEvent) {
   if (event.type === 'current.changed') {
     return {
@@ -587,6 +627,19 @@ function toPublicSeaEventMetadata(event: SeaEvent) {
       currentSceneHint: typeof event.metadata.currentSceneHint === 'string' ? event.metadata.currentSceneHint : null,
       startsAt: typeof event.metadata.startsAt === 'string' ? event.metadata.startsAt : null,
       endsAt: typeof event.metadata.endsAt === 'string' ? event.metadata.endsAt : null,
+      source: typeof event.metadata.source === 'string' ? event.metadata.source : null,
+    };
+  }
+
+  if (event.type === 'environment.changed') {
+    return {
+      environmentId: typeof event.metadata.environmentId === 'string' ? event.metadata.environmentId : null,
+      waterTemperatureC: typeof event.metadata.waterTemperatureC === 'number' ? event.metadata.waterTemperatureC : null,
+      clarity: typeof event.metadata.clarity === 'string' ? event.metadata.clarity : null,
+      tideDirection: typeof event.metadata.tideDirection === 'string' ? event.metadata.tideDirection : null,
+      surfaceState: typeof event.metadata.surfaceState === 'string' ? event.metadata.surfaceState : null,
+      phenomenon: typeof event.metadata.phenomenon === 'string' ? event.metadata.phenomenon : null,
+      environmentSummary: typeof event.metadata.environmentSummary === 'string' ? event.metadata.environmentSummary : null,
       source: typeof event.metadata.source === 'string' ? event.metadata.source : null,
     };
   }
@@ -908,6 +961,10 @@ function currentErrorToHttp(_message: string) {
   return { statusCode: 400, code: 'validation_failed' };
 }
 
+function environmentErrorToHttp(_message: string) {
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
 function encounterErrorToHttp(message: string) {
   if (message === 'gateway not found') {
     return { statusCode: 404, code: 'not_found' };
@@ -1053,6 +1110,13 @@ export function buildApp(options: BuildAppOptions = {}) {
     ok: true,
     data: {
       current: toPublicCurrentSummary(store.getCurrent()),
+    },
+  }));
+
+  app.get('/api/v1/public/environment', async () => ({
+    ok: true,
+    data: {
+      environment: toPublicEnvironmentSummary(store.getEnvironment()),
     },
   }));
 
@@ -2318,6 +2382,23 @@ export function buildApp(options: BuildAppOptions = {}) {
     },
   }));
 
+  app.get('/api/v1/environment/current', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({
+        ok: false,
+        error: result.error,
+      });
+    }
+
+    return {
+      ok: true,
+      data: {
+        environment: toEnvironmentSummary(store.getEnvironment()),
+      },
+    };
+  });
+
   app.post<{ Body: SetCurrentBody }>('/api/v1/currents', async (request, reply) => {
     let actorGatewayId: string;
 
@@ -2770,6 +2851,127 @@ export function buildApp(options: BuildAppOptions = {}) {
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'failed to list encounters';
       const mapped = encounterErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: SetEnvironmentBody }>('/api/v1/environment', async (request, reply) => {
+    let actorGatewayId: string;
+
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorGatewayId = hostedOwner.session.gateway.id;
+    } else {
+      const result = getAuthedGateway(store, request.headers.authorization);
+      if ('error' in result) {
+        return reply.code(401).send({ ok: false, error: result.error });
+      }
+      actorGatewayId = result.gateway.id;
+    }
+
+    const { waterTemperatureC, clarity, tideDirection, surfaceState, phenomenon, summary, metadata } = request.body ?? {};
+
+    if (typeof waterTemperatureC !== 'number' || !Number.isFinite(waterTemperatureC)) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'waterTemperatureC is required',
+        },
+      });
+    }
+    if (typeof clarity !== 'string' || !clarity.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'clarity is required',
+        },
+      });
+    }
+    if (typeof tideDirection !== 'string' || !tideDirection.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'tideDirection is required',
+        },
+      });
+    }
+    if (typeof surfaceState !== 'string' || !surfaceState.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'surfaceState is required',
+        },
+      });
+    }
+    if (typeof phenomenon !== 'string' || !phenomenon.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'phenomenon is required',
+        },
+      });
+    }
+    if (summary !== undefined && typeof summary !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'summary must be a string when provided',
+        },
+      });
+    }
+    if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'metadata must be an object when provided',
+        },
+      });
+    }
+
+    try {
+      const environment = store.setEnvironment({
+        waterTemperatureC,
+        clarity: clarity.trim() as EnvironmentRecord['clarity'],
+        tideDirection: tideDirection.trim() as EnvironmentRecord['tideDirection'],
+        surfaceState: surfaceState.trim() as EnvironmentRecord['surfaceState'],
+        phenomenon: phenomenon.trim() as EnvironmentRecord['phenomenon'],
+        summary: summary?.trim() || undefined,
+        metadata,
+        actorGatewayId,
+      });
+
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          environment: toEnvironmentSummary(environment),
+        },
+      });
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to set environment';
+      const mapped = environmentErrorToHttp(messageText);
       return reply.code(mapped.statusCode).send({
         ok: false,
         error: {

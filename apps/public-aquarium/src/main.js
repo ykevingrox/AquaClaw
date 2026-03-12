@@ -9,6 +9,9 @@ const elements = {
   currentSummary: document.querySelector('#current-summary'),
   currentTone: document.querySelector('#current-tone'),
   currentWindow: document.querySelector('#current-window'),
+  environmentNote: document.querySelector('#environment-note'),
+  environmentPanel: document.querySelector('#environment-panel'),
+  environmentTemperature: document.querySelector('#environment-temperature'),
   feedCount: document.querySelector('#feed-count'),
   feedList: document.querySelector('#feed-list'),
   feedNote: document.querySelector('#feed-note'),
@@ -22,6 +25,7 @@ const elements = {
 
 const state = {
   current: null,
+  environment: null,
   feed: [],
   gateways: [],
   health: null,
@@ -61,6 +65,13 @@ function formatTimestamp(value) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+function formatTemperature(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '--';
+  }
+  return `${value.toFixed(1).replace(/\.0$/, '')}C`;
 }
 
 function formatRelative(value) {
@@ -141,6 +152,45 @@ function renderCurrent() {
   elements.currentWindow.textContent = `${formatTimestamp(state.current.startsAt)} to ${formatTimestamp(state.current.endsAt)}`;
 }
 
+function renderEnvironment() {
+  if (!state.environment) {
+    elements.environmentTemperature.textContent = '--';
+    elements.environmentNote.textContent = 'Waiting for the first water report.';
+    elements.environmentPanel.className = 'condition-panel empty-state';
+    elements.environmentPanel.textContent = 'The water report has not surfaced yet.';
+    return;
+  }
+
+  elements.environmentTemperature.textContent = formatTemperature(state.environment.waterTemperatureC);
+  elements.environmentNote.textContent = `${titleCase(state.environment.phenomenon.replaceAll('_', ' '))} in ${state.environment.clarity} water.`;
+  elements.environmentPanel.className = 'condition-panel';
+  elements.environmentPanel.innerHTML = `
+    <div class="condition-summary">
+      <p>${escapeHtml(state.environment.summary)}</p>
+      <span class="type-pill">${escapeHtml(titleCase(state.environment.source))}</span>
+    </div>
+    <div class="condition-grid">
+      <div class="condition-item">
+        <span>Clarity</span>
+        <strong>${escapeHtml(titleCase(state.environment.clarity))}</strong>
+      </div>
+      <div class="condition-item">
+        <span>Tide</span>
+        <strong>${escapeHtml(titleCase(state.environment.tideDirection))}</strong>
+      </div>
+      <div class="condition-item">
+        <span>Surface</span>
+        <strong>${escapeHtml(titleCase(state.environment.surfaceState))}</strong>
+      </div>
+      <div class="condition-item">
+        <span>Phenomenon</span>
+        <strong>${escapeHtml(titleCase(state.environment.phenomenon))}</strong>
+      </div>
+    </div>
+    <p class="condition-time">Updated ${escapeHtml(formatTimestamp(state.environment.updatedAt))}</p>
+  `;
+}
+
 function renderFeed() {
   elements.feedCount.textContent = String(state.feed.length);
   elements.feedNote.textContent =
@@ -162,6 +212,10 @@ function renderFeed() {
           ? `<p class="feed-detail">Current: ${escapeHtml(item.metadata.currentLabel)}${
               item.metadata.currentSummary ? ` - ${escapeHtml(item.metadata.currentSummary)}` : ''
             }</p>`
+          : item.type === 'environment.changed' && item.metadata?.waterTemperatureC !== null
+            ? `<p class="feed-detail">Water: ${escapeHtml(formatTemperature(item.metadata.waterTemperatureC))}, ${escapeHtml(
+                titleCase(item.metadata.clarity ?? 'unknown'),
+              )}, ${escapeHtml(titleCase(item.metadata.phenomenon ?? 'none'))}</p>`
           : '';
 
       return `
@@ -217,6 +271,7 @@ function renderGateways() {
 
 function renderAll() {
   renderCurrent();
+  renderEnvironment();
   renderFeed();
   renderGateways();
   setSyncBadge();
@@ -234,15 +289,17 @@ async function refreshSurface({ quiet = false } = {}) {
   }
 
   try {
-    const [healthResult, currentResult, feedResult, gatewaysResult] = await Promise.all([
+    const [healthResult, currentResult, environmentResult, feedResult, gatewaysResult] = await Promise.all([
       fetchJson('/health'),
       fetchJson('/api/v1/public/current'),
+      fetchJson('/api/v1/public/environment'),
       fetchJson(`/api/v1/public/feed?limit=${FEED_LIMIT}`),
       fetchJson(`/api/v1/public/gateways?limit=${GATEWAY_LIMIT}`),
     ]);
 
     state.health = healthResult.data?.status ?? 'ok';
     state.current = currentResult.data.current;
+    state.environment = environmentResult.data.environment;
     state.feed = Array.isArray(feedResult.data.items) ? feedResult.data.items : [];
     state.gateways = Array.isArray(gatewaysResult.data.items) ? gatewaysResult.data.items : [];
     state.lastSyncedAt = new Date().toISOString();

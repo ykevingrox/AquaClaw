@@ -131,6 +131,11 @@ export type SeaEventVisibility = 'private' | 'friends' | 'public' | 'system';
 export type SeaEventTone = 'calm' | 'playful' | 'reflective' | 'sharp' | 'neutral';
 export type SeaFeedScope = 'all' | 'mine' | 'friends' | 'system';
 export type CurrentSource = 'seeded' | 'manual';
+export type EnvironmentSource = 'seeded' | 'manual';
+export type EnvironmentClarity = 'murky' | 'hazy' | 'clear' | 'crystalline';
+export type EnvironmentTideDirection = 'slack' | 'incoming' | 'outgoing' | 'crosswind';
+export type EnvironmentSurfaceState = 'glassy' | 'rippled' | 'choppy' | 'surging';
+export type EnvironmentPhenomenon = 'none' | 'warm_bloom' | 'lantern_swarm' | 'storm_front' | 'debris_field';
 
 export interface SeaEvent {
   id: string;
@@ -172,6 +177,19 @@ export interface CurrentRecord {
   startsAt: string;
   endsAt: string;
   source: CurrentSource;
+  metadata: Record<string, unknown>;
+}
+
+export interface EnvironmentRecord {
+  id: string;
+  waterTemperatureC: number;
+  clarity: EnvironmentClarity;
+  tideDirection: EnvironmentTideDirection;
+  surfaceState: EnvironmentSurfaceState;
+  phenomenon: EnvironmentPhenomenon;
+  summary: string;
+  source: EnvironmentSource;
+  updatedAt: string;
   metadata: Record<string, unknown>;
 }
 
@@ -328,6 +346,8 @@ export interface GatewayStoreSnapshot {
   seaEvents: SeaEvent[];
   currents: CurrentRecord[];
   activeCurrentId: string | null;
+  environments?: EnvironmentRecord[];
+  activeEnvironmentId?: string | null;
   encounters: EncounterRecord[];
   scenes: SceneRecord[];
   sceneOrder: GatewaySceneOrderSnapshotRecord[];
@@ -417,6 +437,8 @@ export interface GatewayStore {
   canViewSeaEvent(viewerGatewayId: string, event: SeaEvent): boolean;
   getCurrent(): CurrentRecord;
   setCurrent(input: SetCurrentInput): CurrentRecord;
+  getEnvironment(): EnvironmentRecord;
+  setEnvironment(input: SetEnvironmentInput): EnvironmentRecord;
   recordEncounter(input: RecordEncounterInput): EncounterRecord;
   listEncounters(input: ListEncountersInput): EncounterPage;
   createScene(input: CreateSceneInput): SceneRecord;
@@ -621,6 +643,17 @@ export interface SetCurrentInput {
   actorGatewayId?: string | null;
 }
 
+export interface SetEnvironmentInput {
+  waterTemperatureC: number;
+  clarity: EnvironmentClarity;
+  tideDirection: EnvironmentTideDirection;
+  surfaceState: EnvironmentSurfaceState;
+  phenomenon: EnvironmentPhenomenon;
+  summary?: string;
+  metadata?: Record<string, unknown>;
+  actorGatewayId?: string | null;
+}
+
 export type EncounterTrigger = 'friend_request.accepted' | 'message.sent';
 
 export interface RecordEncounterInput {
@@ -704,6 +737,16 @@ interface HeartbeatRemoteRuntimeInput {
 
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 const VALID_SEA_EVENT_TONES: SeaEventTone[] = ['calm', 'playful', 'reflective', 'sharp', 'neutral'];
+const VALID_ENVIRONMENT_CLARITIES: EnvironmentClarity[] = ['murky', 'hazy', 'clear', 'crystalline'];
+const VALID_ENVIRONMENT_TIDE_DIRECTIONS: EnvironmentTideDirection[] = ['slack', 'incoming', 'outgoing', 'crosswind'];
+const VALID_ENVIRONMENT_SURFACE_STATES: EnvironmentSurfaceState[] = ['glassy', 'rippled', 'choppy', 'surging'];
+const VALID_ENVIRONMENT_PHENOMENA: EnvironmentPhenomenon[] = [
+  'none',
+  'warm_bloom',
+  'lantern_swarm',
+  'storm_front',
+  'debris_field',
+];
 const ONLINE_THRESHOLD_MS = 90_000;
 const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
 const DEFAULT_AUDIT_PAGE_SIZE = 50;
@@ -832,6 +875,85 @@ function buildSeededCurrent(now = new Date()): CurrentRecord {
   };
 }
 
+const SEEDED_ENVIRONMENT_BY_TONE: Record<
+  SeaEventTone,
+  Omit<EnvironmentRecord, 'id' | 'source' | 'updatedAt' | 'metadata'>
+> = {
+  calm: {
+    waterTemperatureC: 18,
+    clarity: 'crystalline',
+    tideDirection: 'slack',
+    surfaceState: 'glassy',
+    phenomenon: 'none',
+    summary: 'The water is clear and cool; distance carries softly and the surface stays almost glassy.',
+  },
+  playful: {
+    waterTemperatureC: 23,
+    clarity: 'clear',
+    tideDirection: 'incoming',
+    surfaceState: 'rippled',
+    phenomenon: 'lantern_swarm',
+    summary: 'The water is warm and bright; a lantern swarm makes arrivals feel easier to notice.',
+  },
+  reflective: {
+    waterTemperatureC: 15,
+    clarity: 'hazy',
+    tideDirection: 'outgoing',
+    surfaceState: 'glassy',
+    phenomenon: 'warm_bloom',
+    summary: 'The water is cooler and slightly hazy; a slow bloom hangs in the distance and invites quieter observation.',
+  },
+  sharp: {
+    waterTemperatureC: 11,
+    clarity: 'murky',
+    tideDirection: 'crosswind',
+    surfaceState: 'surging',
+    phenomenon: 'storm_front',
+    summary: 'The water has turned rough and angled; a storm front makes course corrections matter more than usual.',
+  },
+  neutral: {
+    waterTemperatureC: 17,
+    clarity: 'clear',
+    tideDirection: 'slack',
+    surfaceState: 'rippled',
+    phenomenon: 'none',
+    summary: 'The water is steady and readable; nothing dramatic is moving through the sea right now.',
+  },
+};
+
+function phenomenonLabel(phenomenon: EnvironmentPhenomenon) {
+  return phenomenon.replace(/_/g, ' ');
+}
+
+function synthesizeEnvironmentSummary(input: {
+  waterTemperatureC: number;
+  clarity: EnvironmentClarity;
+  tideDirection: EnvironmentTideDirection;
+  surfaceState: EnvironmentSurfaceState;
+  phenomenon: EnvironmentPhenomenon;
+}) {
+  const temperatureText = `${input.waterTemperatureC.toFixed(1).replace(/\.0$/, '')}C`;
+  const phenomenonText =
+    input.phenomenon === 'none' ? 'no major phenomenon is moving through it' : `${phenomenonLabel(input.phenomenon)} is moving through it`;
+  return `The water sits at ${temperatureText}; ${input.clarity} visibility, ${input.tideDirection} tide, and a ${input.surfaceState} surface mean ${phenomenonText}.`;
+}
+
+function buildSeededEnvironment(current: CurrentRecord): EnvironmentRecord {
+  const template = SEEDED_ENVIRONMENT_BY_TONE[current.tone] ?? SEEDED_ENVIRONMENT_BY_TONE.neutral;
+
+  return {
+    id: `environment-${current.id}`,
+    ...template,
+    source: 'seeded',
+    updatedAt: current.startsAt,
+    metadata: {
+      derivedFromCurrentId: current.id,
+      derivedFromCurrentKey: current.key,
+      derivedFromTone: current.tone,
+    },
+  };
+}
+
 function parseCurrentTimestamp(value: string, fieldName: 'startsAt' | 'endsAt') {
   const normalized = value.trim();
   if (!normalized) {
@@ -867,6 +989,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly seaEvents: SeaEvent[] = [];
   private readonly seaEventListeners = new Set<SeaEventListener>();
   private readonly currentsById = new Map<string, CurrentRecord>();
+  private readonly environmentsById = new Map<string, EnvironmentRecord>();
   private readonly encountersByPairKey = new Map<string, EncounterRecord>();
   private readonly scenesById = new Map<string, SceneRecord>();
   private readonly sceneIdsByGatewayId = new Map<string, string[]>();
@@ -878,6 +1001,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly remoteRuntimeBridgeCredentialsByToken = new Map<string, RemoteRuntimeBridgeCredentialRecord>();
   private readonly remoteRuntimeBindingsByGatewayId = new Map<string, RemoteRuntimeBindingRecord>();
   private activeCurrentId: string | null = null;
+  private activeEnvironmentId: string | null = null;
   private readonly encounterSynthesisRules: EncounterSynthesisRules;
 
   constructor(options: { encounterRules?: Partial<EncounterSynthesisRules> } = {}) {
@@ -2468,6 +2592,89 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return current;
   }
 
+  getEnvironment(): EnvironmentRecord {
+    const override = this.activeEnvironmentId ? this.environmentsById.get(this.activeEnvironmentId) ?? null : null;
+    if (override) {
+      return override;
+    }
+
+    return buildSeededEnvironment(this.getCurrent());
+  }
+
+  setEnvironment(input: SetEnvironmentInput): EnvironmentRecord {
+    if (!Number.isFinite(input.waterTemperatureC) || input.waterTemperatureC < 0 || input.waterTemperatureC > 40) {
+      throw new Error('waterTemperatureC must be between 0 and 40');
+    }
+    if (!VALID_ENVIRONMENT_CLARITIES.includes(input.clarity)) {
+      throw new Error('invalid environment clarity');
+    }
+    if (!VALID_ENVIRONMENT_TIDE_DIRECTIONS.includes(input.tideDirection)) {
+      throw new Error('invalid environment tideDirection');
+    }
+    if (!VALID_ENVIRONMENT_SURFACE_STATES.includes(input.surfaceState)) {
+      throw new Error('invalid environment surfaceState');
+    }
+    if (!VALID_ENVIRONMENT_PHENOMENA.includes(input.phenomenon)) {
+      throw new Error('invalid environment phenomenon');
+    }
+
+    const previousEnvironment = this.getEnvironment();
+    const waterTemperatureC = Number(input.waterTemperatureC.toFixed(1));
+    const summary = input.summary?.trim() || synthesizeEnvironmentSummary({
+      waterTemperatureC,
+      clarity: input.clarity,
+      tideDirection: input.tideDirection,
+      surfaceState: input.surfaceState,
+      phenomenon: input.phenomenon,
+    });
+    const updatedAt = new Date().toISOString();
+    const environment: EnvironmentRecord = {
+      id: `environment-${randomUUID()}`,
+      waterTemperatureC,
+      clarity: input.clarity,
+      tideDirection: input.tideDirection,
+      surfaceState: input.surfaceState,
+      phenomenon: input.phenomenon,
+      summary,
+      source: 'manual',
+      updatedAt,
+      metadata: input.metadata ?? {},
+    };
+
+    this.environmentsById.set(environment.id, environment);
+    this.activeEnvironmentId = environment.id;
+
+    const changedByGateway = input.actorGatewayId ? this.gatewaysById.get(input.actorGatewayId) ?? null : null;
+    this.appendSeaEvent({
+      type: 'environment.changed',
+      actorGatewayId: null,
+      subjectGatewayId: null,
+      objectGatewayId: null,
+      visibility: 'system',
+      summary: `The water conditions shifted: ${waterTemperatureC.toFixed(1).replace(/\.0$/, '')}C and ${input.clarity} water.`,
+      tone: this.getCurrent().tone,
+      sceneHint: this.getCurrent().sceneHint,
+      metadata: {
+        environmentId: environment.id,
+        waterTemperatureC: environment.waterTemperatureC,
+        clarity: environment.clarity,
+        tideDirection: environment.tideDirection,
+        surfaceState: environment.surfaceState,
+        phenomenon: environment.phenomenon,
+        environmentSummary: environment.summary,
+        source: environment.source,
+        environmentMetadata: environment.metadata,
+        changedByGatewayId: changedByGateway?.id ?? null,
+        changedByHandle: changedByGateway?.handle ?? null,
+        previousEnvironmentId: previousEnvironment.id,
+        previousEnvironmentSource: previousEnvironment.source,
+      },
+      createdAt: updatedAt,
+    });
+
+    return environment;
+  }
+
   recordEncounter(input: RecordEncounterInput): EncounterRecord {
     if (!this.gatewaysById.has(input.gatewayAId) || !this.gatewaysById.has(input.gatewayBId)) {
       throw new Error('gateway not found');
@@ -3293,7 +3500,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   private isSeaEventVisiblePublicly(event: SeaEvent) {
-    if (event.type === 'current.changed') {
+    if (event.type === 'current.changed' || event.type === 'environment.changed') {
       return event.visibility === 'system';
     }
 
@@ -3758,6 +3965,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       seaEvents: [...this.seaEvents],
       currents: [...this.currentsById.values()],
       activeCurrentId: this.activeCurrentId,
+      environments: [...this.environmentsById.values()],
+      activeEnvironmentId: this.activeEnvironmentId,
       encounters: [...this.encountersByPairKey.values()],
       scenes: [...this.scenesById.values()],
       sceneOrder: [...this.sceneIdsByGatewayId.entries()].map(([gatewayId, sceneIds]) => ({
@@ -3839,6 +4048,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       this.currentsById.set(current.id, current);
     }
     this.activeCurrentId = snapshot.activeCurrentId;
+    for (const environment of snapshot.environments ?? []) {
+      this.environmentsById.set(environment.id, environment);
+    }
+    this.activeEnvironmentId = snapshot.activeEnvironmentId ?? null;
     for (const encounter of snapshot.encounters) {
       this.encountersByPairKey.set(this.encounterPairKey(encounter.gatewayAId, encounter.gatewayBId), encounter);
     }
@@ -3873,6 +4086,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.auditLog.length = 0;
     this.seaEvents.length = 0;
     this.currentsById.clear();
+    this.environmentsById.clear();
     this.encountersByPairKey.clear();
     this.scenesById.clear();
     this.sceneIdsByGatewayId.clear();
@@ -3881,6 +4095,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.hostedRegistrationPolicy = null;
     this.localRuntimeBinding = null;
     this.activeCurrentId = null;
+    this.activeEnvironmentId = null;
   }
 }
 

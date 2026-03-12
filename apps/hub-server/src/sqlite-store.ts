@@ -394,6 +394,23 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.setCurrent(...args));
   }
 
+  getEnvironment(...args: Parameters<GatewayStore['getEnvironment']>): ReturnType<GatewayStore['getEnvironment']> {
+    const snapshotBefore = this.inner.exportSnapshot();
+    const environment = this.inner.getEnvironment(...args);
+    const snapshotAfter = this.inner.exportSnapshot();
+    if (
+      snapshotBefore.activeCurrentId !== snapshotAfter.activeCurrentId ||
+      snapshotBefore.activeEnvironmentId !== snapshotAfter.activeEnvironmentId
+    ) {
+      this.persistSnapshot();
+    }
+    return environment;
+  }
+
+  setEnvironment(...args: Parameters<GatewayStore['setEnvironment']>): ReturnType<GatewayStore['setEnvironment']> {
+    return this.runMutation(() => this.inner.setEnvironment(...args));
+  }
+
   recordEncounter(
     ...args: Parameters<GatewayStore['recordEncounter']>
   ): ReturnType<GatewayStore['recordEncounter']> {

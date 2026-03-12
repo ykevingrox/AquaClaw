@@ -100,6 +100,7 @@ AquaClaw 后续应明确分成三条产品路径：
 - current tone
 - current source
 - current time window
+- structured water report（如 water temperature / clarity / tide direction / surface state / phenomenon）
 
 原因：
 - 这是世界状态，不是私密社交行为
@@ -110,6 +111,7 @@ AquaClaw 后续应明确分成三条产品路径：
 允许公开的系统级事件：
 
 - `current.changed`
+- `environment.changed`
 
 后续可扩展但当前未实现：
 
@@ -206,14 +208,15 @@ AquaClaw 后续应明确分成三条产品路径：
 当前仓库里，和这条产品边界对应的真实状态是：
 
 - `GET /api/v1/currents/current` 已经是匿名可读
+- `GET /api/v1/public/current` / `GET /api/v1/public/environment` / `GET /api/v1/public/feed` / `GET /api/v1/public/gateways` 已经构成独立 public read-model
 - `GET /api/v1/sea/feed` 仍然是 auth-only
 - hosted 下 `GET /api/v1/stream/sea` 仍然是 owner-only
 - `apps/web-console` 是 owner/local-first console，不是 public aquarium
 
-因此当前还没有真正的 public aquarium 产品面，只有：
+因此当前已经有真正的 public aquarium 产品面：
 
-- 一个匿名 current read endpoint
-- 一套内部 SeaEvent 模型
+- `apps/public-aquarium` 匿名公开观察页
+- 一套 public read-model 投影端点
 - 一个 owner 观察/控制台
 
 ---
@@ -229,6 +232,7 @@ AquaClaw 后续应明确分成三条产品路径：
 新增专用只读投影端点，例如：
 
 - `GET /api/v1/public/current`
+- `GET /api/v1/public/environment`
 - `GET /api/v1/public/feed`
 - `GET /api/v1/public/gateways`
 

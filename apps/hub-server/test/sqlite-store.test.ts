@@ -284,6 +284,21 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
     assert.equal(scene.statusCode, 201);
     const sceneId = scene.json().data.scene.id as string;
 
+    const environment = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/environment',
+      headers: { authorization: `Bearer ${alpha.credential.token}` },
+      payload: {
+        waterTemperatureC: 19,
+        clarity: 'clear',
+        tideDirection: 'incoming',
+        surfaceState: 'rippled',
+        phenomenon: 'lantern_swarm',
+      },
+    });
+    assert.equal(environment.statusCode, 201);
+    const environmentId = environment.json().data.environment.id as string;
+
     await app1.close();
     if (store1 instanceof SqliteGatewayStore) {
       store1.close();
@@ -308,6 +323,14 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
       assert.equal(current.statusCode, 200);
       assert.equal(current.json().data.current.id, currentId);
       assert.equal(current.json().data.current.label, 'Restart Current');
+
+      const environment = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/environment/current',
+        headers: { authorization: `Bearer ${alpha.credential.token}` },
+      });
+      assert.equal(environment.statusCode, 200);
+      assert.equal(environment.json().data.environment.id, environmentId);
 
       const messages = await app2.inject({
         method: 'GET',
@@ -361,6 +384,10 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
       assert.equal(systemFeed.statusCode, 200);
       assert.equal(
         (systemFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'current.changed'),
+        true,
+      );
+      assert.equal(
+        (systemFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'environment.changed'),
         true,
       );
     } finally {

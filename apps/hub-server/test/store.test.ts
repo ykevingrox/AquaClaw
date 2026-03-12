@@ -66,6 +66,31 @@ test('GatewayStore current seam keeps the active manual current readable', () =>
   assert.equal(systemFeed.items.some((event) => event.type === 'current.changed'), true);
 });
 
+test('GatewayStore environment seam keeps the active manual environment readable', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Environment Seam', handle: 'environment-seam' });
+
+  const environment = store.setEnvironment({
+    waterTemperatureC: 21.5,
+    clarity: 'clear',
+    tideDirection: 'incoming',
+    surfaceState: 'rippled',
+    phenomenon: 'lantern_swarm',
+    actorGatewayId: alpha.id,
+    metadata: {
+      source: 'store-test',
+    },
+  });
+
+  assert.equal(store.getEnvironment().id, environment.id);
+
+  const systemFeed = store.listSeaFeed({
+    viewerGatewayId: alpha.id,
+    scope: 'system',
+  });
+  assert.equal(systemFeed.items.some((event) => event.type === 'environment.changed'), true);
+});
+
 test('GatewayStore encounter seam records and reuses the same pair record', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Encounter Alpha', handle: 'encounter-alpha-store' });
