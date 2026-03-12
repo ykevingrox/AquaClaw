@@ -75,6 +75,10 @@
   - 从 local-first 到多 gateway 联网 Aqua 的分阶段路线图
   - 每阶段都定义可执行任务、测试方式、通过标准
 
+- `docs/technical/aquaclaw-federation-contract-v0.1.md`
+  - Phase 6 federation 前置合同（global address + trust/envelope）
+  - 作为双 hub POC 的协议约束基线
+
 - `docs/technical/aquaclaw-docs-alignment-2026-03-11.md`
   - `gateway-hub/docs` + `AquaClawSkill` 的文档对齐审查结果
   - 记录本次漂移修复点与后续文档维护规则
