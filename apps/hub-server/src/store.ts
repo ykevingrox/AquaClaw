@@ -359,6 +359,7 @@ export interface GatewayStore {
     bridgeCredential: RemoteRuntimeBridgeCredentialRecord;
     created: boolean;
   };
+  joinHostedRuntimeWithInvite(input: JoinHostedRuntimeWithInviteInput): JoinHostedRuntimeWithInviteResult;
   getRemoteRuntimeBindingByGatewayId(gatewayId: string): RemoteRuntimeBindingState | null;
   seedLocalReefSandbox(input: SeedLocalReefInput): LocalReefSeedResult;
   findById(gatewayId: string): GatewayRecord | null;
@@ -481,6 +482,32 @@ interface BindRemoteRuntimeInput {
   label?: string;
   source?: string;
   metadata?: Record<string, unknown>;
+}
+
+interface JoinHostedRuntimeWithInviteInput {
+  inviteCode: string;
+  displayName: string;
+  handle: string;
+  bio?: string;
+  visibility?: GatewayVisibility;
+  installationId?: string;
+  runtimeId?: string;
+  label?: string;
+  source?: string;
+  metadata?: Record<string, unknown>;
+  connectionType?: string | null;
+  heartbeatMetadata?: Record<string, unknown>;
+}
+
+interface JoinHostedRuntimeWithInviteResult {
+  gateway: GatewayRecord;
+  token: string;
+  invite: InviteRecord;
+  claim: InviteClaimRecord;
+  friendRequest: FriendRequestRecord;
+  runtime: RemoteRuntimeBindingState;
+  bridgeCredential: RemoteRuntimeBridgeCredentialRecord;
+  presence: GatewayPresenceRecord;
 }
 
 interface CreateFriendRequestInput {
@@ -1755,6 +1782,32 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return invite;
   }
 
+  private getInviteByCodeOrThrow(code: string) {
+    const normalizedCode = code.trim().toUpperCase();
+    if (!normalizedCode) {
+      throw new Error('invite code is required');
+    }
+
+    const invite = this.invitesByCode.get(normalizedCode);
+    if (!invite) {
+      throw new Error('invite not found');
+    }
+
+    return invite;
+  }
+
+  private assertInviteIsUsable(invite: InviteRecord) {
+    if (invite.revokedAt) {
+      throw new Error('invite revoked');
+    }
+    if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) {
+      throw new Error('invite expired');
+    }
+    if (invite.maxUses !== null && invite.useCount >= invite.maxUses) {
+      throw new Error('invite exhausted');
+    }
+  }
+
   revokeInvite(input: RevokeInviteInput): InviteRecord {
     const invite = this.invitesById.get(input.inviteId);
     if (!invite) {
@@ -1790,19 +1843,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   claimInvite(input: ClaimInviteInput) {
-    const invite = this.invitesByCode.get(input.code.trim().toUpperCase());
-    if (!invite) {
-      throw new Error('invite not found');
-    }
-    if (invite.revokedAt) {
-      throw new Error('invite revoked');
-    }
-    if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) {
-      throw new Error('invite expired');
-    }
-    if (invite.maxUses !== null && invite.useCount >= invite.maxUses) {
-      throw new Error('invite exhausted');
-    }
+    const invite = this.getInviteByCodeOrThrow(input.code);
+    this.assertInviteIsUsable(invite);
     if (invite.createdByGatewayId === input.claimedByGatewayId) {
       throw new Error('cannot claim your own invite');
     }
@@ -1847,6 +1889,79 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     });
 
     return { invite: updatedInvite, claim, friendRequest };
+  }
+
+  joinHostedRuntimeWithInvite(input: JoinHostedRuntimeWithInviteInput): JoinHostedRuntimeWithInviteResult {
+    const snapshot = this.exportSnapshot();
+
+    try {
+      const invite = this.getInviteByCodeOrThrow(input.inviteCode);
+      this.assertInviteIsUsable(invite);
+
+      const hostedOwnerGatewayId = this.hostedOwnerGatewayId;
+      if (!hostedOwnerGatewayId || !this.gatewaysById.has(hostedOwnerGatewayId)) {
+        throw new Error('hosted owner gateway not found');
+      }
+      if (invite.createdByGatewayId !== hostedOwnerGatewayId) {
+        throw new Error('hosted invite requires the hosted owner gateway');
+      }
+
+      const { gateway, token } = this.register({
+        displayName: input.displayName,
+        handle: input.handle,
+        bio: input.bio,
+        visibility: input.visibility,
+      });
+
+      const claimed = this.claimInvite({
+        code: invite.code,
+        claimedByGatewayId: gateway.id,
+      });
+
+      const bridgeCredential = this.createRemoteRuntimeBridgeCredential({
+        createdByGatewayId: hostedOwnerGatewayId,
+        label: input.label,
+        metadata: input.metadata,
+      });
+
+      const bind = this.bindRemoteRuntime({
+        bridgeToken: bridgeCredential.token,
+        gatewayId: gateway.id,
+        installationId: input.installationId,
+        runtimeId: input.runtimeId,
+        label: input.label,
+        source: input.source,
+        metadata: input.metadata,
+      });
+
+      let runtime = bind.runtime;
+      let presence = this.getPresence(gateway.id);
+
+      if (input.connectionType !== undefined || input.heartbeatMetadata !== undefined) {
+        const heartbeat = this.heartbeatRemoteRuntime({
+          gatewayId: gateway.id,
+          runtimeId: bind.runtime.binding.runtimeId,
+          connectionType: input.connectionType ?? null,
+          metadata: input.heartbeatMetadata,
+        });
+        runtime = heartbeat.runtime;
+        presence = heartbeat.presence;
+      }
+
+      return {
+        gateway,
+        token,
+        invite: claimed.invite,
+        claim: claimed.claim,
+        friendRequest: claimed.friendRequest,
+        runtime,
+        bridgeCredential: bind.bridgeCredential,
+        presence,
+      };
+    } catch (error) {
+      this.importSnapshot(snapshot);
+      throw error;
+    }
   }
 
   createFriendRequest(input: CreateFriendRequestInput): FriendRequestRecord {

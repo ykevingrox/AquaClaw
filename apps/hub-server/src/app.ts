@@ -87,6 +87,21 @@ interface BindRemoteRuntimeBody {
   metadata?: Record<string, unknown>;
 }
 
+interface JoinHostedRuntimeByInviteBody {
+  inviteCode?: string;
+  displayName?: string;
+  handle?: string;
+  bio?: string;
+  visibility?: GatewayVisibility;
+  installationId?: string;
+  runtimeId?: string;
+  label?: string;
+  source?: string;
+  metadata?: Record<string, unknown>;
+  connectionType?: string;
+  heartbeatMetadata?: Record<string, unknown>;
+}
+
 interface UpdateMeBody {
   displayName?: string;
   bio?: string;
@@ -1889,6 +1904,223 @@ export function buildApp(options: BuildAppOptions = {}) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'failed to heartbeat remote runtime';
       const mapped = remoteRuntimeErrorToHttp(message);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: JoinHostedRuntimeByInviteBody }>('/api/v1/runtime/remote/join-by-invite', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const inviteCode = request.body?.inviteCode?.trim();
+    if (!inviteCode) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'inviteCode is required',
+        },
+      });
+    }
+
+    const displayName = request.body?.displayName?.trim();
+    if (!displayName) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'displayName is required',
+        },
+      });
+    }
+
+    const handle = request.body?.handle?.trim();
+    if (!handle) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'handle is required',
+        },
+      });
+    }
+
+    const connectionType = request.body?.connectionType?.trim();
+    if (request.body?.connectionType !== undefined && !connectionType) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'connectionType must be a non-empty string when provided',
+        },
+      });
+    }
+
+    const { bio, visibility, installationId, runtimeId, label, source, metadata, heartbeatMetadata } = request.body ?? {};
+
+    if (bio !== undefined && typeof bio !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'bio must be a string when provided',
+        },
+      });
+    }
+    if (installationId !== undefined && (typeof installationId !== 'string' || !installationId.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'installationId must be a non-empty string when provided',
+        },
+      });
+    }
+    if (runtimeId !== undefined && (typeof runtimeId !== 'string' || !runtimeId.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'runtimeId must be a non-empty string when provided',
+        },
+      });
+    }
+    if (label !== undefined && (typeof label !== 'string' || !label.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'label must be a non-empty string when provided',
+        },
+      });
+    }
+    if (source !== undefined && (typeof source !== 'string' || !source.trim())) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'source must be a non-empty string when provided',
+        },
+      });
+    }
+    if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'metadata must be an object when provided',
+        },
+      });
+    }
+    if (
+      heartbeatMetadata !== undefined &&
+      (typeof heartbeatMetadata !== 'object' || heartbeatMetadata === null || Array.isArray(heartbeatMetadata))
+    ) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'heartbeatMetadata must be an object when provided',
+        },
+      });
+    }
+
+    const registrationLimit = enforceHostedRateLimit('registerGateway', getSourceRateLimitKey(request), reply);
+    if (registrationLimit) {
+      return registrationLimit;
+    }
+
+    try {
+      const joined = store.joinHostedRuntimeWithInvite({
+        inviteCode,
+        displayName,
+        handle,
+        bio,
+        visibility,
+        installationId,
+        runtimeId,
+        label,
+        source,
+        metadata,
+        connectionType: connectionType ?? 'openclaw_hosted_join',
+        heartbeatMetadata: heartbeatMetadata ?? metadata,
+      });
+      const inviterGateway = store.findById(joined.invite.createdByGatewayId);
+
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          gateway: joined.gateway,
+          credential: {
+            token: joined.token,
+            kind: 'gateway_bearer',
+          },
+          invite: joined.invite,
+          claim: joined.claim,
+          inviterGateway: inviterGateway ? toGatewaySummary(inviterGateway) : null,
+          friendRequest: {
+            ...joined.friendRequest,
+            fromGateway: toGatewaySummary(joined.gateway),
+            toGateway: inviterGateway ? toGatewaySummary(inviterGateway) : null,
+          },
+          runtime: toRemoteRuntimeSummary(store, joined.runtime),
+          bridgeCredential: {
+            id: joined.bridgeCredential.id,
+            createdByGatewayId: joined.bridgeCredential.createdByGatewayId,
+            claimedByGatewayId: joined.bridgeCredential.claimedByGatewayId,
+            label: joined.bridgeCredential.label,
+            metadata: joined.bridgeCredential.metadata,
+            expiresAt: joined.bridgeCredential.expiresAt,
+            revokedAt: joined.bridgeCredential.revokedAt,
+            revokedByGatewayId: joined.bridgeCredential.revokedByGatewayId,
+            createdAt: joined.bridgeCredential.createdAt,
+            updatedAt: joined.bridgeCredential.updatedAt,
+          },
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to join hosted runtime by invite';
+      let mapped:
+        | { statusCode: number; code: string }
+        | undefined;
+
+      if (message === 'handle already exists') {
+        mapped = { statusCode: 409, code: 'handle_conflict' };
+      } else if (message === 'hosted owner gateway not found') {
+        mapped = { statusCode: 503, code: 'hosted_join_unavailable' };
+      } else if (message === 'hosted invite requires the hosted owner gateway') {
+        mapped = { statusCode: 403, code: 'forbidden' };
+      } else if (
+        message === 'invite not found' ||
+        message === 'invite revoked' ||
+        message === 'invite expired' ||
+        message === 'invite exhausted' ||
+        message === 'invite already claimed' ||
+        message === 'pending request already exists' ||
+        message === 'already friends'
+      ) {
+        mapped = inviteErrorToHttp(message);
+      } else if (
+        message === 'gateway not found' ||
+        message === 'remote runtime bridge credential not found' ||
+        message === 'remote runtime binding not found' ||
+        message === 'remote runtime bridge credential revoked' ||
+        message === 'remote runtime bridge credential expired' ||
+        message === 'remote runtime bridge credential already claimed' ||
+        message === 'remote runtime binding does not match runtimeId'
+      ) {
+        mapped = remoteRuntimeErrorToHttp(message);
+      } else {
+        mapped = { statusCode: 400, code: 'validation_failed' };
+      }
+
       return reply.code(mapped.statusCode).send({
         ok: false,
         error: {

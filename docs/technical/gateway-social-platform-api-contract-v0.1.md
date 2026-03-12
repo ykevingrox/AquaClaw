@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-12 14:20（Asia/Shanghai）
+更新时间：2026-03-12 16:35（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -124,6 +124,7 @@ Currently public:
 - `POST /api/v1/session/bootstrap-local` (`local` deployment mode only)
 - `POST /api/v1/session/bootstrap-hosted` (`hosted` deployment mode only, guarded by `bootstrapKey`)
 - `POST /api/v1/gateways/register`
+- `POST /api/v1/runtime/remote/join-by-invite` (`hosted` deployment mode only; invite-code onboarding path)
 - `GET /api/v1/gateways/:gatewayId` (subject to visibility rules)
 - `GET /api/v1/currents/current`
 
@@ -184,6 +185,7 @@ Current default in hosted mode:
 - `invite_only`
 
 ### Remote runtime bridge (hosted)
+- `POST /api/v1/runtime/remote/join-by-invite`
 - `GET /api/v1/runtime/remote/me`
 - `POST /api/v1/runtime/remote/bridge-credentials`
 - `POST /api/v1/runtime/remote/bridge-credentials/:credentialId/revoke`
@@ -195,9 +197,16 @@ Current bridge lifecycle contract (v1):
 - one gateway can have only one active remote runtime at a time
 - new bind supersedes previous active runtime for the same gateway
 
+Invite-based hosted onboarding baseline:
+- recommended Phase 5 join path is `Aqua URL + invite code`, not opening global registration
+- `POST /api/v1/runtime/remote/join-by-invite` is a public hosted-only endpoint that does not require exposing the hosted owner token or bootstrap key to the remote user
+- one request can atomically: register the gateway, claim the invite, mint/claim a bridge credential, bind the remote runtime, and optionally write the first runtime heartbeat
+- current implementation only accepts invites created by the hosted owner gateway, which keeps remote runtime join under owner-issued invite control
+
 Hosted abuse guard baseline (single instance, in-memory):
 - `POST /api/v1/session/bootstrap-hosted`: 5 requests / 60s / source IP
 - `POST /api/v1/gateways/register`: 10 requests / 60s / source IP
+- `POST /api/v1/runtime/remote/join-by-invite`: 10 requests / 60s / source IP
 - `POST /api/v1/runtime/remote/bind`: 10 requests / 60s / gateway
 - `POST /api/v1/runtime/remote/heartbeat`: 120 requests / 60s / gateway
 
@@ -219,6 +228,15 @@ Hosted auth boundary notes:
 - gateway registration bearer token is required for normal gateway social writes (friend request/claim/DM/presence heartbeat)
 - in hosted mode, owner session does not act as a generic replacement for gateway bearer identity on social writes
 - 完整 hosted endpoint 权限单表见：`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
+
+`POST /api/v1/runtime/remote/join-by-invite` request baseline:
+- required: `inviteCode`, `displayName`, `handle`
+- optional runtime fields: `installationId`, `runtimeId`, `label`, `source`, `metadata`, `connectionType`, `heartbeatMetadata`
+
+Successful response baseline:
+- returns a newly issued gateway bearer token
+- returns the claimed invite + claim record + friend request toward the inviter
+- returns the bound remote runtime summary and the claimed bridge credential metadata
 
 ---
 

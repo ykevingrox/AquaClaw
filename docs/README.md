@@ -87,6 +87,10 @@
   - hosted 单实例部署运行手册（反向代理、TLS、SQLite 备份、上线验收）
   - 对应 networked roadmap 的 Phase 1 hosted baseline 运维交付
 
+- `docs/ops/hosted-single-instance-quickstart-v0.1.md`
+  - 单实例 hosted Aqua 的推荐服务器配置 + 逐步部署教程
+  - 包含 `npm run ops:render:hosted` 配置生成脚本的使用方式
+
 - `docs/ops/hosted-remote-bridge-e2e-v0.1.md`
   - hosted remote runtime bridge 的端到端验证脚本与操作说明
   - 覆盖 owner bootstrap、gateway register/reuse、bridge credential、bind、heartbeat、remote me

@@ -19,6 +19,7 @@ const hostedOnlyEndpoints = [
   { method: 'POST', url: '/api/v1/session/hosted/logout' },
   { method: 'POST', url: '/api/v1/session/hosted/revoke' },
   { method: 'PATCH', url: '/api/v1/registration-policy' },
+  { method: 'POST', url: '/api/v1/runtime/remote/join-by-invite' },
   { method: 'GET', url: '/api/v1/runtime/remote/me' },
   { method: 'POST', url: '/api/v1/runtime/remote/bridge-credentials' },
   { method: 'POST', url: '/api/v1/runtime/remote/bridge-credentials/remote-bridge-id/revoke' },
@@ -230,6 +231,93 @@ test('hosted registration policy is owner-session-only and supports open, closed
   });
   assert.equal(inviteOnlyRegister.statusCode, 403);
   assert.equal(inviteOnlyRegister.json().error.code, 'registration_invite_only');
+
+  await app.close();
+});
+
+test('hosted invite join lets a remote gateway enter and bind without opening global registration', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const blockedRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Blocked Hosted Join Register',
+      handle: 'blocked-hosted-join-register',
+    },
+  });
+  assert.equal(blockedRegister.statusCode, 403);
+  assert.equal(blockedRegister.json().error.code, 'registration_invite_only');
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-join-by-invite-owner');
+  const ownerToken = owner.credential.token;
+
+  const inviteResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      maxUses: 1,
+    },
+  });
+  assert.equal(inviteResponse.statusCode, 201);
+  const inviteCode = inviteResponse.json().data.invite.code as string;
+
+  const joined = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/join-by-invite',
+    payload: {
+      inviteCode,
+      displayName: 'Hosted Join Invite Gateway',
+      handle: 'hosted-join-invite-gateway',
+      installationId: 'hosted-join-installation',
+      runtimeId: 'hosted-join-runtime',
+      label: 'Hosted Join Runtime',
+      source: 'deployment_test_join',
+      metadata: {
+        region: 'apac',
+      },
+      connectionType: 'openclaw_remote',
+      heartbeatMetadata: {
+        source: 'deployment_test_join_heartbeat',
+      },
+    },
+  });
+  assert.equal(joined.statusCode, 201);
+  const joinedToken = joined.json().data.credential.token as string;
+  assert.equal(joined.json().data.gateway.handle, 'hosted-join-invite-gateway');
+  assert.equal(joined.json().data.runtime.runtime.runtimeId, 'hosted-join-runtime');
+  assert.equal(joined.json().data.runtime.runtime.installationId, 'hosted-join-installation');
+  assert.equal(joined.json().data.runtime.runtime.metadata.source, 'deployment_test_join_heartbeat');
+  assert.equal(joined.json().data.runtime.runtime.status, 'online');
+  assert.equal(joined.json().data.runtime.presence.status, 'online');
+  assert.equal(joined.json().data.friendRequest.toGateway.id, owner.gateway.id);
+
+  const remoteMe = await app.inject({
+    method: 'GET',
+    url: '/api/v1/runtime/remote/me',
+    headers: {
+      authorization: `Bearer ${joinedToken}`,
+    },
+  });
+  assert.equal(remoteMe.statusCode, 200);
+  assert.equal(remoteMe.json().data.runtime.runtimeId, 'hosted-join-runtime');
+  assert.equal(remoteMe.json().data.runtime.metadata.source, 'deployment_test_join_heartbeat');
+  assert.equal(remoteMe.json().data.presence.status, 'online');
+
+  const inviteReuse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/join-by-invite',
+    payload: {
+      inviteCode,
+      displayName: 'Hosted Join Invite Gateway Two',
+      handle: 'hosted-join-invite-gateway-two',
+    },
+  });
+  assert.equal(inviteReuse.statusCode, 409);
+  assert.equal(inviteReuse.json().error.code, 'invalid_state');
 
   await app.close();
 });

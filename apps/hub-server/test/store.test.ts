@@ -223,6 +223,102 @@ test('GatewayStore invite seam lets owner revoke and blocks future claims', () =
   );
 });
 
+test('GatewayStore hosted invite join registers, claims, binds, and heartbeats in one atomic step', () => {
+  const store: GatewayStore = createGatewayStore();
+  const owner = store.bootstrapHostedSession({
+    displayName: 'Hosted Join Owner',
+    handle: 'hosted-join-owner-store',
+  }).gateway;
+
+  const invite = store.createInvite({
+    createdByGatewayId: owner.id,
+    maxUses: 1,
+  });
+
+  const joined = store.joinHostedRuntimeWithInvite({
+    inviteCode: invite.code,
+    displayName: 'Hosted Join Gateway',
+    handle: 'hosted-join-gateway-store',
+    installationId: 'hosted-join-install-store',
+    runtimeId: 'hosted-join-runtime-store',
+    label: 'Hosted Join Runtime Store',
+    source: 'hosted_join_store_test',
+    metadata: {
+      region: 'apac',
+    },
+    connectionType: 'openclaw_remote',
+    heartbeatMetadata: {
+      source: 'hosted-join-heartbeat-store-test',
+    },
+  });
+
+  assert.equal(joined.gateway.handle, 'hosted-join-gateway-store');
+  assert.equal(typeof joined.token, 'string');
+  assert.equal(joined.claim.inviteId, invite.id);
+  assert.equal(joined.friendRequest.toGatewayId, owner.id);
+  assert.equal(joined.bridgeCredential.claimedByGatewayId, joined.gateway.id);
+  assert.equal(joined.runtime.binding.runtimeId, 'hosted-join-runtime-store');
+  assert.equal(joined.runtime.binding.installationId, 'hosted-join-install-store');
+  assert.equal(joined.runtime.binding.metadata.region, 'apac');
+  assert.equal(joined.runtime.binding.metadata.source, 'hosted-join-heartbeat-store-test');
+  assert.equal(joined.runtime.status, 'online');
+  assert.equal(joined.presence.status, 'online');
+
+  const runtime = store.getRemoteRuntimeBindingByGatewayId(joined.gateway.id);
+  assert.ok(runtime);
+  assert.equal(runtime.binding.runtimeId, 'hosted-join-runtime-store');
+  assert.equal(runtime.status, 'online');
+
+  assert.throws(
+    () =>
+      store.joinHostedRuntimeWithInvite({
+        inviteCode: invite.code,
+        displayName: 'Hosted Join Again',
+        handle: 'hosted-join-again-store',
+      }),
+    /invite exhausted/,
+  );
+});
+
+test('GatewayStore hosted invite join rolls back cleanly on handle conflict', () => {
+  const store: GatewayStore = createGatewayStore();
+  const owner = store.bootstrapHostedSession({
+    displayName: 'Hosted Join Rollback Owner',
+    handle: 'hosted-join-rollback-owner-store',
+  }).gateway;
+
+  registerGateway(store, {
+    displayName: 'Existing Join Handle',
+    handle: 'hosted-join-conflict-store',
+  });
+
+  const invite = store.createInvite({
+    createdByGatewayId: owner.id,
+    maxUses: 1,
+  });
+
+  assert.throws(
+    () =>
+      store.joinHostedRuntimeWithInvite({
+        inviteCode: invite.code,
+        displayName: 'Hosted Join Conflict',
+        handle: 'hosted-join-conflict-store',
+      }),
+    /handle already exists/,
+  );
+
+  const ownerIncoming = store.listIncomingFriendRequests(owner.id);
+  assert.equal(ownerIncoming.length, 0);
+  assert.equal(store.getRemoteRuntimeBindingByGatewayId(owner.id), null);
+
+  const anotherJoin = store.joinHostedRuntimeWithInvite({
+    inviteCode: invite.code,
+    displayName: 'Hosted Join After Conflict',
+    handle: 'hosted-join-after-conflict-store',
+  });
+  assert.equal(anotherJoin.claim.inviteId, invite.id);
+});
+
 
 test('GatewayStore remote runtime bridge credential seam requires hosted owner identity', () => {
   const store: GatewayStore = createGatewayStore();

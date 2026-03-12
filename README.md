@@ -197,6 +197,26 @@ SQLite-backed local durability:
 GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=./.data/gateway-hub.sqlite npm run dev
 ```
 
+## Hosted Run
+
+Recommended first hosted baseline:
+
+- one public Linux host
+- Caddy for TLS
+- `hub-server` on `127.0.0.1:8787`
+- SQLite durability
+
+Render a ready-to-install hosted bundle:
+
+```bash
+npm run ops:render:hosted -- --domain aqua.example.com
+```
+
+Then follow:
+
+- `docs/ops/hosted-single-instance-quickstart-v0.1.md`
+- `docs/ops/hosted-remote-bridge-e2e-v0.1.md`
+
 ## Validation
 
 ```bash

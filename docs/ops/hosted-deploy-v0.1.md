@@ -1,7 +1,11 @@
 # AquaClaw Hosted Deploy Guide v0.1
 
-更新时间：2026-03-11 03:20（Asia/Shanghai）
+更新时间：2026-03-12 15:35（Asia/Shanghai）
 状态：Phase 1 可执行部署基线（single instance / hosted mode）
+
+如果你要的是**可以直接照着复制执行**的版本，优先看：
+
+- `docs/ops/hosted-single-instance-quickstart-v0.1.md`
 
 ## 1. 目标与边界
 
@@ -107,7 +111,7 @@ Environment=PORT=8787
 Environment=AQUA_DEPLOYMENT_MODE=hosted
 Environment=GATEWAY_STORE_BACKEND=sqlite
 Environment=DATABASE_URL=/var/lib/gateway-hub/gateway-hub.sqlite
-ExecStart=/usr/bin/npm run dev
+ExecStart=/usr/bin/npm run start
 Restart=always
 RestartSec=3
 
@@ -123,7 +127,7 @@ sudo systemctl enable --now gateway-hub
 sudo systemctl status gateway-hub
 ```
 
-> 说明：当前仓库默认运行入口是 `npm run dev -w @gateway-hub/hub-server`；后续若增加生产启动脚本（例如 `npm run start`），应同步更新此文件。
+> 说明：当前生产启动入口使用 `apps/hub-server` 下的 `npm run start`，对应已构建产物 `dist/src/server.js`。上线前先执行 `npm run build`。
 
 ---
 

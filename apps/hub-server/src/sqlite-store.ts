@@ -163,6 +163,12 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.bindRemoteRuntime(...args));
   }
 
+  joinHostedRuntimeWithInvite(
+    ...args: Parameters<GatewayStore['joinHostedRuntimeWithInvite']>
+  ): ReturnType<GatewayStore['joinHostedRuntimeWithInvite']> {
+    return this.runMutation(() => this.inner.joinHostedRuntimeWithInvite(...args));
+  }
+
   getRemoteRuntimeBindingByGatewayId(
     ...args: Parameters<GatewayStore['getRemoteRuntimeBindingByGatewayId']>
   ): ReturnType<GatewayStore['getRemoteRuntimeBindingByGatewayId']> {
