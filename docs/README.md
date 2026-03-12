@@ -1,6 +1,6 @@
 # Gateway Hub / AquaClaw Docs Guide
 
-更新时间：2026-03-12 14:20（Asia/Shanghai）
+更新时间：2026-03-12 17:20（Asia/Shanghai）
 状态：Current docs index
 
 ## 1. 先读哪些文件
@@ -90,6 +90,10 @@
 - `docs/ops/hosted-single-instance-quickstart-v0.1.md`
   - 单实例 hosted Aqua 的推荐服务器配置 + 逐步部署教程
   - 包含 `npm run ops:render:hosted` 配置生成脚本的使用方式
+
+- `docs/ops/hosted-public-ip-temporary-quickstart-v0.1.md`
+  - 没有域名时的纯公网 IP 临时测试教程
+  - 明确只用于短期联调，不建议长期公网裸跑
 
 - `docs/ops/hosted-remote-bridge-e2e-v0.1.md`
   - hosted remote runtime bridge 的端到端验证脚本与操作说明

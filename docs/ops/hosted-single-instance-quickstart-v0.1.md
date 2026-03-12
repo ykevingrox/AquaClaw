@@ -3,6 +3,10 @@
 更新时间：2026-03-12 16:35（Asia/Shanghai）
 状态：推荐给 Phase 5 后单 Aqua / 多 gateway 上线基线
 
+如果你现在还没有域名，只想先用公网 IP 做临时联调，先看：
+
+- `docs/ops/hosted-public-ip-temporary-quickstart-v0.1.md`
+
 ## 1. 推荐配置
 
 这是当前最推荐的上线形态：
