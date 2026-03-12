@@ -4,7 +4,7 @@ import { buildApp } from '../src/app.js';
 
 async function registerGateway(
   app: ReturnType<typeof buildApp>,
-  payload: { displayName: string; handle: string; bio?: string; visibility?: string },
+  payload: { displayName: string; handle: string; bio?: string; visibility?: string; friendRequestPolicy?: string },
 ) {
   const response = await app.inject({
     method: 'POST',
@@ -21,6 +21,7 @@ async function registerGateway(
       displayName: string;
       bio: string;
       visibility: string;
+      friendRequestPolicy: string;
       createdAt: string;
     },
   };
@@ -157,6 +158,38 @@ test('patch /api/v1/gateways/me rejects invalid visibility', async () => {
   assert.equal(response.statusCode, 400);
   assert.equal(response.json().ok, false);
   assert.equal(response.json().error.message, 'invalid visibility');
+  await app.close();
+});
+
+test('patch /api/v1/gateways/me updates friend request policy', async () => {
+  const app = buildApp();
+  const registered = await registerGateway(app, {
+    displayName: 'Policy Patch',
+    handle: 'policy-patch',
+  });
+
+  assert.equal(registered.gateway.friendRequestPolicy, 'manual_review');
+
+  const updateResponse = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/gateways/me',
+    headers: { authorization: `Bearer ${registered.token}` },
+    payload: {
+      friendRequestPolicy: 'disabled',
+    },
+  });
+
+  assert.equal(updateResponse.statusCode, 200);
+  assert.equal(updateResponse.json().data.gateway.friendRequestPolicy, 'disabled');
+
+  const meResponse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/gateways/me',
+    headers: { authorization: `Bearer ${registered.token}` },
+  });
+  assert.equal(meResponse.statusCode, 200);
+  assert.equal(meResponse.json().data.gateway.friendRequestPolicy, 'disabled');
+
   await app.close();
 });
 
@@ -988,6 +1021,81 @@ test('friend request rejects duplicates and self-targeting', async () => {
   });
   assert.equal(selfResponse.statusCode, 400);
   assert.equal(selfResponse.json().error.message, 'cannot friend request yourself');
+
+  await app.close();
+});
+
+test('friend request rejects targets that disabled incoming requests', async () => {
+  const app = buildApp();
+  const alpha = await registerGateway(app, {
+    displayName: 'Alpha Disabled Target',
+    handle: 'alpha-disabled-target',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Beta Disabled Target',
+    handle: 'beta-disabled-target',
+    friendRequestPolicy: 'disabled',
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: { toGatewayId: beta.gateway.id },
+  });
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.json().error.code, 'friend_requests_disabled');
+
+  const incoming = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friend-requests/incoming',
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(incoming.statusCode, 200);
+  assert.equal(incoming.json().data.items.length, 0);
+
+  await app.close();
+});
+
+test('friend request rejects the bootstrapped local owner gateway', async () => {
+  const app = buildApp();
+
+  const ownerBootstrap = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-local',
+    payload: {
+      handle: 'local-owner-protected',
+      displayName: 'Local Owner Protected',
+    },
+  });
+  assert.equal(ownerBootstrap.statusCode, 201);
+  const ownerToken = ownerBootstrap.json().data.credential.token as string;
+  const ownerGatewayId = ownerBootstrap.json().data.gateway.id as string;
+  assert.equal(ownerBootstrap.json().data.gateway.friendRequestPolicy, 'disabled');
+
+  const outsider = await registerGateway(app, {
+    displayName: 'Outside Gateway',
+    handle: 'outside-gateway',
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${outsider.token}` },
+    payload: { toGatewayId: ownerGatewayId },
+  });
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.json().error.code, 'owner_protected');
+
+  const incoming = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friend-requests/incoming',
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+  assert.equal(incoming.statusCode, 200);
+  assert.equal(incoming.json().data.items.length, 0);
 
   await app.close();
 });

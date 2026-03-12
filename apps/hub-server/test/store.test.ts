@@ -248,6 +248,50 @@ test('GatewayStore invite seam lets owner revoke and blocks future claims', () =
   );
 });
 
+test('GatewayStore friend request guardrails protect owners and disabled recipients', () => {
+  const store: GatewayStore = createGatewayStore();
+  const owner = store.bootstrapLocalSession({
+    displayName: 'Store Local Owner',
+    handle: 'store-local-owner',
+  }).gateway;
+  const alpha = registerGateway(store, {
+    displayName: 'Store Alpha Guardrail',
+    handle: 'store-alpha-guardrail',
+  });
+  const beta = registerGateway(store, {
+    displayName: 'Store Beta Guardrail',
+    handle: 'store-beta-guardrail',
+  });
+
+  assert.equal(owner.friendRequestPolicy, 'disabled');
+
+  assert.throws(
+    () =>
+      store.createFriendRequest({
+        fromGatewayId: alpha.id,
+        toGatewayId: owner.id,
+      }),
+    /owner gateway cannot participate in friend requests/,
+  );
+
+  const claimedInvite = store.claimInvite({
+    code: store.createInvite({ createdByGatewayId: owner.id, maxUses: 1 }).code,
+    claimedByGatewayId: alpha.id,
+  });
+  assert.equal(claimedInvite.friendRequest, null);
+  assert.equal(store.listIncomingFriendRequests(owner.id).length, 0);
+
+  store.updateProfile(beta.id, { friendRequestPolicy: 'disabled' });
+  assert.throws(
+    () =>
+      store.createFriendRequest({
+        fromGatewayId: alpha.id,
+        toGatewayId: beta.id,
+      }),
+    /target gateway is not accepting friend requests/,
+  );
+});
+
 test('GatewayStore hosted invite join registers, claims, binds, and heartbeats in one atomic step', () => {
   const store: GatewayStore = createGatewayStore();
   const owner = store.bootstrapHostedSession({
@@ -280,7 +324,7 @@ test('GatewayStore hosted invite join registers, claims, binds, and heartbeats i
   assert.equal(joined.gateway.handle, 'hosted-join-gateway-store');
   assert.equal(typeof joined.token, 'string');
   assert.equal(joined.claim.inviteId, invite.id);
-  assert.equal(joined.friendRequest.toGatewayId, owner.id);
+  assert.equal(joined.friendRequest, null);
   assert.equal(joined.bridgeCredential.claimedByGatewayId, joined.gateway.id);
   assert.equal(joined.runtime.binding.runtimeId, 'hosted-join-runtime-store');
   assert.equal(joined.runtime.binding.installationId, 'hosted-join-install-store');
@@ -288,6 +332,7 @@ test('GatewayStore hosted invite join registers, claims, binds, and heartbeats i
   assert.equal(joined.runtime.binding.metadata.source, 'hosted-join-heartbeat-store-test');
   assert.equal(joined.runtime.status, 'online');
   assert.equal(joined.presence.status, 'online');
+  assert.equal(store.listIncomingFriendRequests(owner.id).length, 0);
 
   const runtime = store.getRemoteRuntimeBindingByGatewayId(joined.gateway.id);
   assert.ok(runtime);

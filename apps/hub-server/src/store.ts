@@ -3,6 +3,7 @@ import { createPostgresGatewayStore } from './postgres-store.js';
 import { createSqliteGatewayStore } from './sqlite-store.js';
 
 export type GatewayVisibility = 'private' | 'invite_only' | 'friends_only' | 'public';
+export type GatewayFriendRequestPolicy = 'manual_review' | 'disabled';
 export type PresenceStatus = 'online' | 'recently_active' | 'offline';
 
 export interface GatewayRecord {
@@ -11,6 +12,7 @@ export interface GatewayRecord {
   displayName: string;
   bio: string;
   visibility: GatewayVisibility;
+  friendRequestPolicy: GatewayFriendRequestPolicy;
   createdAt: string;
   updatedAt: string;
 }
@@ -398,7 +400,7 @@ export interface GatewayStore {
   listPublicGateways(input?: ListPublicGatewaysInput): GatewayPage;
   createInvite(input: CreateInviteInput): InviteRecord;
   revokeInvite(input: RevokeInviteInput): InviteRecord;
-  claimInvite(input: ClaimInviteInput): { invite: InviteRecord; claim: InviteClaimRecord; friendRequest: FriendRequestRecord };
+  claimInvite(input: ClaimInviteInput): { invite: InviteRecord; claim: InviteClaimRecord; friendRequest: FriendRequestRecord | null };
   listIncomingFriendRequests(gatewayId: string): FriendRequestRecord[];
   listOutgoingFriendRequests(gatewayId: string): FriendRequestRecord[];
   createFriendRequest(input: CreateFriendRequestInput): FriendRequestRecord;
@@ -451,12 +453,14 @@ interface RegisterInput {
   handle: string;
   bio?: string;
   visibility?: GatewayVisibility;
+  friendRequestPolicy?: GatewayFriendRequestPolicy;
 }
 
 interface UpdateProfileInput {
   displayName?: string;
   bio?: string;
   visibility?: GatewayVisibility;
+  friendRequestPolicy?: GatewayFriendRequestPolicy;
 }
 
 interface BootstrapLocalSessionInput {
@@ -533,7 +537,7 @@ interface JoinHostedRuntimeWithInviteResult {
   token: string;
   invite: InviteRecord;
   claim: InviteClaimRecord;
-  friendRequest: FriendRequestRecord;
+  friendRequest: FriendRequestRecord | null;
   runtime: RemoteRuntimeBindingState;
   bridgeCredential: RemoteRuntimeBridgeCredentialRecord;
   presence: GatewayPresenceRecord;
@@ -543,6 +547,7 @@ interface CreateFriendRequestInput {
   fromGatewayId: string;
   toGatewayId: string;
   message?: string;
+  bypassGuardrails?: boolean;
 }
 
 interface SearchGatewaysInput {
@@ -736,6 +741,7 @@ interface HeartbeatRemoteRuntimeInput {
 }
 
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
+const VALID_FRIEND_REQUEST_POLICIES: GatewayFriendRequestPolicy[] = ['manual_review', 'disabled'];
 const VALID_SEA_EVENT_TONES: SeaEventTone[] = ['calm', 'playful', 'reflective', 'sharp', 'neutral'];
 const VALID_ENVIRONMENT_CLARITIES: EnvironmentClarity[] = ['murky', 'hazy', 'clear', 'crystalline'];
 const VALID_ENVIRONMENT_TIDE_DIRECTIONS: EnvironmentTideDirection[] = ['slack', 'incoming', 'outgoing', 'crosswind'];
@@ -1035,14 +1041,19 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     if (!VALID_VISIBILITIES.includes(visibility)) {
       throw new Error('invalid visibility');
     }
+    if (input.friendRequestPolicy !== undefined && !VALID_FRIEND_REQUEST_POLICIES.includes(input.friendRequestPolicy)) {
+      throw new Error('invalid friend request policy');
+    }
 
     const now = seed?.createdAt ?? new Date().toISOString();
+    const gatewayId = seed?.gatewayId ?? randomUUID();
     const gateway: GatewayRecord = {
-      id: seed?.gatewayId ?? randomUUID(),
+      id: gatewayId,
       handle: normalizedHandle,
       displayName: input.displayName.trim(),
       bio: input.bio?.trim() ?? '',
       visibility,
+      friendRequestPolicy: this.resolveGatewayFriendRequestPolicy(gatewayId, input.friendRequestPolicy),
       createdAt: now,
       updatedAt: seed?.updatedAt ?? now,
     };
@@ -1089,6 +1100,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         handle: this.resolveAvailableHandle(handleBase),
         bio: input.bio?.trim() || DEFAULT_LOCAL_OWNER_BIO,
         visibility: input.visibility ?? 'invite_only',
+        friendRequestPolicy: 'disabled',
       });
 
       gateway = registerResult.gateway;
@@ -1135,6 +1147,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         handle: this.resolveAvailableHandle(handleBase),
         bio: input.bio?.trim() || DEFAULT_HOSTED_OWNER_BIO,
         visibility: input.visibility ?? 'invite_only',
+        friendRequestPolicy: 'disabled',
       });
 
       gateway = registerResult.gateway;
@@ -1718,17 +1731,25 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     if (input.visibility && !VALID_VISIBILITIES.includes(input.visibility)) {
       throw new Error('invalid visibility');
     }
+    if (input.friendRequestPolicy !== undefined && !VALID_FRIEND_REQUEST_POLICIES.includes(input.friendRequestPolicy)) {
+      throw new Error('invalid friend request policy');
+    }
 
     const nextDisplayName = input.displayName === undefined ? existing.displayName : input.displayName.trim();
     if (!nextDisplayName) {
       throw new Error('displayName is required');
     }
+    const nextFriendRequestPolicy = this.resolveGatewayFriendRequestPolicy(
+      existing.id,
+      input.friendRequestPolicy ?? existing.friendRequestPolicy,
+    );
 
     const updated: GatewayRecord = {
       ...existing,
       displayName: nextDisplayName,
       bio: input.bio === undefined ? existing.bio : input.bio.trim(),
       visibility: input.visibility ?? existing.visibility,
+      friendRequestPolicy: nextFriendRequestPolicy,
       updatedAt: new Date().toISOString(),
     };
 
@@ -1743,8 +1764,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
           ...(existing.displayName !== updated.displayName ? ['displayName'] : []),
           ...(existing.bio !== updated.bio ? ['bio'] : []),
           ...(existing.visibility !== updated.visibility ? ['visibility'] : []),
+          ...(existing.friendRequestPolicy !== updated.friendRequestPolicy ? ['friendRequestPolicy'] : []),
         ],
         visibility: updated.visibility,
+        friendRequestPolicy: updated.friendRequestPolicy,
       },
       createdAt: updated.updatedAt,
     });
@@ -2038,11 +2061,13 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       createdAt: claim.createdAt,
     });
 
-    const friendRequest = this.createFriendRequest({
-      fromGatewayId: input.claimedByGatewayId,
-      toGatewayId: updatedInvite.createdByGatewayId,
-      message: `Claimed invite ${updatedInvite.code}`,
-    });
+    const friendRequest = this.canReceiveExternalFriendRequests(updatedInvite.createdByGatewayId)
+      ? this.createFriendRequest({
+          fromGatewayId: input.claimedByGatewayId,
+          toGatewayId: updatedInvite.createdByGatewayId,
+          message: `Claimed invite ${updatedInvite.code}`,
+        })
+      : null;
 
     return { invite: updatedInvite, claim, friendRequest };
   }
@@ -2121,6 +2146,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   createFriendRequest(input: CreateFriendRequestInput): FriendRequestRecord {
+    const bypassGuardrails = input.bypassGuardrails === true;
+
     if (input.fromGatewayId === input.toGatewayId) {
       throw new Error('cannot friend request yourself');
     }
@@ -2129,6 +2156,12 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const toGateway = this.gatewaysById.get(input.toGatewayId);
     if (!fromGateway || !toGateway) {
       throw new Error('gateway not found');
+    }
+    if (!bypassGuardrails && (this.isOwnerGatewayId(fromGateway.id) || this.isOwnerGatewayId(toGateway.id))) {
+      throw new Error('owner gateway cannot participate in friend requests');
+    }
+    if (!bypassGuardrails && this.normalizeFriendRequestPolicy(toGateway.friendRequestPolicy) === 'disabled') {
+      throw new Error('target gateway is not accepting friend requests');
     }
 
     if (this.isBlockedEitherWay(input.fromGatewayId, input.toGatewayId)) {
@@ -3100,6 +3133,39 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
   }
 
+  private isOwnerGatewayId(gatewayId: string) {
+    return gatewayId === this.localOwnerGatewayId || gatewayId === this.hostedOwnerGatewayId;
+  }
+
+  private normalizeFriendRequestPolicy(policy: GatewayFriendRequestPolicy | null | undefined): GatewayFriendRequestPolicy {
+    return VALID_FRIEND_REQUEST_POLICIES.includes(policy as GatewayFriendRequestPolicy) ? (policy as GatewayFriendRequestPolicy) : 'manual_review';
+  }
+
+  private resolveGatewayFriendRequestPolicy(gatewayId: string, policy: GatewayFriendRequestPolicy | null | undefined) {
+    if (this.isOwnerGatewayId(gatewayId)) {
+      return 'disabled';
+    }
+    return this.normalizeFriendRequestPolicy(policy);
+  }
+
+  private canReceiveExternalFriendRequests(gatewayId: string) {
+    const gateway = this.gatewaysById.get(gatewayId);
+    if (!gateway) {
+      return false;
+    }
+    return !this.isOwnerGatewayId(gatewayId) && this.normalizeFriendRequestPolicy(gateway.friendRequestPolicy) !== 'disabled';
+  }
+
+  private normalizeGatewayRecord(gateway: GatewayRecord): GatewayRecord {
+    return {
+      ...gateway,
+      friendRequestPolicy: this.resolveGatewayFriendRequestPolicy(
+        gateway.id,
+        (gateway as GatewayRecord & { friendRequestPolicy?: GatewayFriendRequestPolicy }).friendRequestPolicy,
+      ),
+    };
+  }
+
   private normalizeRuntimeField(value: string | undefined, fallback: string, fieldName: 'installationId' | 'runtimeId' | 'label' | 'source') {
     const normalized = value === undefined ? fallback : value.trim();
     if (!normalized) {
@@ -3180,6 +3246,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       fromGatewayId: peerGatewayId,
       toGatewayId: ownerGatewayId,
       message: '[reef-seed:v1] drifting into your orbit',
+      bypassGuardrails: true,
     });
     this.acceptFriendRequest(request.id, ownerGatewayId);
     return true;
@@ -3982,17 +4049,18 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
 
     this.reset();
+    this.localOwnerGatewayId = snapshot.localOwnerGatewayId ?? null;
+    this.hostedOwnerGatewayId = snapshot.hostedOwnerGatewayId ?? null;
+    this.hostedRegistrationPolicy = snapshot.hostedRegistrationPolicy ?? null;
 
     for (const gateway of snapshot.gateways) {
-      this.gatewaysById.set(gateway.id, gateway);
-      this.gatewaysByHandle.set(gateway.handle, gateway);
+      const normalizedGateway = this.normalizeGatewayRecord(gateway);
+      this.gatewaysById.set(normalizedGateway.id, normalizedGateway);
+      this.gatewaysByHandle.set(normalizedGateway.handle, normalizedGateway);
     }
     for (const tokenRecord of snapshot.gatewayTokens) {
       this.tokensToGatewayId.set(tokenRecord.token, tokenRecord.gatewayId);
     }
-    this.localOwnerGatewayId = snapshot.localOwnerGatewayId ?? null;
-    this.hostedOwnerGatewayId = snapshot.hostedOwnerGatewayId ?? null;
-    this.hostedRegistrationPolicy = snapshot.hostedRegistrationPolicy ?? null;
     for (const session of snapshot.localSessions ?? []) {
       this.localSessionsByToken.set(session.token, session);
     }

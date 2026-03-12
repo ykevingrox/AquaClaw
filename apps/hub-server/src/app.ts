@@ -11,6 +11,7 @@ import {
   type ConversationReadStateSummary,
   type EnvironmentRecord,
   type EncounterRecord,
+  type GatewayFriendRequestPolicy,
   type GatewayRecord,
   type GatewayStore,
   type GatewayVisibility,
@@ -40,6 +41,7 @@ interface RegisterBody {
   handle?: string;
   bio?: string;
   visibility?: GatewayVisibility;
+  friendRequestPolicy?: GatewayFriendRequestPolicy;
 }
 
 interface BootstrapLocalSessionBody {
@@ -110,6 +112,7 @@ interface UpdateMeBody {
   displayName?: string;
   bio?: string;
   visibility?: GatewayVisibility;
+  friendRequestPolicy?: GatewayFriendRequestPolicy;
 }
 
 interface CreateFriendRequestBody {
@@ -555,13 +558,16 @@ function hostedRegistrationPolicyError(policy: HostedRegistrationPolicy) {
   } as const;
 }
 
-function toGatewaySummary(gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
+function toGatewaySummary(
+  gateway: Pick<GatewayRecord, 'id' | 'handle' | 'displayName' | 'bio' | 'visibility' | 'friendRequestPolicy'>,
+) {
   return {
     id: gateway.id,
     handle: gateway.handle,
     displayName: gateway.displayName,
     bio: gateway.bio,
     visibility: gateway.visibility,
+    friendRequestPolicy: gateway.friendRequestPolicy,
   };
 }
 
@@ -664,7 +670,10 @@ function toPublicSeaEventSummary(store: GatewayStore, event: SeaEvent) {
   };
 }
 
-function toSearchResult(store: GatewayStore, gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
+function toSearchResult(
+  store: GatewayStore,
+  gateway: Pick<GatewayRecord, 'id' | 'handle' | 'displayName' | 'bio' | 'visibility' | 'friendRequestPolicy'>,
+) {
   return {
     ...toGatewaySummary(gateway),
     status: store.getPresence(gateway.id).status,
@@ -712,7 +721,10 @@ function toConversationReadStateSummary(
   };
 }
 
-function toFriendSummary(store: GatewayStore, gateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility }) {
+function toFriendSummary(
+  store: GatewayStore,
+  gateway: Pick<GatewayRecord, 'id' | 'handle' | 'displayName' | 'bio' | 'visibility' | 'friendRequestPolicy'>,
+) {
   const presence = store.getPresence(gateway.id);
   return {
     ...toGatewaySummary(gateway),
@@ -865,6 +877,12 @@ function friendRequestErrorToHttp(message: string) {
   }
   if (message === 'already friends') {
     return { statusCode: 409, code: 'already_friends' };
+  }
+  if (message === 'owner gateway cannot participate in friend requests') {
+    return { statusCode: 403, code: 'owner_protected' };
+  }
+  if (message === 'target gateway is not accepting friend requests') {
+    return { statusCode: 403, code: 'friend_requests_disabled' };
   }
   if (message === 'friend request not found') {
     return { statusCode: 404, code: 'not_found' };
@@ -2263,6 +2281,13 @@ export function buildApp(options: BuildAppOptions = {}) {
         heartbeatMetadata: heartbeatMetadata ?? metadata,
       });
       const inviterGateway = store.findById(joined.invite.createdByGatewayId);
+      const friendRequest = joined.friendRequest
+        ? {
+            ...joined.friendRequest,
+            fromGateway: toGatewaySummary(joined.gateway),
+            toGateway: inviterGateway ? toGatewaySummary(inviterGateway) : null,
+          }
+        : null;
 
       return reply.code(201).send({
         ok: true,
@@ -2275,11 +2300,7 @@ export function buildApp(options: BuildAppOptions = {}) {
           invite: joined.invite,
           claim: joined.claim,
           inviterGateway: inviterGateway ? toGatewaySummary(inviterGateway) : null,
-          friendRequest: {
-            ...joined.friendRequest,
-            fromGateway: toGatewaySummary(joined.gateway),
-            toGateway: inviterGateway ? toGatewaySummary(inviterGateway) : null,
-          },
+          friendRequest,
           runtime: toRemoteRuntimeSummary(store, joined.runtime),
           bridgeCredential: {
             id: joined.bridgeCredential.id,
@@ -2545,7 +2566,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       }
     }
 
-    const { displayName, handle, bio, visibility } = request.body ?? {};
+    const { displayName, handle, bio, visibility, friendRequestPolicy } = request.body ?? {};
 
     if (!displayName?.trim() || !handle?.trim()) {
       return reply.code(400).send({
@@ -2565,7 +2586,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
 
     try {
-      const { gateway, token } = store.register({ displayName, handle, bio, visibility });
+      const { gateway, token } = store.register({ displayName, handle, bio, visibility, friendRequestPolicy });
       return reply.code(201).send({
         ok: true,
         data: {
@@ -2575,6 +2596,7 @@ export function buildApp(options: BuildAppOptions = {}) {
             handle: gateway.handle,
             bio: gateway.bio,
             visibility: gateway.visibility,
+            friendRequestPolicy: gateway.friendRequestPolicy,
             createdAt: gateway.createdAt,
           },
           credential: {
@@ -3477,17 +3499,20 @@ export function buildApp(options: BuildAppOptions = {}) {
         claimedByGatewayId: result.gateway.id,
       });
       const inviter = store.findById(claimed.invite.createdByGatewayId);
+      const friendRequest = claimed.friendRequest
+        ? {
+            ...claimed.friendRequest,
+            fromGateway: toGatewaySummary(result.gateway),
+            toGateway: inviter ? toGatewaySummary(inviter) : null,
+          }
+        : null;
       return {
         ok: true,
         data: {
           invite: claimed.invite,
           claim: claimed.claim,
           inviterGateway: inviter ? toGatewaySummary(inviter) : null,
-          friendRequest: {
-            ...claimed.friendRequest,
-            fromGateway: toGatewaySummary(result.gateway),
-            toGateway: inviter ? toGatewaySummary(inviter) : null,
-          },
+          friendRequest,
         },
       };
     } catch (error) {

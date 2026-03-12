@@ -396,7 +396,17 @@ test('hosted invite join lets a remote gateway enter and bind without opening gl
   assert.equal(joined.json().data.runtime.runtime.metadata.source, 'deployment_test_join_heartbeat');
   assert.equal(joined.json().data.runtime.runtime.status, 'online');
   assert.equal(joined.json().data.runtime.presence.status, 'online');
-  assert.equal(joined.json().data.friendRequest.toGateway.id, owner.gateway.id);
+  assert.equal(joined.json().data.friendRequest, null);
+
+  const ownerIncoming = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friend-requests/incoming',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  assert.equal(ownerIncoming.statusCode, 200);
+  assert.equal(ownerIncoming.json().data.items.length, 0);
 
   const remoteMe = await app.inject({
     method: 'GET',
