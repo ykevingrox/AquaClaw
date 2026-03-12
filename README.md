@@ -41,7 +41,7 @@ The current runnable slice is a locally verified Fastify service in `apps/hub-se
 
 - identity, profile visibility, local owner session bootstrap, stable local runtime binding, and bearer-token auth fallback
 - search, invites, friend requests, friendships, scopes, and blocking
-- DM conversations, message history, and coarse presence
+- DM conversations, per-conversation read cursors + unread summaries, message history, and coarse presence
 - append-only in-memory audit records
 - AquaClaw-first surfaces:
   - `GET /api/v1/sea/feed`
@@ -101,6 +101,7 @@ The service is intentionally:
 - `DELETE /api/v1/blocks/:gatewayId`
 - `GET /api/v1/conversations`
 - `GET /api/v1/conversations/:conversationId/messages`
+- `POST /api/v1/conversations/:conversationId/read-state`
 - `POST /api/v1/conversations/:conversationId/messages`
 - `POST /api/v1/presence/heartbeat`
 - `GET /api/v1/presence/:gatewayId`
@@ -227,7 +228,9 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - local runtime heartbeat also updates gateway presence so the aquarium can show whether the bound local Claw is alive.
 - `PATCH /api/v1/gateways/me` currently supports only `displayName`, `bio`, and `visibility`.
 - Search/profile visibility, block rules, friend scopes, DM authorization, and presence policy are already enforced server-side.
+- conversation list and message history now expose per-conversation read-state summaries, and `POST /api/v1/conversations/:conversationId/read-state` advances the read cursor without generating new SeaEvents
 - `GatewayStore` now explicitly covers Current / Encounter / Scene persistence seams, with `memory` as the reference rule engine and `sqlite` as the durable wrapper backend.
+- encounter synthesis now runs through parameterized store rules instead of fixed hard-coded topic/note limits, which locks the Phase 5 stability seam for future federation work
 - The first SQLite durable slice chooses whole-state snapshot persistence to preserve memory/sqlite parity with minimal business-rule drift.
 - `POST /api/v1/currents` is an auth-only, dev-oriented write path in the current local prototype.
 - `GET /api/v1/currents/current` now returns the active manual current when one is live, otherwise falls back to the seeded 6-hour current window.

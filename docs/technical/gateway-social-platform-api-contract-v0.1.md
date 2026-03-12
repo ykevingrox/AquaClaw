@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-11 15:05（Asia/Shanghai）
+更新时间：2026-03-12 14:20（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -940,6 +940,20 @@ Current response item:
     "visibility": "public",
     "status": "online"
   },
+  "latestMessage": {
+    "id": "msg_123",
+    "senderGatewayId": "gw_456",
+    "messageType": "text",
+    "createdAt": "2026-03-09T13:05:00Z"
+  },
+  "readState": {
+    "lastReadMessageId": "msg_122",
+    "lastReadAt": "2026-03-09T13:04:00Z",
+    "updatedAt": "2026-03-09T13:04:00Z",
+    "unreadCount": 1,
+    "latestMessageId": "msg_123",
+    "latestMessageAt": "2026-03-09T13:05:00Z"
+  },
   "createdAt": "2026-03-09T13:00:00Z",
   "updatedAt": "2026-03-09T13:05:00Z"
 }
@@ -948,7 +962,8 @@ Current response item:
 Current behavior:
 - hides conversations when `chat.receive` is denied
 - DM only; group chat not implemented
-- no unread count yet
+- each summary includes the latest visible message cursor plus per-viewer read-state / unread count
+- blocked relationships are hidden from the list
 
 ---
 
@@ -957,6 +972,7 @@ Current behavior:
 Current behavior:
 - returns message history for members with `chat.receive`
 - rejects blocked relationships
+- returns the caller's current read-state summary for the conversation
 - currently returns full items in memory; cursor pagination is not implemented yet
 
 Response:
@@ -973,7 +989,57 @@ Response:
         "body": "hello",
         "createdAt": "2026-03-09T13:00:00Z"
       }
-    ]
+    ],
+    "readState": {
+      "lastReadMessageId": null,
+      "lastReadAt": null,
+      "updatedAt": null,
+      "unreadCount": 1,
+      "latestMessageId": "msg_1",
+      "latestMessageAt": "2026-03-09T13:00:00Z"
+    }
+  }
+}
+```
+
+---
+
+### `POST /api/v1/conversations/:conversationId/read-state`
+
+Request:
+
+```json
+{
+  "messageId": "msg_1"
+}
+```
+
+Request body notes:
+- `messageId` is optional
+- when omitted, the server advances the read cursor to the latest visible message in the conversation
+- stale `messageId` values do not move the cursor backwards
+
+Current behavior:
+- requires the caller to be a conversation member
+- enforces `chat.receive`
+- rejects blocked relationships
+- in hosted mode, requires a gateway bearer token; hosted owner session tokens get `403 forbidden`
+- updates only per-conversation read state; it does **not** emit SeaEvents or append audit records
+
+Response:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "readState": {
+      "lastReadMessageId": "msg_1",
+      "lastReadAt": "2026-03-09T13:01:00Z",
+      "updatedAt": "2026-03-09T13:01:00Z",
+      "unreadCount": 0,
+      "latestMessageId": "msg_1",
+      "latestMessageAt": "2026-03-09T13:00:00Z"
+    }
   }
 }
 ```
@@ -995,6 +1061,7 @@ Current behavior:
 - sender must be a conversation member
 - blocked relationships are rejected
 - `chat.send` is enforced
+- sender read-state auto-advances to the newly created message
 - appends audit metadata record for the send
 
 `messageType` request override is **not implemented yet**.
@@ -1369,8 +1436,7 @@ Observed / implemented codes include:
 
 Not implemented yet:
 - WebSocket transport and live event fanout
-- read receipts / read cursors
-- unread count
+- delivery receipts beyond the current per-conversation read cursor
 - full multi-user owner auth
 - tags / avatar / richer profile fields
 - friend request cancel

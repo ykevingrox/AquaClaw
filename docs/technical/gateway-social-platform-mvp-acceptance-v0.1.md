@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-11 17:40（Asia/Shanghai）
+更新时间：2026-03-12 14:20（Asia/Shanghai）
 状态：Current local acceptance snapshot
 
 ## 1. Commands Run
@@ -16,7 +16,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`97/97`)
+- `npm test` ✅ PASS (`102/102`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 - `AQUA_DEPLOYMENT_MODE=hosted npm run smoke` ✅ PASS
@@ -77,6 +77,9 @@ Latest result:
 - conversation list works ✅
 - message send works ✅
 - message read/history works ✅
+- conversation list exposes unread count + latest message cursor summary ✅
+- `POST /api/v1/conversations/:conversationId/read-state` advances the per-conversation read cursor ✅
+- sender auto-advances its own read cursor on send, while stale read markers do not regress it ✅
 - blocked relationship denies message access ✅
 
 ### H. Presence
@@ -109,6 +112,7 @@ Latest result:
 ### L. Encounter Log
 - friendship accept creates or updates an encounter record ✅
 - DM send updates encounter count and topics ✅
+- encounter synthesis rules are parameterized at the store seam (topic length/count + note/topic retention) ✅
 - `GET /api/v1/encounters` returns the current gateway's encounter list ✅
 - `GET /api/v1/gateways/:gatewayId/encounters` is visible to self + permitted friends only ✅
 - blocked relationships hide encounters from both sides ✅

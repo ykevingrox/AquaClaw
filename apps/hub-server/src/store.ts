@@ -91,6 +91,28 @@ export interface MessageRecord {
   createdAt: string;
 }
 
+export interface ConversationReadStateRecord {
+  conversationId: string;
+  gatewayId: string;
+  lastReadMessageId: string | null;
+  lastReadAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface ConversationReadStateSummary {
+  readState: ConversationReadStateRecord;
+  latestMessage: MessageRecord | null;
+  unreadCount: number;
+}
+
+export interface ConversationListItem {
+  conversation: ConversationRecord;
+  peerGateway: GatewayRecord;
+  latestMessage: MessageRecord | null;
+  readState: ConversationReadStateRecord;
+  unreadCount: number;
+}
+
 export interface AuditRecord {
   id: string;
   actorGatewayId: string | null;
@@ -267,6 +289,14 @@ export interface GatewaySceneOrderSnapshotRecord {
   sceneIds: string[];
 }
 
+export interface EncounterSynthesisRules {
+  friendRequestAcceptedSeedTopics: string[];
+  maxNotes: number;
+  maxRecentTopics: number;
+  maxTopicsPerMessage: number;
+  minTopicLength: number;
+}
+
 export interface GatewayStoreSnapshot {
   version: 1;
   gateways: GatewayRecord[];
@@ -288,6 +318,7 @@ export interface GatewayStoreSnapshot {
   inviteClaims: InviteClaimRecord[];
   conversations: ConversationRecord[];
   messages: MessageRecord[];
+  conversationReadStates?: ConversationReadStateRecord[];
   auditLog: AuditRecord[];
   seaEvents: SeaEvent[];
   currents: CurrentRecord[];
@@ -356,9 +387,11 @@ export interface GatewayStore {
   updateFriendScopes(input: UpdateFriendScopesInput): FriendScopeRecord[];
   createBlock(input: CreateBlockInput): BlockRecord;
   removeBlock(blockerGatewayId: string, blockedGatewayId: string): BlockRecord;
-  listConversations(gatewayId: string): Array<{ conversation: ConversationRecord; peerGateway: GatewayRecord }>;
+  listConversations(gatewayId: string): ConversationListItem[];
   createMessage(input: CreateMessageInput): MessageRecord;
   listMessages(conversationId: string, gatewayId: string): MessageRecord[];
+  getConversationReadState(conversationId: string, gatewayId: string): ConversationReadStateSummary;
+  markConversationRead(input: MarkConversationReadStateInput): ConversationReadStateSummary;
   heartbeatPresence(gatewayId: string): GatewayPresenceRecord;
   heartbeatLocalRuntime(input: HeartbeatLocalRuntimeInput): {
     runtime: LocalRuntimeBindingState;
@@ -468,6 +501,12 @@ interface CreateMessageInput {
   body: string;
 }
 
+interface MarkConversationReadStateInput {
+  conversationId: string;
+  gatewayId: string;
+  messageId?: string;
+}
+
 interface UpdateFriendScopesInput {
   fromGatewayId: string;
   toGatewayId: string;
@@ -545,8 +584,9 @@ export interface RecordEncounterInput {
   gatewayBId: string;
   actorGatewayId?: string | null;
   trigger: EncounterTrigger;
-  summary: string;
+  summary?: string;
   topics?: string[];
+  messageBody?: string;
   createdAt?: string;
 }
 
@@ -641,6 +681,13 @@ const DEFAULT_REMOTE_RUNTIME_LABEL = 'Hosted Remote Runtime';
 const DEFAULT_REMOTE_RUNTIME_SOURCE = 'hosted_remote_bind';
 const DEFAULT_REMOTE_BRIDGE_LABEL = 'Hosted Remote Runtime Bridge';
 const DEFAULT_REMOTE_BRIDGE_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_ENCOUNTER_SYNTHESIS_RULES: EncounterSynthesisRules = {
+  friendRequestAcceptedSeedTopics: ['friendship'],
+  maxNotes: 5,
+  maxRecentTopics: 5,
+  maxTopicsPerMessage: 3,
+  minTopicLength: 3,
+};
 const LOCAL_REEF_SEED_KEY = 'local_reef_v1';
 const LOCAL_REEF_HANDLE_PREFIX = 'reef-';
 const LOCAL_REEF_OWNER_SCENE_SUMMARY =
@@ -769,6 +816,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly inviteClaimsByKey = new Map<string, InviteClaimRecord>();
   private readonly conversationsById = new Map<string, ConversationRecord>();
   private readonly messagesById = new Map<string, MessageRecord>();
+  private readonly conversationReadStatesByKey = new Map<string, ConversationReadStateRecord>();
   private readonly lastSeenAtByGatewayId = new Map<string, string>();
   private readonly auditLog: AuditRecord[] = [];
   private readonly seaEvents: SeaEvent[] = [];
@@ -785,6 +833,17 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly remoteRuntimeBridgeCredentialsByToken = new Map<string, RemoteRuntimeBridgeCredentialRecord>();
   private readonly remoteRuntimeBindingsByGatewayId = new Map<string, RemoteRuntimeBindingRecord>();
   private activeCurrentId: string | null = null;
+  private readonly encounterSynthesisRules: EncounterSynthesisRules;
+
+  constructor(options: { encounterRules?: Partial<EncounterSynthesisRules> } = {}) {
+    this.encounterSynthesisRules = {
+      ...DEFAULT_ENCOUNTER_SYNTHESIS_RULES,
+      ...options.encounterRules,
+      friendRequestAcceptedSeedTopics: [
+        ...(options.encounterRules?.friendRequestAcceptedSeedTopics ?? DEFAULT_ENCOUNTER_SYNTHESIS_RULES.friendRequestAcceptedSeedTopics),
+      ],
+    };
+  }
 
   register(
     input: RegisterInput,
@@ -1897,8 +1956,6 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       gatewayBId: request.toGatewayId,
       actorGatewayId: actingGatewayId,
       trigger: 'friend_request.accepted',
-      summary: `${this.gatewayLabel(request.fromGatewayId)} and ${this.gatewayLabel(request.toGatewayId)} formed a first encounter memory`,
-      topics: ['friendship'],
       createdAt: now,
     });
 
@@ -2264,7 +2321,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       throw new Error('encounter requires two distinct gateways');
     }
 
-    const summary = input.summary.trim();
+    const summary = this.buildEncounterSummary(input);
     if (!summary) {
       throw new Error('encounter summary is required');
     }
@@ -2273,7 +2330,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const pairKey = this.encounterPairKey(pair[0], pair[1]);
     const now = input.createdAt ?? new Date().toISOString();
     const existing = this.encountersByPairKey.get(pairKey) ?? null;
-    const nextTopics = this.mergeEncounterTopics(input.topics ?? [], existing?.recentTopics ?? []);
+    const nextTopics = this.mergeEncounterTopics(
+      [...this.defaultEncounterTopics(input.trigger), ...(input.topics ?? []), ...(input.messageBody ? this.extractEncounterTopics(input.messageBody) : [])],
+      existing?.recentTopics ?? [],
+    );
     const nextNotes = this.mergeEncounterNotes(summary, existing?.notes ?? []);
 
     const encounter: EncounterRecord = existing
@@ -2511,19 +2571,24 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.conversationsById.get(conversationId) ?? null;
   }
 
-  listConversations(gatewayId: string): Array<{ conversation: ConversationRecord; peerGateway: GatewayRecord }> {
+  listConversations(gatewayId: string): ConversationListItem[] {
     return Array.from(this.conversationsById.values())
       .filter((conversation) => conversation.memberGatewayIds.includes(gatewayId))
       .filter((conversation) => {
         const peerGatewayId = this.getConversationPeerGatewayId(conversation, gatewayId);
-        return this.isBlockedEitherWay(gatewayId, peerGatewayId) || this.hasGrantedDmScope(peerGatewayId, gatewayId, 'chat.receive');
+        return !this.isBlockedEitherWay(gatewayId, peerGatewayId) && this.hasGrantedDmScope(peerGatewayId, gatewayId, 'chat.receive');
       })
       .map((conversation) => {
         const peerGatewayId = this.getConversationPeerGatewayId(conversation, gatewayId);
         const peerGateway = this.gatewaysById.get(peerGatewayId);
-        return peerGateway ? { conversation, peerGateway } : null;
+        if (!peerGateway) {
+          return null;
+        }
+
+        const { readState, latestMessage, unreadCount } = this.buildConversationReadStateSummary(conversation, gatewayId);
+        return { conversation, peerGateway, latestMessage, readState, unreadCount };
       })
-      .filter((item): item is { conversation: ConversationRecord; peerGateway: GatewayRecord } => Boolean(item))
+      .filter((item): item is ConversationListItem => Boolean(item))
       .sort((a, b) => a.peerGateway.handle.localeCompare(b.peerGateway.handle));
   }
 
@@ -2563,6 +2628,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       ...conversation,
       updatedAt: now,
     });
+    this.setConversationReadState(conversation.id, input.senderGatewayId, message.id, now);
     this.appendAuditRecord({
       actorGatewayId: input.senderGatewayId,
       targetGatewayId: peerGatewayId,
@@ -2580,8 +2646,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       gatewayBId: peerGatewayId,
       actorGatewayId: input.senderGatewayId,
       trigger: 'message.sent',
-      summary: `${this.gatewayLabel(input.senderGatewayId)} and ${this.gatewayLabel(peerGatewayId)} exchanged a direct message`,
-      topics: this.extractEncounterTopics(message.body),
+      messageBody: message.body,
       createdAt: now,
     });
 
@@ -2589,24 +2654,51 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   listMessages(conversationId: string, viewerGatewayId: string): MessageRecord[] {
-    const conversation = this.conversationsById.get(conversationId);
-    if (!conversation) {
-      throw new Error('conversation not found');
-    }
-    if (!conversation.memberGatewayIds.includes(viewerGatewayId)) {
-      throw new Error('gateway is not a member of this conversation');
-    }
-    const peerGatewayId = this.getConversationPeerGatewayId(conversation, viewerGatewayId);
-    if (this.isBlockedEitherWay(viewerGatewayId, peerGatewayId)) {
-      throw new Error('blocked relationship');
-    }
-    if (!this.hasGrantedDmScope(peerGatewayId, viewerGatewayId, 'chat.receive')) {
-      throw new Error('chat receive not allowed');
+    const conversation = this.requireConversationAccess(conversationId, viewerGatewayId, 'chat.receive');
+    return this.listMessagesForConversation(conversation.id);
+  }
+
+  getConversationReadState(conversationId: string, gatewayId: string): ConversationReadStateSummary {
+    const conversation = this.requireConversationAccess(conversationId, gatewayId, 'chat.receive');
+    return this.buildConversationReadStateSummary(conversation, gatewayId);
+  }
+
+  markConversationRead(input: MarkConversationReadStateInput): ConversationReadStateSummary {
+    const conversation = this.requireConversationAccess(input.conversationId, input.gatewayId, 'chat.receive');
+    const messages = this.listMessagesForConversation(conversation.id);
+    const currentSummary = this.buildConversationReadStateSummaryFromMessages(conversation, input.gatewayId, messages);
+    const normalizedMessageId = input.messageId?.trim();
+
+    if (normalizedMessageId !== undefined && !normalizedMessageId) {
+      throw new Error('messageId is required');
     }
 
-    return Array.from(this.messagesById.values())
-      .filter((message) => message.conversationId === conversationId)
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    if (messages.length === 0) {
+      return currentSummary;
+    }
+
+    const currentReadIndex = currentSummary.readState.lastReadMessageId
+      ? messages.findIndex((message) => message.id === currentSummary.readState.lastReadMessageId)
+      : -1;
+    const targetMessage = normalizedMessageId
+      ? messages.find((message) => message.id === normalizedMessageId) ?? null
+      : messages[messages.length - 1] ?? null;
+
+    if (normalizedMessageId && !targetMessage) {
+      throw new Error('message not found in conversation');
+    }
+    if (!targetMessage) {
+      return currentSummary;
+    }
+
+    const targetIndex = messages.findIndex((message) => message.id === targetMessage.id);
+    const effectiveMessage =
+      currentReadIndex > targetIndex && currentSummary.readState.lastReadMessageId
+        ? messages[currentReadIndex] ?? targetMessage
+        : targetMessage;
+    const now = new Date().toISOString();
+    this.setConversationReadState(conversation.id, input.gatewayId, effectiveMessage.id, now);
+    return this.buildConversationReadStateSummaryFromMessages(conversation, input.gatewayId, messages);
   }
 
   private ensureDmConversation(gatewayAId: string, gatewayBId: string): ConversationRecord {
@@ -2792,6 +2884,95 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return conversation.memberGatewayIds[0] === gatewayId ? conversation.memberGatewayIds[1] : conversation.memberGatewayIds[0];
   }
 
+  private conversationReadStateKey(conversationId: string, gatewayId: string) {
+    return `${conversationId}:${gatewayId}`;
+  }
+
+  private getStoredConversationReadState(conversationId: string, gatewayId: string) {
+    return this.conversationReadStatesByKey.get(this.conversationReadStateKey(conversationId, gatewayId)) ?? null;
+  }
+
+  private setConversationReadState(conversationId: string, gatewayId: string, messageId: string | null, readAt: string) {
+    const nextState: ConversationReadStateRecord = {
+      conversationId,
+      gatewayId,
+      lastReadMessageId: messageId,
+      lastReadAt: messageId ? readAt : null,
+      updatedAt: readAt,
+    };
+    this.conversationReadStatesByKey.set(this.conversationReadStateKey(conversationId, gatewayId), nextState);
+    return nextState;
+  }
+
+  private buildEmptyConversationReadState(conversationId: string, gatewayId: string): ConversationReadStateRecord {
+    return {
+      conversationId,
+      gatewayId,
+      lastReadMessageId: null,
+      lastReadAt: null,
+      updatedAt: null,
+    };
+  }
+
+  private listMessagesForConversation(conversationId: string) {
+    return Array.from(this.messagesById.values())
+      .filter((message) => message.conversationId === conversationId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  private buildConversationReadStateSummary(conversation: ConversationRecord, gatewayId: string): ConversationReadStateSummary {
+    return this.buildConversationReadStateSummaryFromMessages(conversation, gatewayId, this.listMessagesForConversation(conversation.id));
+  }
+
+  private buildConversationReadStateSummaryFromMessages(
+    conversation: ConversationRecord,
+    gatewayId: string,
+    messages: MessageRecord[],
+  ): ConversationReadStateSummary {
+    const storedState = this.getStoredConversationReadState(conversation.id, gatewayId);
+    const readState = storedState ?? this.buildEmptyConversationReadState(conversation.id, gatewayId);
+    const latestMessage = messages[messages.length - 1] ?? null;
+    const lastReadIndex = readState.lastReadMessageId ? messages.findIndex((message) => message.id === readState.lastReadMessageId) : -1;
+    const unreadCount = messages.reduce((count, message, index) => {
+      if (index <= lastReadIndex) {
+        return count;
+      }
+      if (message.senderGatewayId === gatewayId) {
+        return count;
+      }
+      return count + 1;
+    }, 0);
+
+    return {
+      readState,
+      latestMessage,
+      unreadCount,
+    };
+  }
+
+  private requireConversationAccess(
+    conversationId: string,
+    gatewayId: string,
+    requiredScope: 'chat.receive' | 'chat.send',
+  ) {
+    const conversation = this.conversationsById.get(conversationId);
+    if (!conversation) {
+      throw new Error('conversation not found');
+    }
+    if (!conversation.memberGatewayIds.includes(gatewayId)) {
+      throw new Error('gateway is not a member of this conversation');
+    }
+    const peerGatewayId = this.getConversationPeerGatewayId(conversation, gatewayId);
+    if (this.isBlockedEitherWay(gatewayId, peerGatewayId)) {
+      throw new Error('blocked relationship');
+    }
+    if (!this.hasGrantedDmScope(peerGatewayId, gatewayId, requiredScope)) {
+      throw new Error(requiredScope === 'chat.send' ? 'chat send not allowed' : 'chat receive not allowed');
+    }
+
+    return conversation;
+  }
+
   private normalizeEncounterPair(gatewayAId: string, gatewayBId: string): [string, string] {
     return [gatewayAId, gatewayBId].sort() as [string, string];
   }
@@ -2804,21 +2985,40 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private mergeEncounterTopics(nextTopics: string[], existingTopics: string[]) {
     const merged = [...nextTopics, ...existingTopics]
       .map((topic) => topic.trim().toLowerCase())
-      .filter((topic) => topic.length >= 2);
-    return [...new Set(merged)].slice(0, 5);
+      .filter((topic) => topic.length >= this.encounterSynthesisRules.minTopicLength);
+    return [...new Set(merged)].slice(0, this.encounterSynthesisRules.maxRecentTopics);
   }
 
   private mergeEncounterNotes(summary: string, existingNotes: string[]) {
     const merged = [summary.trim(), ...existingNotes].filter((note) => note.length > 0);
-    return [...new Set(merged)].slice(0, 5);
+    return [...new Set(merged)].slice(0, this.encounterSynthesisRules.maxNotes);
   }
 
   private extractEncounterTopics(body: string) {
     return body
       .split(/[^\p{L}\p{N}]+/u)
       .map((token) => token.trim())
-      .filter((token) => token.length >= 3)
-      .slice(0, 3);
+      .filter((token) => token.length >= this.encounterSynthesisRules.minTopicLength)
+      .slice(0, this.encounterSynthesisRules.maxTopicsPerMessage);
+  }
+
+  private defaultEncounterTopics(trigger: EncounterTrigger) {
+    if (trigger === 'friend_request.accepted') {
+      return [...this.encounterSynthesisRules.friendRequestAcceptedSeedTopics];
+    }
+    return [];
+  }
+
+  private buildEncounterSummary(input: RecordEncounterInput) {
+    if (input.summary?.trim()) {
+      return input.summary.trim();
+    }
+    const gatewayALabel = this.gatewayLabel(input.gatewayAId);
+    const gatewayBLabel = this.gatewayLabel(input.gatewayBId);
+    if (input.trigger === 'friend_request.accepted') {
+      return `${gatewayALabel} and ${gatewayBLabel} formed a first encounter memory`;
+    }
+    return `${gatewayALabel} and ${gatewayBLabel} exchanged a direct message`;
   }
 
   private latestEncounterForGateway(gatewayId: string) {
@@ -3363,6 +3563,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       inviteClaims: [...this.inviteClaimsByKey.values()],
       conversations: [...this.conversationsById.values()],
       messages: [...this.messagesById.values()],
+      conversationReadStates: [...this.conversationReadStatesByKey.values()],
       auditLog: [...this.auditLog],
       seaEvents: [...this.seaEvents],
       currents: [...this.currentsById.values()],
@@ -3439,6 +3640,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     for (const message of snapshot.messages) {
       this.messagesById.set(message.id, message);
     }
+    for (const readState of snapshot.conversationReadStates ?? []) {
+      this.conversationReadStatesByKey.set(this.conversationReadStateKey(readState.conversationId, readState.gatewayId), readState);
+    }
     this.auditLog.push(...snapshot.auditLog);
     this.seaEvents.push(...snapshot.seaEvents);
     for (const current of snapshot.currents) {
@@ -3474,6 +3678,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.inviteClaimsByKey.clear();
     this.conversationsById.clear();
     this.messagesById.clear();
+    this.conversationReadStatesByKey.clear();
     this.lastSeenAtByGatewayId.clear();
     this.auditLog.length = 0;
     this.seaEvents.length = 0;
@@ -3492,6 +3697,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
 interface CreateGatewayStoreOptions {
   backend?: StoreBackend;
   databaseUrl?: string | null;
+  encounterRules?: Partial<EncounterSynthesisRules>;
 }
 
 export function createGatewayStore(options: CreateGatewayStoreOptions = {}): GatewayStore {
@@ -3500,7 +3706,7 @@ export function createGatewayStore(options: CreateGatewayStoreOptions = {}): Gat
     if (!options.databaseUrl) {
       throw new Error('databaseUrl is required for sqlite store backend');
     }
-    return createSqliteGatewayStore({ databaseUrl: options.databaseUrl });
+    return createSqliteGatewayStore({ databaseUrl: options.databaseUrl, encounterRules: options.encounterRules });
   }
   if (backend === 'postgres') {
     if (!options.databaseUrl) {
@@ -3508,5 +3714,5 @@ export function createGatewayStore(options: CreateGatewayStoreOptions = {}): Gat
     }
     return createPostgresGatewayStore({ databaseUrl: options.databaseUrl });
   }
-  return new InMemoryGatewayStore();
+  return new InMemoryGatewayStore({ encounterRules: options.encounterRules });
 }

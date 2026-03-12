@@ -967,6 +967,199 @@ test('conversation members can send and list dm messages', async () => {
   await app.close();
 });
 
+test('conversation read state tracks unread messages and does not regress on stale read markers', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Read State', handle: 'alpha-read-state' },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Read State', handle: 'beta-read-state' },
+  });
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accept = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  const conversationId = accept.json().data.conversation.id as string;
+
+  const firstSend = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { body: 'first unread wave' },
+  });
+  assert.equal(firstSend.statusCode, 201);
+  const firstMessageId = firstSend.json().data.message.id as string;
+  assert.equal(firstSend.json().data.readState.lastReadMessageId, firstMessageId);
+  assert.equal(firstSend.json().data.readState.unreadCount, 0);
+
+  const betaConversationsBeforeRead = await app.inject({
+    method: 'GET',
+    url: '/api/v1/conversations',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(betaConversationsBeforeRead.statusCode, 200);
+  assert.equal(betaConversationsBeforeRead.json().data.items[0].readState.lastReadMessageId, null);
+  assert.equal(betaConversationsBeforeRead.json().data.items[0].readState.unreadCount, 1);
+  assert.equal(betaConversationsBeforeRead.json().data.items[0].readState.latestMessageId, firstMessageId);
+
+  const betaMessagesBeforeRead = await app.inject({
+    method: 'GET',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(betaMessagesBeforeRead.statusCode, 200);
+  assert.equal(betaMessagesBeforeRead.json().data.readState.unreadCount, 1);
+
+  const firstMarkRead = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/read-state`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(firstMarkRead.statusCode, 200);
+  assert.equal(firstMarkRead.json().data.readState.lastReadMessageId, firstMessageId);
+  assert.equal(firstMarkRead.json().data.readState.unreadCount, 0);
+
+  const secondSend = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { body: 'second unread wave' },
+  });
+  assert.equal(secondSend.statusCode, 201);
+  const secondMessageId = secondSend.json().data.message.id as string;
+
+  const secondMarkRead = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/read-state`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(secondMarkRead.statusCode, 200);
+  assert.equal(secondMarkRead.json().data.readState.lastReadMessageId, secondMessageId);
+  assert.equal(secondMarkRead.json().data.readState.unreadCount, 0);
+
+  const staleMarkRead = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/read-state`,
+    headers: { authorization: `Bearer ${betaToken}` },
+    payload: { messageId: firstMessageId },
+  });
+  assert.equal(staleMarkRead.statusCode, 200);
+  assert.equal(staleMarkRead.json().data.readState.lastReadMessageId, secondMessageId);
+  assert.equal(staleMarkRead.json().data.readState.unreadCount, 0);
+
+  await app.close();
+});
+
+test('marking conversation read does not emit extra sea feed events', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Alpha Quiet Read', handle: 'alpha-quiet-read' },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+  const alphaGatewayId = alphaRegister.json().data.gateway.id as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: { displayName: 'Beta Quiet Read', handle: 'beta-quiet-read' },
+  });
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { toGatewayId: betaGatewayId },
+  });
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accept = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  const conversationId = accept.json().data.conversation.id as string;
+
+  const send = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: { body: 'read state should stay quiet' },
+  });
+  assert.equal(send.statusCode, 201);
+
+  const feedBefore = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sea/feed?scope=mine',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(feedBefore.statusCode, 200);
+  const beforeIds = feedBefore.json().data.items.map((item: { id: string }) => item.id);
+
+  const activityBefore = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${alphaGatewayId}/activity`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(activityBefore.statusCode, 200);
+  const activityBeforeIds = activityBefore.json().data.items.map((item: { id: string }) => item.id);
+
+  const markRead = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/read-state`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(markRead.statusCode, 200);
+  assert.equal(markRead.json().data.readState.unreadCount, 0);
+
+  const feedAfter = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sea/feed?scope=mine',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(feedAfter.statusCode, 200);
+  assert.deepEqual(
+    feedAfter.json().data.items.map((item: { id: string }) => item.id),
+    beforeIds,
+  );
+
+  const activityAfter = await app.inject({
+    method: 'GET',
+    url: `/api/v1/gateways/${alphaGatewayId}/activity`,
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(activityAfter.statusCode, 200);
+  assert.deepEqual(
+    activityAfter.json().data.items.map((item: { id: string }) => item.id),
+    activityBeforeIds,
+  );
+
+  await app.close();
+});
+
 test('denying chat.send blocks sending but still allows reading when chat.receive remains granted', async () => {
   const app = buildApp();
 

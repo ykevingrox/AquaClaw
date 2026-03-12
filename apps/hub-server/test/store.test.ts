@@ -107,6 +107,48 @@ test('GatewayStore encounter seam records and reuses the same pair record', () =
   assert.equal(mineFeed.items.some((event) => event.type === 'encounter.updated'), true);
 });
 
+test('GatewayStore accepts custom encounter synthesis rules', () => {
+  const store: GatewayStore = createGatewayStore({
+    encounterRules: {
+      friendRequestAcceptedSeedTopics: ['reef-bond'],
+      maxNotes: 2,
+      maxRecentTopics: 3,
+      maxTopicsPerMessage: 2,
+      minTopicLength: 4,
+    },
+  });
+  const alpha = registerGateway(store, { displayName: 'Encounter Rules Alpha', handle: 'encounter-rules-alpha' });
+  const beta = registerGateway(store, { displayName: 'Encounter Rules Beta', handle: 'encounter-rules-beta' });
+
+  const first = store.recordEncounter({
+    gatewayAId: alpha.id,
+    gatewayBId: beta.id,
+    actorGatewayId: alpha.id,
+    trigger: 'friend_request.accepted',
+  });
+  assert.deepEqual(first.recentTopics, ['reef-bond']);
+
+  const second = store.recordEncounter({
+    gatewayAId: alpha.id,
+    gatewayBId: beta.id,
+    actorGatewayId: alpha.id,
+    trigger: 'message.sent',
+    messageBody: 'kelp coral tide maps sonar',
+  });
+  assert.deepEqual(second.recentTopics, ['kelp', 'coral', 'reef-bond']);
+  assert.equal(second.notes.length, 2);
+
+  const third = store.recordEncounter({
+    gatewayAId: alpha.id,
+    gatewayBId: beta.id,
+    actorGatewayId: alpha.id,
+    trigger: 'message.sent',
+    messageBody: 'luma reef quiet signal',
+  });
+  assert.deepEqual(third.recentTopics, ['luma', 'reef', 'kelp']);
+  assert.equal(third.notes.length, 2);
+});
+
 test('GatewayStore scene seam writes owner-visible private scenes directly', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Scene Alpha', handle: 'scene-alpha-store' });

@@ -504,6 +504,9 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
       payload: { body: 'hello from smoke' },
     });
     assert.equal(sent.statusCode, 201);
+    const messageId = sent.json().data.message.id as string;
+    assert.equal(sent.json().data.readState.lastReadMessageId, messageId);
+    assert.equal(sent.json().data.readState.unreadCount, 0);
 
     const messages = await app.inject({
       method: 'GET',
@@ -513,6 +516,16 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     assert.equal(messages.statusCode, 200);
     assert.equal(messages.json().data.items.length, 1);
     assert.equal(messages.json().data.items[0].body, 'hello from smoke');
+    assert.equal(messages.json().data.readState.unreadCount, 1);
+
+    const markRead = await app.inject({
+      method: 'POST',
+      url: `/api/v1/conversations/${conversationId}/read-state`,
+      headers: { authorization: `Bearer ${peerToken}` },
+    });
+    assert.equal(markRead.statusCode, 200);
+    assert.equal(markRead.json().data.readState.lastReadMessageId, messageId);
+    assert.equal(markRead.json().data.readState.unreadCount, 0);
 
     const encounters = await app.inject({
       method: 'GET',

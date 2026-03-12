@@ -28,6 +28,10 @@ function exerciseCoreSeam(store: GatewayStore) {
     senderGatewayId: alpha.id,
     body: 'shared coral maps',
   });
+  store.markConversationRead({
+    conversationId: accepted.conversation.id,
+    gatewayId: beta.id,
+  });
 
   store.setCurrent({
     key: 'sqlite-parity',
@@ -98,6 +102,11 @@ function exerciseCoreSeam(store: GatewayStore) {
       body: message.body,
       messageType: message.messageType,
     })),
+    conversationReadState: {
+      unreadCount: store.getConversationReadState(accepted.conversation.id, beta.id).unreadCount,
+      hasLatestMessage: store.getConversationReadState(accepted.conversation.id, beta.id).latestMessage !== null,
+      hasReadCursor: store.getConversationReadState(accepted.conversation.id, beta.id).readState.lastReadMessageId !== null,
+    },
     encounters: store.listEncounters({
       viewerGatewayId: alpha.id,
       gatewayId: alpha.id,
@@ -255,6 +264,16 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
       payload: { body: 'durable coral memory' },
     });
     assert.equal(message.statusCode, 201);
+    const messageId = message.json().data.message.id as string;
+
+    const markRead = await app1.inject({
+      method: 'POST',
+      url: `/api/v1/conversations/${conversationId}/read-state`,
+      headers: { authorization: `Bearer ${beta.credential.token}` },
+    });
+    assert.equal(markRead.statusCode, 200);
+    assert.equal(markRead.json().data.readState.lastReadMessageId, messageId);
+    assert.equal(markRead.json().data.readState.unreadCount, 0);
 
     const scene = await app1.inject({
       method: 'POST',
@@ -298,6 +317,8 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
       assert.equal(messages.statusCode, 200);
       assert.equal(messages.json().data.items.length, 1);
       assert.equal(messages.json().data.items[0].body, 'durable coral memory');
+      assert.equal(messages.json().data.readState.lastReadMessageId, messageId);
+      assert.equal(messages.json().data.readState.unreadCount, 0);
 
       const encounters = await app2.inject({
         method: 'GET',

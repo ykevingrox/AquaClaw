@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-11 17:40（Asia/Shanghai）
+更新时间：2026-03-12 14:20（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -105,6 +105,7 @@
 
 - `GET /api/v1/conversations`
 - `GET /api/v1/conversations/:conversationId/messages`
+- `POST /api/v1/conversations/:conversationId/read-state`
 - `POST /api/v1/conversations/:conversationId/messages`
 - `POST /api/v1/presence/heartbeat`
 - `GET /api/v1/presence/:gatewayId`
@@ -204,15 +205,15 @@ SQLite-first 决策依据：
 
 ## 3.5 当前验证基线
 
-在 Milestone 12 local reef sandbox 落地后，已再次验证当前 runnable baseline：
+在 Phase 5 完成后，已再次验证当前 runnable baseline：
 
-- `npm test` ✅ `80/80`
+- `npm test` ✅ `102/102`
 - `npm run build` ✅
 - `npm run smoke` ✅（`memory`）
 - `AQUA_DEPLOYMENT_MODE=hosted npm run smoke` ✅
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅
 
-这说明在加入 hosted deployment mode guard、hosted smoke、以及保持 local/sqlite baseline 不回归后，当前 baseline 仍然保持全绿。
+这说明在加入 Phase 5 的 read cursor / unread 模型与 encounter synthesis 参数化后，local/hosted/sqlite 三条基线仍然保持全绿。
 
 ---
 
@@ -1344,28 +1345,30 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环；Phase 1~4（含 hosted baseline / owner-auth / remote bridge v1 / registration policy + invite lifecycle + abuse guard）已落地并验收通过。当前 active next slice 已切到 Phase 5：delivery & consistency 强化的第一刀（stream replay 窗口与重连语义硬化）。**
+**Milestone 8-12 local-first loop 已闭环；Phase 1~5（含 hosted baseline / owner-auth / remote bridge v1 / registration policy + invite lifecycle + abuse guard / delivery & consistency）已落地并验收通过。当前 active next slice 已切到 Phase 6：federation 前置的第一刀（global address + trust/envelope contract）。**
 
 当前判断：
 
-- local-first 主链条保持全绿（`npm test` 97/97、`npm run build`、`npm run smoke`，含 sqlite smoke）
+- local-first 主链条保持全绿（`npm test` 102/102、`npm run build`、`npm run smoke`，含 sqlite smoke）
 - hosted 主链条与硬化项全绿（owner session、registration policy、invite revoke、abuse guard 429 合约）
 - hosted owner/gateway 权限边界与 auth-only 面收敛已完成（含 `GET/PATCH /api/v1/gateways/me`）
 - hosted `scope=all` 对非 owner 默认剔除 `system` 事件的边界已稳定
 - remote runtime bridge v1（create/bind/heartbeat/revoke）与运维脚本文档已完成并回归通过
-- Phase 4 的“速率限制 + invite lifecycle + policy matrix + 文档同步”已完成，进入 Phase 5
+- Phase 5 已完成：
+  - stream replay 窗口与重连语义硬化
+  - conversation/message 最小 read cursor + unread model
+  - parameterized encounter synthesis seam
 
 下一刀（已拆分为可执行清单，按顺序推进）：
 
-1. Phase 5 / Task 1：stream replay 窗口与重连语义硬化（completed，2026-03-11）
-   - replay window contract 已锁定为每进程最近 `200` 条 delivery
-   - `resync_required` 已收敛为稳定 contract：`reason`（`invalid_cursor` / `cursor_outside_replay_window`）+ `action=refetch_and_reconnect` + `replayWindow`
-   - 已补齐窗口内 replay、过期 cursor、非法 cursor、跨 restart 后 resync 仍持续接收 live event 的回归
-2. Phase 5 / Task 2：conversation/message 最小 read cursor 模型（active）
-   - 设计并落地最小已读游标（按会话）
-   - 补齐 read cursor 与 feed/activity 关联回归
+1. Phase 6 / Task 1：gateway global address + hub trust / envelope contract（active）
+   - 锁定 `aqua://<hub>/<gateway>` 或等价地址格式
+   - 明确 trust material、key rotation、envelope verify/fail contract
+2. Phase 6 / Task 2：双 hub 本地 POC baseline
+   - 增加双实例实验环境
+   - 补最小 relay 主路径与拒绝路径验证
 3. 文档同步
-   - 更新 contract / acceptance / status plan 的 Phase 5 验收基线
+   - 将 Phase 6 contract / design / acceptance baseline 收敛到单一 active slice
 
 ### 决策锁定（2026-03-11）
 

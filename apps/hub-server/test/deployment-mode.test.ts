@@ -777,6 +777,16 @@ test('hosted owner session token cannot act as gateway identity on hosted social
   assert.equal(ownerSendMessage.statusCode, 403);
   assert.equal(ownerSendMessage.json().error.code, 'forbidden');
 
+  const ownerMarkRead = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/read-state`,
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(ownerMarkRead.statusCode, 403);
+  assert.equal(ownerMarkRead.json().error.code, 'forbidden');
+
   const ownerPresenceHeartbeat = await app.inject({
     method: 'POST',
     url: '/api/v1/presence/heartbeat',

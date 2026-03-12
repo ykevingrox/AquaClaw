@@ -3,7 +3,15 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
-import { InMemoryGatewayStore, type GatewayStore, type GatewayStoreSnapshot, type SeaEvent, type SeaEventListener, type SeaEventLiveSource } from './store.js';
+import {
+  InMemoryGatewayStore,
+  type EncounterSynthesisRules,
+  type GatewayStore,
+  type GatewayStoreSnapshot,
+  type SeaEvent,
+  type SeaEventListener,
+  type SeaEventLiveSource,
+} from './store.js';
 
 const SQLITE_SCHEMA_SQL = `
 create table if not exists gateway_store_state (
@@ -15,6 +23,7 @@ create table if not exists gateway_store_state (
 
 interface CreateSqliteGatewayStoreOptions {
   databaseUrl: string;
+  encounterRules?: Partial<EncounterSynthesisRules>;
 }
 
 function resolveSqliteDatabasePath(databaseUrl: string) {
@@ -32,7 +41,7 @@ function resolveSqliteDatabasePath(databaseUrl: string) {
 }
 
 export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
-  private readonly inner = new InMemoryGatewayStore();
+  private readonly inner: InMemoryGatewayStore;
   private readonly db: DatabaseSync;
 
   constructor(options: CreateSqliteGatewayStoreOptions) {
@@ -43,6 +52,7 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
 
     this.db = new DatabaseSync(databasePath);
     this.db.exec(SQLITE_SCHEMA_SQL);
+    this.inner = new InMemoryGatewayStore({ encounterRules: options.encounterRules });
     this.loadSnapshot();
   }
 
@@ -285,6 +295,18 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
 
   listMessages(...args: Parameters<GatewayStore['listMessages']>): ReturnType<GatewayStore['listMessages']> {
     return this.inner.listMessages(...args);
+  }
+
+  getConversationReadState(
+    ...args: Parameters<GatewayStore['getConversationReadState']>
+  ): ReturnType<GatewayStore['getConversationReadState']> {
+    return this.inner.getConversationReadState(...args);
+  }
+
+  markConversationRead(
+    ...args: Parameters<GatewayStore['markConversationRead']>
+  ): ReturnType<GatewayStore['markConversationRead']> {
+    return this.runMutation(() => this.inner.markConversationRead(...args));
   }
 
   heartbeatPresence(

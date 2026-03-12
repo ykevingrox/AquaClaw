@@ -6,6 +6,8 @@ import { SeaLiveHub, type SeaLiveHubOptions } from './live-hub.js';
 import { createInMemoryRateLimiter, type RateLimitPolicy } from './rate-limiter.js';
 import {
   createGatewayStore,
+  type ConversationListItem,
+  type ConversationReadStateSummary,
   type EncounterRecord,
   type GatewayStore,
   type GatewayVisibility,
@@ -141,6 +143,10 @@ interface FriendScopesParams {
 
 interface CreateMessageBody {
   body?: string;
+}
+
+interface UpdateConversationReadStateBody {
+  messageId?: string;
 }
 
 interface UpdateFriendScopesBody {
@@ -535,7 +541,7 @@ function toSearchResult(store: GatewayStore, gateway: { id: string; handle: stri
 
 function toConversationSummary(
   store: GatewayStore,
-  item: { conversation: { id: string; type: 'dm'; createdAt: string; updatedAt: string }; peerGateway: { id: string; handle: string; displayName: string; bio: string; visibility: GatewayVisibility } },
+  item: ConversationListItem,
 ) {
   return {
     id: item.conversation.id,
@@ -544,8 +550,32 @@ function toConversationSummary(
       ...toGatewaySummary(item.peerGateway),
       status: store.getPresence(item.peerGateway.id).status,
     },
+    latestMessage: item.latestMessage
+      ? {
+          id: item.latestMessage.id,
+          senderGatewayId: item.latestMessage.senderGatewayId,
+          messageType: item.latestMessage.messageType,
+          createdAt: item.latestMessage.createdAt,
+        }
+      : null,
+    readState: toConversationReadStateSummary(item.readState, item.unreadCount, item.latestMessage),
     createdAt: item.conversation.createdAt,
     updatedAt: item.conversation.updatedAt,
+  };
+}
+
+function toConversationReadStateSummary(
+  state: ConversationReadStateSummary['readState'],
+  unreadCount: number,
+  latestMessage: ConversationReadStateSummary['latestMessage'],
+) {
+  return {
+    lastReadMessageId: state.lastReadMessageId,
+    lastReadAt: state.lastReadAt,
+    updatedAt: state.updatedAt,
+    unreadCount,
+    latestMessageId: latestMessage?.id ?? null,
+    latestMessageAt: latestMessage?.createdAt ?? null,
   };
 }
 
@@ -3308,10 +3338,12 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     try {
       const items = store.listMessages(request.params.conversationId, result.gateway.id);
+      const readState = store.getConversationReadState(request.params.conversationId, result.gateway.id);
       return {
         ok: true,
         data: {
           items,
+          readState: toConversationReadStateSummary(readState.readState, readState.unreadCount, readState.latestMessage),
         },
       };
     } catch (error) {
@@ -3326,6 +3358,46 @@ export function buildApp(options: BuildAppOptions = {}) {
       });
     }
   });
+
+  app.post<{ Params: ConversationParams; Body: UpdateConversationReadStateBody }>(
+    '/api/v1/conversations/:conversationId/read-state',
+    async (request, reply) => {
+      const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+      if (!result.ok) {
+        return reply.code(result.error.statusCode).send({
+          ok: false,
+          error: {
+            code: result.error.code,
+            message: result.error.message,
+          },
+        });
+      }
+
+      try {
+        const readState = store.markConversationRead({
+          conversationId: request.params.conversationId,
+          gatewayId: result.gateway.id,
+          messageId: request.body?.messageId,
+        });
+        return {
+          ok: true,
+          data: {
+            readState: toConversationReadStateSummary(readState.readState, readState.unreadCount, readState.latestMessage),
+          },
+        };
+      } catch (error) {
+        const messageText = error instanceof Error ? error.message : 'failed to update read state';
+        const mapped = conversationErrorToHttp(messageText);
+        return reply.code(mapped.statusCode).send({
+          ok: false,
+          error: {
+            code: mapped.code,
+            message: messageText,
+          },
+        });
+      }
+    },
+  );
 
   app.post<{ Params: ConversationParams; Body: CreateMessageBody }>('/api/v1/conversations/:conversationId/messages', async (request, reply) => {
     const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
@@ -3345,10 +3417,12 @@ export function buildApp(options: BuildAppOptions = {}) {
         senderGatewayId: result.gateway.id,
         body: request.body?.body ?? '',
       });
+      const readState = store.getConversationReadState(request.params.conversationId, result.gateway.id);
       return reply.code(201).send({
         ok: true,
         data: {
           message,
+          readState: toConversationReadStateSummary(readState.readState, readState.unreadCount, readState.latestMessage),
         },
       });
     } catch (error) {
