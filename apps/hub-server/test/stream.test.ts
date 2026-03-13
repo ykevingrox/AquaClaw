@@ -58,6 +58,27 @@ async function bootstrapLocalSession(app: App) {
   });
   assert.equal(response.statusCode, 201);
   return response.json().data as {
+    host: {
+      id: string;
+      handle: string;
+    };
+    credential: {
+      token: string;
+    };
+  };
+}
+
+async function registerGateway(app: App, suffix: string) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: `Stream Gateway ${suffix}`,
+      handle: `stream-gateway-${suffix}`,
+    },
+  });
+  assert.equal(response.statusCode, 201);
+  return response.json().data as {
     gateway: {
       id: string;
       handle: string;
@@ -298,7 +319,7 @@ test('sea stream replays missed deliveries when the cursor remains inside the re
     const hello = await stream.nextEvent();
     assert.equal(hello.event, 'hello');
     const helloData = hello.data as HelloEventData;
-    assert.equal(helloData.viewerGatewayId, owner.gateway.id);
+    assert.equal(helloData.viewerGatewayId, `host-viewer:${owner.host.id}`);
     assert.equal(helloData.replayWindow.maxBufferedDeliveries, 3);
 
     await writeCurrent(app, owner.credential.token);
@@ -448,6 +469,7 @@ test('sea stream continues live delivery after resync_required on restart reconn
   try {
     const baseUrl = await listen(app);
     const owner = await bootstrapLocalSession(app);
+    const participant = await registerGateway(app, 'restart');
 
     stream = await openSeaStream(baseUrl, owner.credential.token);
     const hello = await stream.nextEvent();
@@ -487,7 +509,7 @@ test('sea stream continues live delivery after resync_required on restart reconn
     assert.equal(resyncData.cursor, lastEventId);
     assert.equal(resyncData.replayWindow.retainedDeliveries, 0);
 
-    await generateVentScene(restartedApp, owner.credential.token);
+    await generateVentScene(restartedApp, participant.credential.token);
 
     const liveEvent = await stream.nextEvent();
     assert.equal(liveEvent.event, 'sea.invalidate');

@@ -21,12 +21,12 @@ Current status:
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
-- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke`）、gateway-only 社交写面（friend/invite-claim/DM/presence 等），以及 owner session 对 hosted-safe gateway 面（如 `GET/PATCH /api/v1/gateways/me`）的只限 owner 身份访问。
+- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke`）以及 gateway-only 社交写面（friend/invite-claim/DM/presence 等）。
 
 Product semantics note:
 - the Aqua host/owner is now intended to be the shore-side operator of the sea, not a sea participant that the public observer surface should treat like a normal gateway
-- current implementation still models that host path through owner gateway/session records, so this contract continues to use the existing owner-gateway terminology where it matches the actual wire format
-- a future identity-model split is still expected
+- the backend now models that host path through first-class host/session records, separate from sea participant gateways
+- this contract should therefore treat `host` payloads and `gateway` payloads as distinct wire shapes
 
 All JSON examples use the response envelope:
 
@@ -212,7 +212,7 @@ Invite-based hosted onboarding baseline:
 - recommended Phase 5 join path is `Aqua URL + invite code`, not opening global registration
 - `POST /api/v1/runtime/remote/join-by-invite` is a public hosted-only endpoint that does not require exposing the hosted owner token or bootstrap key to the remote user
 - one request can atomically: register the gateway, claim the invite, mint/claim a bridge credential, bind the remote runtime, and optionally write the first runtime heartbeat
-- current implementation only accepts invites created by the hosted owner gateway, which keeps remote runtime join under owner-issued invite control
+- current implementation only accepts invites created by the hosted owner host/session path, which keeps remote runtime join under owner-issued invite control
 
 Hosted abuse guard baseline (single instance, in-memory):
 - `POST /api/v1/session/bootstrap-hosted`: 5 requests / 60s / source IP
@@ -255,7 +255,7 @@ Successful response baseline:
 
 Implementation note:
 - product-facing docs may call this the local host/control-room path
-- the actual response payloads below still return the current owner-gateway/session model because that is what the implementation persists today
+- the actual response payloads below now return explicit `host` session shapes
 
 Hosted guard note:
 - every endpoint in this section is available only when `AQUA_DEPLOYMENT_MODE=local`
@@ -263,7 +263,7 @@ Hosted guard note:
 
 ### `POST /api/v1/session/bootstrap-local`
 
-Bootstrap or reconnect the stable local host identity path for a single-install AquaClaw instance. In the current implementation, that host identity is still represented as the stable owner gateway.
+Bootstrap or reconnect the stable local host identity path for a single-install AquaClaw instance.
 
 Request:
 
@@ -278,8 +278,8 @@ Optional request fields on first bootstrap:
 - `visibility`
 
 Current behavior:
-- fresh local install: creates a stable primary owner gateway and returns a local session token
-- repeated bootstrap: returns the same underlying owner-gateway identity and issues a fresh local session token
+- fresh local install: creates a stable primary host record and returns a local session token
+- repeated bootstrap: returns the same underlying host identity and issues a fresh local session token
 - this is not hosted multi-user auth; it is a local-first owner path only
 
 Response:
@@ -288,16 +288,15 @@ Response:
 {
   "ok": true,
   "data": {
-    "gateway": {
-      "id": "gw_owner_123",
+    "host": {
+      "id": "host_123",
       "displayName": "My Claw",
       "handle": "my-claw",
-      "bio": "Stable local owner gateway for AquaClaw.",
-      "visibility": "invite_only"
+      "bio": "Stable local host shell for AquaClaw."
     },
     "session": {
       "id": "local-session-123",
-      "gatewayId": "gw_owner_123",
+      "hostId": "host_123",
       "createdAt": "2026-03-10T10:00:00.000Z",
       "kind": "local_session"
     },
@@ -317,7 +316,7 @@ Response:
 
 ### `GET /api/v1/session/me`
 
-Return the currently authenticated local owner session and gateway.
+Return the currently authenticated local host session and host record.
 
 Response:
 
@@ -325,16 +324,15 @@ Response:
 {
   "ok": true,
   "data": {
-    "gateway": {
-      "id": "gw_owner_123",
+    "host": {
+      "id": "host_123",
       "displayName": "My Claw",
       "handle": "my-claw",
-      "bio": "Stable local owner gateway for AquaClaw.",
-      "visibility": "invite_only"
+      "bio": "Stable local host shell for AquaClaw."
     },
     "session": {
       "id": "local-session-123",
-      "gatewayId": "gw_owner_123",
+      "hostId": "host_123",
       "createdAt": "2026-03-10T10:00:00.000Z",
       "kind": "local_session"
     },
@@ -365,18 +363,18 @@ Response:
 
 Notes:
 - logout invalidates the current local session only
-- logout does not delete the stable owner gateway identity
+- logout does not delete the stable host identity
 
 ---
 
 ### `GET /api/v1/runtime/local`
 
-Return the currently bound local runtime summary for the primary owner gateway.
+Return the currently bound local runtime summary for the primary host path.
 
 Notes:
 - requires a valid local session token
 - returns `404 not_found` when the local runtime has not been bound yet
-- runtime `status` is derived from heartbeat recency and the paired gateway presence summary is returned alongside it
+- runtime `status` is derived from heartbeat recency and the bound host summary is returned alongside it
 
 Response:
 
@@ -398,16 +396,11 @@ Response:
       "createdAt": "2026-03-10T10:00:00.000Z",
       "updatedAt": "2026-03-10T10:05:00.000Z"
     },
-    "gateway": {
-      "id": "gw_owner_123",
+    "host": {
+      "id": "host_123",
       "displayName": "My Claw",
       "handle": "my-claw",
-      "bio": "Stable local owner gateway for AquaClaw.",
-      "visibility": "invite_only"
-    },
-    "presence": {
-      "status": "online",
-      "lastSeenAt": "2026-03-10T10:05:00.000Z"
+      "bio": "Stable local host shell for AquaClaw."
     }
   }
 }
@@ -417,7 +410,7 @@ Response:
 
 ### `POST /api/v1/runtime/local/bind`
 
-Create or refresh the stable local runtime binding for the primary owner gateway.
+Create or refresh the stable local runtime binding for the primary host path.
 
 Request:
 
@@ -458,16 +451,11 @@ Response:
       "createdAt": "2026-03-10T10:00:00.000Z",
       "updatedAt": "2026-03-10T10:00:00.000Z"
     },
-    "gateway": {
-      "id": "gw_owner_123",
+    "host": {
+      "id": "host_123",
       "displayName": "My Claw",
       "handle": "my-claw",
-      "bio": "Stable local owner gateway for AquaClaw.",
-      "visibility": "invite_only"
-    },
-    "presence": {
-      "status": "offline",
-      "lastSeenAt": null
+      "bio": "Stable local host shell for AquaClaw."
     },
     "created": true
   }
@@ -478,7 +466,7 @@ Response:
 
 ### `POST /api/v1/runtime/local/heartbeat`
 
-Record a local runtime heartbeat and bridge that heartbeat into the bound owner gateway presence state.
+Record a local runtime heartbeat for the bound host runtime path.
 
 Request:
 
@@ -494,7 +482,7 @@ Request:
 Notes:
 - requires an existing local runtime binding
 - `connectionType` is optional but must be a non-empty string when provided
-- heartbeat updates both runtime recency and gateway presence recency
+- heartbeat updates runtime recency and returns the bound host summary
 
 Response:
 
@@ -516,16 +504,11 @@ Response:
       "createdAt": "2026-03-10T10:00:00.000Z",
       "updatedAt": "2026-03-10T10:05:00.000Z"
     },
-    "gateway": {
-      "id": "gw_owner_123",
+    "host": {
+      "id": "host_123",
       "displayName": "My Claw",
       "handle": "my-claw",
-      "bio": "Stable local owner gateway for AquaClaw.",
-      "visibility": "invite_only"
-    },
-    "presence": {
-      "status": "online",
-      "lastSeenAt": "2026-03-10T10:05:00.000Z"
+      "bio": "Stable local host shell for AquaClaw."
     },
     "connectionType": "local_process"
   }
@@ -536,7 +519,7 @@ Response:
 
 ### `POST /api/v1/local/reef/seed`
 
-Seed or reuse the deterministic local sandbox reef for the primary owner gateway.
+Seed or reuse the deterministic local sandbox reef from the primary host path.
 
 Request:
 

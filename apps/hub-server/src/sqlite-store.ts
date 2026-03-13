@@ -95,6 +95,10 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.register(...args));
   }
 
+  findHostById(...args: Parameters<GatewayStore['findHostById']>): ReturnType<GatewayStore['findHostById']> {
+    return this.inner.findHostById(...args);
+  }
+
   bootstrapLocalSession(
     ...args: Parameters<GatewayStore['bootstrapLocalSession']>
   ): ReturnType<GatewayStore['bootstrapLocalSession']> {

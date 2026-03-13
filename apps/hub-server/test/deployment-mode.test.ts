@@ -45,8 +45,9 @@ async function bootstrapHostedOwner(app: ReturnType<typeof buildApp>, handle = '
   });
   assert.equal(response.statusCode, 201);
   return response.json().data as {
-    gateway: {
+    host: {
       id: string;
+      handle: string;
     };
     credential: {
       token: string;
@@ -404,16 +405,6 @@ test('hosted invite join lets a remote gateway enter and bind without opening gl
   assert.equal(joined.json().data.runtime.presence.status, 'online');
   assert.equal(joined.json().data.friendRequest, null);
 
-  const ownerIncoming = await app.inject({
-    method: 'GET',
-    url: '/api/v1/friend-requests/incoming',
-    headers: {
-      authorization: `Bearer ${ownerToken}`,
-    },
-  });
-  assert.equal(ownerIncoming.statusCode, 200);
-  assert.equal(ownerIncoming.json().data.items.length, 0);
-
   const remoteMe = await app.inject({
     method: 'GET',
     url: '/api/v1/runtime/remote/me',
@@ -498,7 +489,7 @@ test('hosted bootstrap requires configured key and supports hosted session lifec
     },
   });
   assert.equal(hostedMe.statusCode, 200);
-  assert.equal(hostedMe.json().data.gateway.id, firstBootstrap.json().data.gateway.id);
+  assert.equal(hostedMe.json().data.host.id, firstBootstrap.json().data.host.id);
 
   const secondBootstrap = await app.inject({
     method: 'POST',
@@ -509,7 +500,7 @@ test('hosted bootstrap requires configured key and supports hosted session lifec
   });
   assert.equal(secondBootstrap.statusCode, 200);
   assert.equal(secondBootstrap.json().data.owner.created, false);
-  assert.equal(secondBootstrap.json().data.gateway.id, firstBootstrap.json().data.gateway.id);
+  assert.equal(secondBootstrap.json().data.host.id, firstBootstrap.json().data.host.id);
 
   const secondToken = secondBootstrap.json().data.credential.token as string;
   assert.notEqual(secondToken, firstToken);
@@ -782,7 +773,7 @@ test('local mode leaves shared registration behavior unchanged when hosted limit
   await app.close();
 });
 
-test('hosted owner session token can access hosted-safe gateway surfaces as owner identity', async () => {
+test('hosted owner session token stays in the control room instead of masquerading as a gateway', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
   const hostedBootstrap = await app.inject({
@@ -796,32 +787,56 @@ test('hosted owner session token can access hosted-safe gateway surfaces as owne
   });
   assert.equal(hostedBootstrap.statusCode, 201);
 
-  const ownerGatewayId = hostedBootstrap.json().data.gateway.id as string;
+  const ownerHostId = hostedBootstrap.json().data.host.id as string;
   const ownerToken = hostedBootstrap.json().data.credential.token as string;
 
-  const me = await app.inject({
+  const hostedMe = await app.inject({
+    method: 'GET',
+    url: '/api/v1/session/hosted/me',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  assert.equal(hostedMe.statusCode, 200);
+  assert.equal(hostedMe.json().data.host.id, ownerHostId);
+
+  const gatewayMe = await app.inject({
     method: 'GET',
     url: '/api/v1/gateways/me',
     headers: {
       authorization: `Bearer ${ownerToken}`,
     },
   });
-  assert.equal(me.statusCode, 200);
-  assert.equal(me.json().data.gateway.id, ownerGatewayId);
+  assert.equal(gatewayMe.statusCode, 401);
 
-  const updateProfile = await app.inject({
+  const updateAqua = await app.inject({
     method: 'PATCH',
-    url: '/api/v1/gateways/me',
+    url: '/api/v1/aqua/me',
     headers: {
       authorization: `Bearer ${ownerToken}`,
     },
     payload: {
-      bio: 'Hosted owner profile update via hosted session token.',
+      displayName: 'Hosted Control Room',
     },
   });
-  assert.equal(updateProfile.statusCode, 200);
-  assert.equal(updateProfile.json().data.gateway.id, ownerGatewayId);
-  assert.equal(updateProfile.json().data.gateway.bio, 'Hosted owner profile update via hosted session token.');
+  assert.equal(updateAqua.statusCode, 200);
+  assert.equal(updateAqua.json().data.aqua.displayName, 'Hosted Control Room');
+
+  const ownerCurrent = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      key: 'hosted-control-room-current',
+      label: 'Hosted Control Room Current',
+      summary: 'Hosted owner can still shape the water from shore.',
+      tone: 'calm',
+      ...buildActiveCurrentWindow(),
+    },
+  });
+  assert.equal(ownerCurrent.statusCode, 201);
 
   const ownerMineFeed = await app.inject({
     method: 'GET',
@@ -831,6 +846,10 @@ test('hosted owner session token can access hosted-safe gateway surfaces as owne
     },
   });
   assert.equal(ownerMineFeed.statusCode, 200);
+  assert.equal(
+    ownerMineFeed.json().data.items.some((item: { type: string }) => item.type === 'current.changed'),
+    true,
+  );
 
   await app.close();
 });

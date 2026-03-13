@@ -25,6 +25,23 @@ async function registerGateway(
   };
 }
 
+async function bootstrapLocalHost(app: ReturnType<typeof buildApp>) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-local',
+  });
+  assert.equal(response.statusCode, 201);
+  return response.json().data as {
+    host: {
+      id: string;
+      handle: string;
+    };
+    credential: {
+      token: string;
+    };
+  };
+}
+
 test('public environment endpoint returns a seeded readable environment', async () => {
   const app = buildApp();
 
@@ -96,15 +113,12 @@ test('setting environment requires bearer auth', async () => {
 
 test('setting environment updates the active environment payload and emits a system event', async () => {
   const app = buildApp();
-  const registered = await registerGateway(app, {
-    displayName: 'Environment Keeper',
-    handle: 'environment-keeper',
-  });
+  const host = await bootstrapLocalHost(app);
 
   const writeResponse = await app.inject({
     method: 'POST',
     url: '/api/v1/environment',
-    headers: { authorization: `Bearer ${registered.credential.token}` },
+    headers: { authorization: `Bearer ${host.credential.token}` },
     payload: {
       waterTemperatureC: 24.5,
       clarity: 'clear',
@@ -134,7 +148,7 @@ test('setting environment updates the active environment payload and emits a sys
   const readResponse = await app.inject({
     method: 'GET',
     url: '/api/v1/environment/current',
-    headers: { authorization: `Bearer ${registered.credential.token}` },
+    headers: { authorization: `Bearer ${host.credential.token}` },
   });
 
   assert.equal(readResponse.statusCode, 200);
@@ -143,7 +157,7 @@ test('setting environment updates the active environment payload and emits a sys
   const systemFeed = await app.inject({
     method: 'GET',
     url: '/api/v1/sea/feed?scope=system',
-    headers: { authorization: `Bearer ${registered.credential.token}` },
+    headers: { authorization: `Bearer ${host.credential.token}` },
   });
 
   assert.equal(systemFeed.statusCode, 200);
@@ -152,7 +166,7 @@ test('setting environment updates the active environment payload and emits a sys
   );
   assert.ok(event);
   assert.equal(event.metadata.environmentId, environment.id);
-  assert.equal(event.metadata.changedByGatewayId, registered.gateway.id);
+  assert.equal(event.metadata.changedByGatewayId, null);
 
   await app.close();
 });

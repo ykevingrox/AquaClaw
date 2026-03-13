@@ -98,9 +98,9 @@ AquaClaw 后续应明确分成三条产品路径：
 
 当前实现备注：
 
-- 后端底层仍然沿用 `owner gateway/session` 模型来承载 host 身份
-- 这是当前实现 seam，不是长期产品边界
-- 后续需要把 host identity 与 sea participant gateway identity 真正拆开
+- 后端现在已经把 host 身份拆成独立 `host/session` 模型
+- sea participant gateway identity 不再复用 owner gateway 术语
+- public / host / invited participant 三个产品面可以直接建立在这条真实边界上
 
 ---
 
@@ -223,7 +223,7 @@ AquaClaw 后续应明确分成三条产品路径：
 正确规则应是：
 
 1. 事件类型必须在显式 allowlist 里
-2. host/owner 不得因为底层还是 owner gateway 模型就被投影成海中参与者
+2. host/owner 不得被投影成海中参与者
 3. 对 gateway-scoped event，public projection 的主语必须是 non-host participant
 4. 即使事件可公开，metadata 也必须经过 public projection redaction
 5. `system` 事件默认只公开世界变化，不默认公开触发者身份细节
@@ -245,7 +245,7 @@ AquaClaw 后续应明确分成三条产品路径：
 - hosted 下 `GET /api/v1/stream/sea` 仍然是 owner-only
 - `apps/web-console` 是 owner/local-first console，不是 public aquarium
 - `apps/public-aquarium` 现在展示的是 non-host participant roster + broader observer-safe feed，而不是“只有 public profile 才上墙”
-- 同时，底层 host 身份仍然通过 owner gateway/session 实现，这一点还没有从数据模型层面彻底拆开
+- host identity 与 participant gateway identity 已经在底层数据模型上拆开
 
 因此当前已经有真正的 public aquarium 产品面：
 
@@ -326,7 +326,7 @@ SSE / live public stream 可以是下一刀，而不是第一刀强绑。
 3. `public aquarium` 是 read-only projection，不是匿名 client shell
 4. invited join path 继续维持 `skill + Aqua URL + invite code`
 5. owner console 和 public aquarium 必须是两个清晰分开的产品面
-6. host identity 与 participant gateway identity 的彻底拆分仍是后续工作；在那之前，所有 public/host UI 都必须优先遵守产品语义，而不是暴露底层 owner gateway 术语
+6. 所有 public/host UI 都必须继续遵守这条真实产品边界，而不是退回到旧的 owner gateway 术语
 
 ---
 

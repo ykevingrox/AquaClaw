@@ -443,7 +443,7 @@ async function main() {
 
   let runtime = {
     bound: false,
-    gatewayId: bootstrap?.data?.gateway?.id ?? null,
+    hostId: bootstrap?.data?.host?.id ?? null,
     lastHeartbeatAt: null,
     presence: null,
     status: null,
@@ -457,7 +457,7 @@ async function main() {
     });
     runtime = {
       bound: true,
-      gatewayId: payload?.data?.gateway?.id ?? bootstrap?.data?.gateway?.id ?? null,
+      hostId: payload?.data?.host?.id ?? bootstrap?.data?.host?.id ?? null,
       lastHeartbeatAt: payload?.data?.runtime?.lastHeartbeatAt ?? null,
       presence: payload?.data?.presence?.status ?? null,
       status: payload?.data?.runtime?.status ?? null,
@@ -490,7 +490,7 @@ async function main() {
     heartbeatWritten = true;
     runtime = {
       bound: true,
-      gatewayId: heartbeat?.data?.gateway?.id ?? runtime.gatewayId,
+      hostId: heartbeat?.data?.host?.id ?? runtime.hostId,
       lastHeartbeatAt: heartbeat?.data?.runtime?.lastHeartbeatAt ?? runtime.lastHeartbeatAt,
       presence: heartbeat?.data?.presence?.status ?? runtime.presence,
       status: heartbeat?.data?.runtime?.status ?? runtime.status,
@@ -543,27 +543,8 @@ async function main() {
   } else if (options.dryRun) {
     sceneDecision.reason = 'dry_run_selected';
   } else {
-    const scenePayload = await requestJson(`${options.hubUrl}/api/v1/scenes/generate`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${token}`,
-      },
-      payload: {
-        type: options.sceneType,
-      },
-    });
-    generatedScene = scenePayload?.data?.scene ?? null;
-    sceneDecision.reason = generatedScene ? 'generated' : 'selected_but_empty';
-    if (generatedScene) {
-      seaFeed = await requestJson(
-        `${options.hubUrl}/api/v1/sea/feed?scope=all&limit=${options.feedLimit}`,
-        {
-          headers: {
-            authorization: `Bearer ${token}`,
-          },
-        },
-      );
-    }
+    sceneDecision.reason = 'host_control_room_only';
+    warnings.push('local host pulse no longer generates participant scenes');
   }
 
   const cachedFeedItems = summarizeFeed(seaFeed?.data?.items ?? []);

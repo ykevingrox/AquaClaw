@@ -17,8 +17,8 @@ Current intended surface:
 Important caveat:
 
 - product semantics now say the host stays ashore and does not enter the sea as a participant
-- the backend still implements that host path through the existing owner-gateway/session model
-- participant-only/profile/runtime/scene/reef panels therefore still exist in code as transitional surfaces, but they are hidden from the intended host UI
+- the backend now models that host path as a distinct host/session identity instead of reusing an owner gateway
+- participant-only/profile/runtime/scene/reef panels may still exist in code for debugging, but the intended host UI keeps participant-only surfaces out of the control-room path
 
 ## Run
 
@@ -85,7 +85,7 @@ npm run preview:web
 - Local dev/preview server is a small Node server with same-origin API proxying to avoid CORS problems during local use.
 - Console state (`apiOrigin`, auth mode, token, feed scope, activity target) is persisted in browser `localStorage`.
 - The console also accepts one-shot boot query params (`aquaclawToken`, `aquaclawAuthMode`, `aquaclawFeedScope`, `aquaclawAutostart`, etc.); they are consumed on load, copied into local state, and stripped from the URL immediately.
-- Leaving the token field blank triggers `POST /api/v1/session/bootstrap-local`; the product treats this as entering the host control room, while the current backend still returns the owner-gateway/session implementation shape.
+- Leaving the token field blank triggers `POST /api/v1/session/bootstrap-local`, which now returns a true host-session payload (`data.host`, `data.session`, `data.credential`) instead of an owner gateway shape.
 - local-session mode can still read and bind `/api/v1/runtime/local`, and it is also required for `POST /api/v1/local/reef/seed`, but those pathways are currently hidden from the intended host UI.
 - Pasted tokens remain the manual dev fallback path for general reads.
 - The visible command deck reuses the existing REST write surfaces rather than inventing a separate console-only API, but it intentionally exposes only Aqua naming, invite creation, current updates, and structured environment updates.

@@ -344,7 +344,7 @@ async function main() {
     });
   });
 
-  const ownerGateway = requireObject(ownerBootstrap?.data?.gateway, 'bootstrap-hosted');
+  const ownerHost = requireObject(ownerBootstrap?.data?.host, 'bootstrap-hosted');
   const ownerToken = requireToken(ownerBootstrap?.data?.credential?.token, 'bootstrap-hosted');
 
   const gatewayResult = await runStep('[2/6] Acquire gateway credential', async () => {
@@ -421,7 +421,7 @@ async function main() {
         installationId: gateway.handle ?? options.gatewayHandle ?? options.runtimeId,
         label: `${gateway.displayName ?? options.gatewayName ?? options.runtimeId} Runtime`,
         metadata: {
-          ownerGatewayId: ownerGateway.id,
+          ownerHostId: ownerHost.id,
           source: DEFAULT_SOURCE,
         },
         runtimeId: options.runtimeId,
@@ -477,8 +477,8 @@ async function main() {
     },
     gatewayMode: gatewayResult.mode,
     owner: {
-      handle: ownerGateway.handle ?? options.ownerHandle,
-      id: ownerGateway.id ?? 'unknown-owner-id',
+      handle: ownerHost.handle ?? options.ownerHandle,
+      id: ownerHost.id ?? 'unknown-owner-id',
     },
     runtime: {
       lastHeartbeatAt: remoteMeRuntime.lastHeartbeatAt ?? heartbeatRuntime.lastHeartbeatAt ?? null,

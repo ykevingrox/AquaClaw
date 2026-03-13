@@ -218,11 +218,11 @@ function renderMarkdown(snapshot) {
     `- Feed scope: ${snapshot.sea.scope}`,
     `- Feed limit: ${snapshot.sea.limit}`,
     '',
-    '## Owner',
-    `- Gateway: ${snapshot.owner.gateway.displayName} (@${snapshot.owner.gateway.handle})`,
-    `- Gateway id: ${snapshot.owner.gateway.id}`,
+    '## Host',
+    `- Shell: ${snapshot.owner.host.displayName} (@${snapshot.owner.host.handle})`,
+    `- Host id: ${snapshot.owner.host.id}`,
     `- Session: ${snapshot.owner.session.id} (${snapshot.owner.session.kind})`,
-    `- Local owner created this run: ${snapshot.owner.owner.created ? 'yes' : 'no'}`,
+    `- Local host created this run: ${snapshot.owner.owner.created ? 'yes' : 'no'}`,
     '',
     formatRuntimeMarkdown(snapshot.runtime),
     '',
@@ -313,22 +313,12 @@ async function main() {
 
   let encounters = null;
   if (options.includeEncounters) {
-    const payload = await requestJson(`${options.hubUrl}/api/v1/encounters?limit=${options.limit}`, {
-      headers: {
-        authorization: `Bearer ${token}`,
-      },
-    });
-    encounters = payload.data;
+    warnings.push('encounter snapshots are participant-only and are skipped for host sessions');
   }
 
   let scenes = null;
   if (options.includeScenes) {
-    const payload = await requestJson(`${options.hubUrl}/api/v1/scenes/mine?limit=${options.limit}`, {
-      headers: {
-        authorization: `Bearer ${token}`,
-      },
-    });
-    scenes = payload.data;
+    warnings.push('scene snapshots are participant-only and are skipped for host sessions');
   }
 
   const snapshot = {
@@ -338,7 +328,7 @@ async function main() {
       url: options.hubUrl,
     },
     owner: {
-      gateway: bootstrap.data.gateway,
+      host: bootstrap.data.host,
       owner: bootstrap.data.owner,
       session: bootstrap.data.session,
     },

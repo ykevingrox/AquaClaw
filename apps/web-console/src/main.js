@@ -93,6 +93,7 @@ const aquariumState = {
   lastSyncedAt: null,
   locale: loadInitialLocale(),
   token: '',
+  viewerKind: null,
 };
 
 const liveState = {
@@ -351,6 +352,7 @@ const COPY = {
       expires: 'expires: {value}',
       visibilityLabel: 'visibility: {value}',
       idLabel: 'id: {value}',
+      hostRoleLabel: 'role: host shell',
       runtimeLabel: 'runtime: {value}',
       gatewayPresenceLabel: 'gateway presence: {value}',
       sourceLabel: 'source: {value}',
@@ -418,6 +420,8 @@ const COPY = {
       bindRuntimeFailed: 'Failed to bind local runtime',
       failedReadSurface: 'Failed to refresh the read surface.',
       failedActivityPanel: 'Failed to refresh the activity panel.',
+      participantOnlyReadSurface: 'This read surface belongs to participant gateways. The host stays ashore.',
+      participantOnlyCommand: 'This command requires a participant gateway token.',
       runtimeBindingSource: 'aquarium_console',
       commandFailed: 'Command failed.',
     },
@@ -711,6 +715,7 @@ const COPY = {
       expires: '过期：{value}',
       visibilityLabel: '可见性：{value}',
       idLabel: 'ID：{value}',
+      hostRoleLabel: '角色：host 外壳',
       runtimeLabel: 'runtime：{value}',
       gatewayPresenceLabel: '小龙虾在线状态：{value}',
       sourceLabel: '来源：{value}',
@@ -778,6 +783,8 @@ const COPY = {
       bindRuntimeFailed: '绑定本地 runtime 失败',
       failedReadSurface: '刷新读取面失败。',
       failedActivityPanel: '刷新活动面板失败。',
+      participantOnlyReadSurface: '这个读取面属于参与者小龙虾。host 不下海，所以这里不可用。',
+      participantOnlyCommand: '这个命令需要参与者小龙虾 token。',
       runtimeBindingSource: 'aquarium_console',
       commandFailed: '命令执行失败。',
     },
@@ -1143,7 +1150,10 @@ async function resolveIdentity(apiOrigin, token) {
     try {
       const sessionPayload = await requestJson('/api/v1/session/me', { apiOrigin, token });
       return {
-        gateway: sessionPayload.data.gateway,
+        gateway: {
+          ...sessionPayload.data.host,
+          kind: 'host',
+        },
         mode: 'local_session',
       };
     } catch (error) {
@@ -1156,9 +1166,23 @@ async function resolveIdentity(apiOrigin, token) {
     }
   }
 
+  try {
+    const hostedSessionPayload = await requestJson('/api/v1/session/hosted/me', { apiOrigin, token });
+    return {
+      gateway: {
+        ...hostedSessionPayload.data.host,
+        kind: 'host',
+      },
+      mode: 'bearer',
+    };
+  } catch {}
+
   const mePayload = await requestJson('/api/v1/gateways/me', { apiOrigin, token });
   return {
-    gateway: mePayload.data.gateway,
+    gateway: {
+      ...mePayload.data.gateway,
+      kind: 'gateway',
+    },
     mode: 'bearer',
   };
 }
@@ -1373,7 +1397,7 @@ function hydrateProfileForm(gateway, { force = false } = {}) {
 
   elements.profileDisplayName.value = gateway.displayName;
   elements.profileBio.value = gateway.bio ?? '';
-  elements.profileVisibility.value = gateway.visibility;
+  elements.profileVisibility.value = gateway.visibility ?? 'invite_only';
   commandState.profileDirty = false;
 }
 
@@ -1508,6 +1532,9 @@ function renderEnvironment(environment) {
 }
 
 function renderProfile(me, syncedAt) {
+  const rolePill = me.kind === 'host'
+    ? `<span class="meta-pill">${escapeHtml(t('common.hostRoleLabel'))}</span>`
+    : `<span class="meta-pill">${escapeHtml(t('common.visibilityLabel', { value: translateToken(me.visibility, 'visibility') }))}</span>`;
   elements.profilePanel.className = 'panel-body';
   elements.profilePanel.innerHTML = `
     <div class="identity-card">
@@ -1515,7 +1542,7 @@ function renderProfile(me, syncedAt) {
       <p class="identity-handle">@${escapeHtml(me.handle)}</p>
       <p class="identity-bio">${escapeHtml(me.bio || t('common.noBio'))}</p>
       <div class="identity-meta">
-        <span class="meta-pill">${escapeHtml(t('common.visibilityLabel', { value: translateToken(me.visibility, 'visibility') }))}</span>
+        ${rolePill}
         <span class="meta-pill">${escapeHtml(t('common.idLabel', { value: me.id }))}</span>
       </div>
       <p class="sync-mark">${escapeHtml(t('common.lastSync', { time: formatWhen(syncedAt) }))}</p>
@@ -1749,22 +1776,28 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     throw new Error(t('common.aquariumSessionNotReady'));
   }
 
-  if (!elements.activityGatewayId.value.trim()) {
+  const isParticipantGateway = gateway.kind === 'gateway';
+  if (isParticipantGateway && !elements.activityGatewayId.value.trim()) {
     elements.activityGatewayId.value = gateway.id;
   }
+  if (!isParticipantGateway) {
+    elements.activityGatewayId.value = '';
+  }
 
-  const activityGatewayId = elements.activityGatewayId.value.trim() || gateway.id;
+  const activityGatewayId = isParticipantGateway ? (elements.activityGatewayId.value.trim() || gateway.id) : '';
   const feedScope = elements.feedScope.value;
   const aquaRequest = requestJson('/api/v1/public/aqua', { apiOrigin });
   const currentRequest = requestJson('/api/v1/currents/current', { apiOrigin, token });
   const environmentRequest = requestJson('/api/v1/environment/current', { apiOrigin, token });
   const feedRequest = requestJson(`/api/v1/sea/feed?scope=${encodeURIComponent(feedScope)}&limit=12`, { apiOrigin, token });
-  const encountersRequest = requestJson('/api/v1/encounters?limit=8', { apiOrigin, token });
-  const scenesRequest = requestJson('/api/v1/scenes/mine?limit=8', { apiOrigin, token });
-  const activityRequest = requestJson(`/api/v1/gateways/${encodeURIComponent(activityGatewayId)}/activity?limit=10`, {
-    apiOrigin,
-    token,
-  });
+  const encountersRequest = isParticipantGateway ? requestJson('/api/v1/encounters?limit=8', { apiOrigin, token }) : null;
+  const scenesRequest = isParticipantGateway ? requestJson('/api/v1/scenes/mine?limit=8', { apiOrigin, token }) : null;
+  const activityRequest = isParticipantGateway
+    ? requestJson(`/api/v1/gateways/${encodeURIComponent(activityGatewayId)}/activity?limit=10`, {
+        apiOrigin,
+        token,
+      })
+    : null;
   const runtimeRequest =
     includeRuntime && authMode === 'local_session'
       ? requestJson('/api/v1/runtime/local', { apiOrigin, token })
@@ -1775,9 +1808,9 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     currentRequest,
     environmentRequest,
     feedRequest,
-    encountersRequest,
-    scenesRequest,
-    activityRequest,
+    encountersRequest ?? Promise.resolve(null),
+    scenesRequest ?? Promise.resolve(null),
+    activityRequest ?? Promise.resolve(null),
     runtimeRequest ?? Promise.resolve(null),
   ]);
 
@@ -1813,19 +1846,27 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     renderError(elements.feedPanel, feedResult.reason.message);
   }
 
-  if (encountersResult.status === 'fulfilled') {
+  if (!isParticipantGateway) {
+    renderEmpty(elements.encounterPanel, t('common.participantOnlyReadSurface'));
+  } else if (encountersResult.status === 'fulfilled') {
     renderEncounters(encountersResult.value.data.items);
   } else {
     renderError(elements.encounterPanel, encountersResult.reason.message);
   }
 
-  if (scenesResult.status === 'fulfilled') {
+  if (!isParticipantGateway) {
+    renderEmpty(elements.scenePanel, t('common.participantOnlyReadSurface'));
+  } else if (scenesResult.status === 'fulfilled') {
     renderScenes(scenesResult.value.data.items);
   } else {
     renderError(elements.scenePanel, scenesResult.reason.message);
   }
 
-  if (activityResult.status === 'fulfilled') {
+  if (!isParticipantGateway) {
+    elements.activityNote.textContent = t('common.participantOnlyReadSurface');
+    renderEmpty(elements.activityPanel, t('common.participantOnlyReadSurface'));
+  } else if (activityResult.status === 'fulfilled') {
+    elements.activityNote.textContent = t('panel.activity.note');
     renderActivity(activityResult.value.data.items, activityGatewayId);
   } else {
     renderError(elements.activityPanel, activityResult.reason.message);
@@ -2121,6 +2162,7 @@ async function loadAquarium() {
     aquariumState.apiOrigin = apiOrigin;
     aquariumState.token = token;
     aquariumState.gateway = identity.gateway;
+    aquariumState.viewerKind = identity.gateway.kind;
     elements.apiOrigin.value = apiOrigin;
     saveSettings();
 
@@ -2157,6 +2199,7 @@ async function loadAquarium() {
     }
 
     aquariumState.gateway = null;
+    aquariumState.viewerKind = null;
     aquariumState.lastSyncedAt = null;
     aquariumState.token = '';
     stopLiveStream({ preserveCursor: false });
@@ -2194,6 +2237,7 @@ async function clearConsoleAuth() {
   elements.token.value = '';
   authMode = 'bearer';
   aquariumState.gateway = null;
+  aquariumState.viewerKind = null;
   aquariumState.lastSyncedAt = null;
   aquariumState.token = '';
   resetAquariumSurface();
@@ -2300,6 +2344,9 @@ elements.aquaCommandForm.addEventListener('submit', (event) => {
 elements.profileCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void runDeckCommand(elements.profileSaveButton, t('pending.saving'), async ({ apiOrigin, token }) => {
+    if (aquariumState.gateway?.kind !== 'gateway') {
+      throw new Error(t('common.participantOnlyCommand'));
+    }
     const displayName = elements.profileDisplayName.value.trim();
     if (!displayName) {
       throw new Error(t('validation.displayNameRequired'));
@@ -2328,6 +2375,9 @@ elements.profileCommandForm.addEventListener('submit', (event) => {
 elements.sceneCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void runDeckCommand(elements.sceneGenerateButton, t('pending.generating'), async ({ apiOrigin, token }) => {
+    if (aquariumState.gateway?.kind !== 'gateway') {
+      throw new Error(t('common.participantOnlyCommand'));
+    }
     const payload = await requestJson('/api/v1/scenes/generate', {
       apiOrigin,
       token,

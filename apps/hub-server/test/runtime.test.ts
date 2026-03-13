@@ -10,7 +10,7 @@ async function bootstrapLocalSession(app: ReturnType<typeof buildApp>) {
   });
   assert.equal(response.statusCode, 201);
   return response.json().data as {
-    gateway: {
+    host: {
       id: string;
       handle: string;
     };
@@ -87,7 +87,7 @@ test('local runtime bind creates a stable binding and get returns its summary', 
   assert.equal(bind.json().data.runtime.runtimeId, 'openclaw-main');
   assert.equal(bind.json().data.runtime.installationId, 'sizhi-macbook');
   assert.equal(bind.json().data.runtime.status, 'offline');
-  assert.equal(bind.json().data.gateway.id, owner.gateway.id);
+  assert.equal(bind.json().data.host.id, owner.host.id);
 
   const get = await app.inject({
     method: 'GET',
@@ -99,12 +99,12 @@ test('local runtime bind creates a stable binding and get returns its summary', 
   assert.equal(get.statusCode, 200);
   assert.equal(get.json().data.runtime.runtimeId, 'openclaw-main');
   assert.equal(get.json().data.runtime.label, 'Sizhi Local Claw');
-  assert.equal(get.json().data.presence.status, 'offline');
+  assert.equal(get.json().data.host.handle, 'my-claw');
 
   await app.close();
 });
 
-test('local runtime heartbeat updates runtime status and owner gateway presence', async () => {
+test('local runtime heartbeat updates runtime status for the host-bound local runtime', async () => {
   const app = buildApp();
   const owner = await bootstrapLocalSession(app);
 
@@ -132,7 +132,6 @@ test('local runtime heartbeat updates runtime status and owner gateway presence'
   });
   assert.equal(heartbeat.statusCode, 200);
   assert.equal(heartbeat.json().data.runtime.status, 'online');
-  assert.equal(heartbeat.json().data.presence.status, 'online');
   assert.equal(heartbeat.json().data.connectionType, 'openclaw_local');
   assert.equal(typeof heartbeat.json().data.runtime.lastHeartbeatAt, 'string');
 
@@ -145,7 +144,7 @@ test('local runtime heartbeat updates runtime status and owner gateway presence'
   });
   assert.equal(get.statusCode, 200);
   assert.equal(get.json().data.runtime.status, 'online');
-  assert.equal(get.json().data.presence.status, 'online');
+  assert.equal(get.json().data.host.handle, 'my-claw');
 
   await app.close();
 });

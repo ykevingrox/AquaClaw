@@ -34,6 +34,25 @@ async function registerGateway(
   };
 }
 
+async function bootstrapLocalHost(app: ReturnType<typeof buildApp>, payload?: { displayName?: string; handle?: string }) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-local',
+    payload,
+  });
+  assert.ok([200, 201].includes(response.statusCode));
+  const json = response.json();
+  return {
+    token: json.data.credential.token as string,
+    host: json.data.host as {
+      id: string;
+      handle: string;
+      displayName: string;
+      bio: string;
+    },
+  };
+}
+
 test('health endpoint returns ok', async () => {
   const app = buildApp();
   const response = await app.inject({ method: 'GET', url: '/health' });
@@ -184,8 +203,8 @@ test('local owner can rename aqua and outsiders cannot', async () => {
       displayName: 'Should Fail',
     },
   });
-  assert.equal(forbidden.statusCode, 403);
-  assert.equal(forbidden.json().error.message, 'aqua profile update requires the owner gateway');
+  assert.equal(forbidden.statusCode, 401);
+  assert.equal(forbidden.json().error.code, 'unauthorized');
 
   await app.close();
 });
@@ -317,6 +336,10 @@ test('public gateway profile can be fetched without auth', async () => {
 
 test('public aquarium endpoints expose anonymous sea state plus all non-host participants and observer-safe dynamics', async () => {
   const app = buildApp();
+  const host = await bootstrapLocalHost(app, {
+    displayName: 'Public Aquarium Host',
+    handle: 'public-aquarium-host',
+  });
 
   const alpha = await registerGateway(app, {
     displayName: 'Alpha Public',
@@ -345,7 +368,7 @@ test('public aquarium endpoints expose anonymous sea state plus all non-host par
     method: 'POST',
     url: '/api/v1/currents',
     headers: {
-      authorization: `Bearer ${alpha.token}`,
+      authorization: `Bearer ${host.token}`,
     },
     payload: {
       key: 'public-tide',
@@ -377,7 +400,7 @@ test('public aquarium endpoints expose anonymous sea state plus all non-host par
     method: 'POST',
     url: '/api/v1/environment',
     headers: {
-      authorization: `Bearer ${alpha.token}`,
+      authorization: `Bearer ${host.token}`,
     },
     payload: {
       waterTemperatureC: 24,
@@ -1199,21 +1222,13 @@ test('friend request rejects targets that disabled incoming requests', async () 
   await app.close();
 });
 
-test('friend request rejects the bootstrapped local owner gateway', async () => {
+test('friend request endpoints reject the bootstrapped local host session', async () => {
   const app = buildApp();
 
-  const ownerBootstrap = await app.inject({
-    method: 'POST',
-    url: '/api/v1/session/bootstrap-local',
-    payload: {
-      handle: 'local-owner-protected',
-      displayName: 'Local Owner Protected',
-    },
+  const owner = await bootstrapLocalHost(app, {
+    handle: 'local-owner-protected',
+    displayName: 'Local Owner Protected',
   });
-  assert.equal(ownerBootstrap.statusCode, 201);
-  const ownerToken = ownerBootstrap.json().data.credential.token as string;
-  const ownerGatewayId = ownerBootstrap.json().data.gateway.id as string;
-  assert.equal(ownerBootstrap.json().data.gateway.friendRequestPolicy, 'disabled');
 
   const outsider = await registerGateway(app, {
     displayName: 'Outside Gateway',
@@ -1223,20 +1238,12 @@ test('friend request rejects the bootstrapped local owner gateway', async () => 
   const response = await app.inject({
     method: 'POST',
     url: '/api/v1/friend-requests',
-    headers: { authorization: `Bearer ${outsider.token}` },
-    payload: { toGatewayId: ownerGatewayId },
+    headers: { authorization: `Bearer ${owner.token}` },
+    payload: { toGatewayId: outsider.gateway.id },
   });
 
-  assert.equal(response.statusCode, 403);
-  assert.equal(response.json().error.code, 'owner_protected');
-
-  const incoming = await app.inject({
-    method: 'GET',
-    url: '/api/v1/friend-requests/incoming',
-    headers: { authorization: `Bearer ${ownerToken}` },
-  });
-  assert.equal(incoming.statusCode, 200);
-  assert.equal(incoming.json().data.items.length, 0);
+  assert.equal(response.statusCode, 401);
+  assert.equal(response.json().error.code, 'unauthorized');
 
   await app.close();
 });

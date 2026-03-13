@@ -371,7 +371,7 @@ async function bootstrapLocalOwner(hubBaseUrl, options) {
 
   return {
     createdOwner: payload.data.owner.created,
-    gateway: payload.data.gateway,
+    host: payload.data.host,
     token: payload.data.credential.token,
   };
 }
@@ -517,7 +517,7 @@ async function main() {
 
   const owner = await bootstrapLocalOwner(hubBaseUrl, options);
   console.log(
-    `owner: ${owner.createdOwner ? 'created' : 'reconnected'} @${owner.gateway.handle} (${owner.gateway.id}) via local session`,
+    `host: ${owner.createdOwner ? 'created' : 'reconnected'} @${owner.host.handle} (${owner.host.id}) via local session`,
   );
 
   if (options.bindRuntime) {

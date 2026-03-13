@@ -65,13 +65,13 @@ function exerciseCoreSeam(store: GatewayStore) {
   const hostedOwner = store.bootstrapHostedSession({
     displayName: 'SQLite Hosted Owner',
     handle: 'sqlite-hosted-owner',
-  }).gateway;
+  }).host;
   const remoteGateway = registerGateway(store, {
     displayName: 'SQLite Remote Runtime',
     handle: 'sqlite-remote-runtime',
   });
   const bridgeCredential = store.createRemoteRuntimeBridgeCredential({
-    createdByGatewayId: hostedOwner.id,
+    createdByHostId: hostedOwner.id,
     label: 'SQLite Bridge',
   });
   store.bindRemoteRuntime({
@@ -93,7 +93,7 @@ function exerciseCoreSeam(store: GatewayStore) {
   const remoteRuntime = store.getRemoteRuntimeBindingByGatewayId(remoteGateway.id);
   const revokedBridgeCredential = store.revokeRemoteRuntimeBridgeCredential({
     credentialId: bridgeCredential.id,
-    revokedByGatewayId: hostedOwner.id,
+    revokedByHostId: hostedOwner.id,
   });
 
   return {
@@ -181,13 +181,13 @@ async function bootstrapLocalSessionViaApi(
   });
   assert.ok([200, 201].includes(response.statusCode));
   return response.json().data as {
-    gateway: {
+    host: {
       id: string;
       handle: string;
     };
     session: {
       id: string;
-      gatewayId: string;
+      hostId: string;
     };
     credential: {
       token: string;
@@ -221,6 +221,10 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
   const app1 = buildApp({ store: store1 });
 
   try {
+    const host = await bootstrapLocalSessionViaApi(app1, {
+      displayName: 'Restart Host',
+      handle: 'restart-host',
+    });
     const alpha = await registerGatewayViaApi(app1, {
       displayName: 'Restart Alpha',
       handle: 'restart-alpha',
@@ -233,7 +237,7 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
     const currentWrite = await app1.inject({
       method: 'POST',
       url: '/api/v1/currents',
-      headers: { authorization: `Bearer ${alpha.credential.token}` },
+      headers: { authorization: `Bearer ${host.credential.token}` },
       payload: {
         key: 'restart-current',
         label: 'Restart Current',
@@ -293,7 +297,7 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
     const environment = await app1.inject({
       method: 'POST',
       url: '/api/v1/environment',
-      headers: { authorization: `Bearer ${alpha.credential.token}` },
+      headers: { authorization: `Bearer ${host.credential.token}` },
       payload: {
         waterTemperatureC: 19,
         clarity: 'clear',
@@ -436,12 +440,12 @@ test('sqlite backend preserves local owner bootstrap and session continuity acro
         headers: { authorization: `Bearer ${first.credential.token}` },
       });
       assert.equal(sessionMe.statusCode, 200);
-      assert.equal(sessionMe.json().data.gateway.id, first.gateway.id);
-      assert.equal(sessionMe.json().data.gateway.handle, 'sqlite-owner');
+      assert.equal(sessionMe.json().data.host.id, first.host.id);
+      assert.equal(sessionMe.json().data.host.handle, 'sqlite-owner');
 
       const second = await bootstrapLocalSessionViaApi(app2);
       assert.equal(second.owner.created, false);
-      assert.equal(second.gateway.id, first.gateway.id);
+      assert.equal(second.host.id, first.host.id);
 
       const logout = await app2.inject({
         method: 'POST',
@@ -568,8 +572,7 @@ test('sqlite backend preserves local runtime binding and heartbeat continuity ac
       assert.equal(runtime.json().data.runtime.runtimeId, 'sqlite-runtime-main');
       assert.equal(runtime.json().data.runtime.installationId, 'sqlite-runtime-install');
       assert.equal(runtime.json().data.runtime.status, 'online');
-      assert.equal(runtime.json().data.gateway.handle, 'sqlite-runtime-owner');
-      assert.equal(runtime.json().data.presence.status, 'online');
+      assert.equal(runtime.json().data.host.handle, 'sqlite-runtime-owner');
     } finally {
       await app2.close();
       if (store2 instanceof SqliteGatewayStore) {

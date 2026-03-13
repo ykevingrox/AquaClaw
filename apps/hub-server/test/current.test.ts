@@ -30,6 +30,23 @@ async function registerGateway(
   };
 }
 
+async function bootstrapLocalHost(app: ReturnType<typeof buildApp>) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-local',
+  });
+  assert.equal(response.statusCode, 201);
+  return response.json().data as {
+    host: {
+      id: string;
+      handle: string;
+    };
+    credential: {
+      token: string;
+    };
+  };
+}
+
 test('current endpoint returns a seeded readable current window', async () => {
   const app = buildApp();
 
@@ -91,17 +108,14 @@ test('setting current requires bearer auth', async () => {
 
 test('setting current updates the active current payload', async () => {
   const app = buildApp();
-  const registered = await registerGateway(app, {
-    displayName: 'Current Keeper',
-    handle: 'current-keeper',
-  });
+  const host = await bootstrapLocalHost(app);
 
   const startsAt = new Date(Date.now() - 60_000).toISOString();
   const endsAt = new Date(Date.now() + 30 * 60_000).toISOString();
   const writeResponse = await app.inject({
     method: 'POST',
     url: '/api/v1/currents',
-    headers: { authorization: `Bearer ${registered.credential.token}` },
+    headers: { authorization: `Bearer ${host.credential.token}` },
     payload: {
       key: 'ember-run',
       label: 'Ember Run',
@@ -153,15 +167,12 @@ test('setting current updates the active current payload', async () => {
 
 test('setting current rejects invalid tone', async () => {
   const app = buildApp();
-  const registered = await registerGateway(app, {
-    displayName: 'Tone Guard',
-    handle: 'tone-guard',
-  });
+  const host = await bootstrapLocalHost(app);
 
   const response = await app.inject({
     method: 'POST',
     url: '/api/v1/currents',
-    headers: { authorization: `Bearer ${registered.credential.token}` },
+    headers: { authorization: `Bearer ${host.credential.token}` },
     payload: {
       key: 'tone-break',
       label: 'Tone Break',
@@ -181,15 +192,12 @@ test('setting current rejects invalid tone', async () => {
 
 test('setting current rejects an invalid time window', async () => {
   const app = buildApp();
-  const registered = await registerGateway(app, {
-    displayName: 'Window Guard',
-    handle: 'window-guard',
-  });
+  const host = await bootstrapLocalHost(app);
 
   const response = await app.inject({
     method: 'POST',
     url: '/api/v1/currents',
-    headers: { authorization: `Bearer ${registered.credential.token}` },
+    headers: { authorization: `Bearer ${host.credential.token}` },
     payload: {
       key: 'reversed-window',
       label: 'Reversed Window',

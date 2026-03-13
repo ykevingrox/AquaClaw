@@ -16,6 +16,7 @@ import {
   type GatewayRecord,
   type GatewayStore,
   type GatewayVisibility,
+  type HostRecord,
   type HostedRegistrationPolicy,
   type SeaEvent,
   type SeaEventLiveSource,
@@ -312,11 +313,6 @@ function getAuthedGateway(store: GatewayStore, authorization: string | undefined
     return { gateway };
   }
 
-  const hostedSession = store.findHostedSessionByToken(token);
-  if (hostedSession) {
-    return { gateway: hostedSession.gateway };
-  }
-
   return {
     error: {
       code: 'unauthorized',
@@ -576,6 +572,15 @@ function toGatewaySummary(
   };
 }
 
+function toHostSummary(host: Pick<HostRecord, 'id' | 'handle' | 'displayName' | 'bio'>) {
+  return {
+    id: host.id,
+    handle: host.handle,
+    displayName: host.displayName,
+    bio: host.bio,
+  };
+}
+
 function toPublicGatewaySummary(gateway: GatewayRecord) {
   return {
     id: gateway.id,
@@ -765,19 +770,19 @@ function toEncounterSummary(store: GatewayStore, encounter: EncounterRecord, sub
   };
 }
 
-function toLocalSessionSummary(session: { id: string; gatewayId: string; createdAt: string }) {
+function toLocalSessionSummary(session: { id: string; hostId: string; createdAt: string }) {
   return {
     id: session.id,
-    gatewayId: session.gatewayId,
+    hostId: session.hostId,
     createdAt: session.createdAt,
     kind: 'local_session',
   };
 }
 
-function toHostedSessionSummary(session: { id: string; gatewayId: string; createdAt: string }) {
+function toHostedSessionSummary(session: { id: string; hostId: string; createdAt: string }) {
   return {
     id: session.id,
-    gatewayId: session.gatewayId,
+    hostId: session.hostId,
     createdAt: session.createdAt,
     kind: 'hosted_session',
   };
@@ -790,7 +795,7 @@ function toLocalRuntimeSummary(
       id: string;
       installationId: string;
       runtimeId: string;
-      gatewayId: string;
+      hostId: string;
       label: string;
       source: string;
       metadata: Record<string, unknown>;
@@ -801,8 +806,7 @@ function toLocalRuntimeSummary(
     status: 'online' | 'recently_active' | 'offline';
   },
 ) {
-  const gateway = store.findById(runtime.binding.gatewayId);
-  const presence = gateway ? store.getPresence(gateway.id) : null;
+  const host = store.findHostById(runtime.binding.hostId);
 
   return {
     runtime: {
@@ -817,13 +821,9 @@ function toLocalRuntimeSummary(
       createdAt: runtime.binding.createdAt,
       updatedAt: runtime.binding.updatedAt,
     },
-    gateway: gateway ? toGatewaySummary(gateway) : null,
-    presence: presence
-      ? {
-          status: presence.status,
-          lastSeenAt: presence.lastSeenAt,
-        }
-      : null,
+    host: host ? toHostSummary(host) : null,
+    gateway: null,
+    presence: null,
   };
 }
 
@@ -999,7 +999,7 @@ function environmentErrorToHttp(_message: string) {
 }
 
 function aquaProfileErrorToHttp(message: string) {
-  if (message === 'aqua profile update requires the owner gateway') {
+  if (message === 'aqua profile update requires the host') {
     return { statusCode: 403, code: 'forbidden' };
   }
   return { statusCode: 400, code: 'validation_failed' };
@@ -1035,7 +1035,7 @@ function localRuntimeErrorToHttp(message: string) {
   if (message === 'local runtime binding not found') {
     return { statusCode: 404, code: 'not_found' };
   }
-  if (message === 'local runtime binding requires the primary owner gateway') {
+  if (message === 'local runtime binding requires the primary host') {
     return { statusCode: 403, code: 'forbidden' };
   }
   return { statusCode: 400, code: 'validation_failed' };
@@ -1045,7 +1045,7 @@ function remoteRuntimeErrorToHttp(message: string) {
   if (message === 'gateway not found' || message === 'remote runtime bridge credential not found' || message === 'remote runtime binding not found') {
     return { statusCode: 404, code: 'not_found' };
   }
-  if (message === 'hosted runtime bridge credential requires the hosted owner gateway') {
+  if (message === 'hosted runtime bridge credential requires the hosted owner host') {
     return { statusCode: 403, code: 'forbidden' };
   }
   if (
@@ -1066,7 +1066,7 @@ function localReefErrorToHttp(message: string) {
   if (message === 'blocked relationship') {
     return { statusCode: 403, code: 'blocked' };
   }
-  if (message === 'local runtime binding requires the primary owner gateway') {
+  if (message === 'local runtime binding requires the primary host') {
     return { statusCode: 403, code: 'forbidden' };
   }
   return { statusCode: 400, code: 'validation_failed' };
@@ -1287,7 +1287,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       return reply.code(result.createdOwner ? 201 : 200).send({
         ok: true,
         data: {
-          gateway: result.gateway,
+          host: toHostSummary(result.host),
           session: toLocalSessionSummary(result.session),
           credential: {
             token: result.session.token,
@@ -1325,7 +1325,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     return {
       ok: true,
       data: {
-        gateway: result.gateway,
+        host: toHostSummary(result.host),
         session: toLocalSessionSummary(result.session),
         owner: {
           isPrimary: true,
@@ -1441,7 +1441,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       return reply.code(result.createdOwner ? 201 : 200).send({
         ok: true,
         data: {
-          gateway: result.gateway,
+          host: toHostSummary(result.host),
           session: toHostedSessionSummary(result.session),
           credential: {
             token: result.session.token,
@@ -1486,7 +1486,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     return {
       ok: true,
       data: {
-        gateway: hostedOwner.session.gateway,
+        host: toHostSummary(hostedOwner.session.host),
         session: toHostedSessionSummary(hostedOwner.session.session),
         owner: {
           isPrimary: true,
@@ -1551,7 +1551,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
 
     const revokedSessions = store.revokeHostedSessions({
-      gatewayId: hostedOwner.session.gateway.id,
+      hostId: hostedOwner.session.host.id,
       exceptToken: revokeCurrent ? undefined : hostedOwner.session.session.token,
     });
 
@@ -1596,7 +1596,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     try {
       const updatedPolicy = store.setHostedRegistrationPolicy({
         policy,
-        actorGatewayId: hostedOwner.session.gateway.id,
+        actorHostId: hostedOwner.session.host.id,
       });
 
       return {
@@ -1607,7 +1607,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'failed to update hosted registration policy';
-      const statusCode = message === 'hosted runtime bridge credential requires the hosted owner gateway' ? 403 : 400;
+      const statusCode = message === 'hosted runtime bridge credential requires the hosted owner host' ? 403 : 400;
       return reply.code(statusCode).send({
         ok: false,
         error: {
@@ -1704,7 +1704,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     try {
       const runtime = store.bindLocalRuntime({
-        gatewayId: result.gateway.id,
+        hostId: result.host.id,
         installationId,
         runtimeId,
         label,
@@ -1765,7 +1765,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     try {
       const runtime = store.heartbeatLocalRuntime({
-        gatewayId: result.gateway.id,
+        hostId: result.host.id,
         connectionType: connectionType ?? null,
         metadata,
       });
@@ -1863,7 +1863,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     try {
       const credential = store.createRemoteRuntimeBridgeCredential({
-        createdByGatewayId: hostedOwner.session.gateway.id,
+        createdByHostId: hostedOwner.session.host.id,
         label,
         metadata,
       });
@@ -1874,13 +1874,13 @@ export function buildApp(options: BuildAppOptions = {}) {
           credential: {
             id: credential.id,
             token: credential.token,
-            createdByGatewayId: credential.createdByGatewayId,
+            createdByHostId: credential.createdByHostId,
             claimedByGatewayId: credential.claimedByGatewayId,
             label: credential.label,
             metadata: credential.metadata,
             expiresAt: credential.expiresAt,
             revokedAt: credential.revokedAt,
-            revokedByGatewayId: credential.revokedByGatewayId,
+            revokedByHostId: credential.revokedByHostId,
             createdAt: credential.createdAt,
             updatedAt: credential.updatedAt,
           },
@@ -1932,7 +1932,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       try {
         const credential = store.revokeRemoteRuntimeBridgeCredential({
           credentialId,
-          revokedByGatewayId: hostedOwner.session.gateway.id,
+          revokedByHostId: hostedOwner.session.host.id,
         });
 
         return {
@@ -1940,13 +1940,13 @@ export function buildApp(options: BuildAppOptions = {}) {
           data: {
             credential: {
               id: credential.id,
-              createdByGatewayId: credential.createdByGatewayId,
+              createdByHostId: credential.createdByHostId,
               claimedByGatewayId: credential.claimedByGatewayId,
               label: credential.label,
               metadata: credential.metadata,
               expiresAt: credential.expiresAt,
               revokedAt: credential.revokedAt,
-              revokedByGatewayId: credential.revokedByGatewayId,
+              revokedByHostId: credential.revokedByHostId,
               createdAt: credential.createdAt,
               updatedAt: credential.updatedAt,
             },
@@ -2062,13 +2062,13 @@ export function buildApp(options: BuildAppOptions = {}) {
           ...toRemoteRuntimeSummary(store, runtime.runtime),
           bridgeCredential: {
             id: runtime.bridgeCredential.id,
-            createdByGatewayId: runtime.bridgeCredential.createdByGatewayId,
+            createdByHostId: runtime.bridgeCredential.createdByHostId,
             claimedByGatewayId: runtime.bridgeCredential.claimedByGatewayId,
             label: runtime.bridgeCredential.label,
             metadata: runtime.bridgeCredential.metadata,
             expiresAt: runtime.bridgeCredential.expiresAt,
             revokedAt: runtime.bridgeCredential.revokedAt,
-            revokedByGatewayId: runtime.bridgeCredential.revokedByGatewayId,
+            revokedByHostId: runtime.bridgeCredential.revokedByHostId,
             createdAt: runtime.bridgeCredential.createdAt,
             updatedAt: runtime.bridgeCredential.updatedAt,
           },
@@ -2309,7 +2309,7 @@ export function buildApp(options: BuildAppOptions = {}) {
         connectionType: connectionType ?? 'openclaw_hosted_join',
         heartbeatMetadata: heartbeatMetadata ?? metadata,
       });
-      const inviterGateway = store.findById(joined.invite.createdByGatewayId);
+      const inviterGateway = joined.invite.createdByGatewayId ? store.findById(joined.invite.createdByGatewayId) : null;
       const friendRequest = joined.friendRequest
         ? {
             ...joined.friendRequest,
@@ -2333,13 +2333,13 @@ export function buildApp(options: BuildAppOptions = {}) {
           runtime: toRemoteRuntimeSummary(store, joined.runtime),
           bridgeCredential: {
             id: joined.bridgeCredential.id,
-            createdByGatewayId: joined.bridgeCredential.createdByGatewayId,
+            createdByHostId: joined.bridgeCredential.createdByHostId,
             claimedByGatewayId: joined.bridgeCredential.claimedByGatewayId,
             label: joined.bridgeCredential.label,
             metadata: joined.bridgeCredential.metadata,
             expiresAt: joined.bridgeCredential.expiresAt,
             revokedAt: joined.bridgeCredential.revokedAt,
-            revokedByGatewayId: joined.bridgeCredential.revokedByGatewayId,
+            revokedByHostId: joined.bridgeCredential.revokedByHostId,
             createdAt: joined.bridgeCredential.createdAt,
             updatedAt: joined.bridgeCredential.updatedAt,
           },
@@ -2353,9 +2353,9 @@ export function buildApp(options: BuildAppOptions = {}) {
 
       if (message === 'handle already exists') {
         mapped = { statusCode: 409, code: 'handle_conflict' };
-      } else if (message === 'hosted owner gateway not found') {
+      } else if (message === 'hosted owner host not found') {
         mapped = { statusCode: 503, code: 'hosted_join_unavailable' };
-      } else if (message === 'hosted invite requires the hosted owner gateway') {
+      } else if (message === 'hosted invite requires the hosted owner host') {
         mapped = { statusCode: 403, code: 'forbidden' };
       } else if (
         message === 'invite not found' ||
@@ -2403,7 +2403,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     try {
       const reef = store.seedLocalReefSandbox({
-        ownerGatewayId: result.gateway.id,
+        hostId: result.host.id,
       });
 
       return reply.code(reef.applied === 'created' ? 201 : 200).send({
@@ -2433,12 +2433,28 @@ export function buildApp(options: BuildAppOptions = {}) {
   }));
 
   app.get('/api/v1/environment/current', async (request, reply) => {
-    const result = getAuthedGateway(store, request.headers.authorization);
-    if ('error' in result) {
-      return reply.code(401).send({
-        ok: false,
-        error: result.error,
-      });
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const gateway = getAuthedGateway(store, request.headers.authorization);
+        if ('error' in gateway) {
+          return reply.code(401).send({
+            ok: false,
+            error: gateway.error,
+          });
+        }
+      }
+    } else {
+      const localHost = getAuthedLocalSession(store, request.headers.authorization);
+      if ('error' in localHost) {
+        const gateway = getAuthedGateway(store, request.headers.authorization);
+        if ('error' in gateway) {
+          return reply.code(401).send({
+            ok: false,
+            error: gateway.error,
+          });
+        }
+      }
     }
 
     return {
@@ -2450,7 +2466,7 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Body: SetCurrentBody }>('/api/v1/currents', async (request, reply) => {
-    let actorGatewayId: string;
+    let actorGatewayId: string | null = null;
 
     if (deploymentMode === 'hosted') {
       const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
@@ -2464,13 +2480,11 @@ export function buildApp(options: BuildAppOptions = {}) {
           },
         });
       }
-      actorGatewayId = hostedOwner.session.gateway.id;
     } else {
-      const result = getAuthedGateway(store, request.headers.authorization);
+      const result = getAuthedLocalSession(store, request.headers.authorization);
       if ('error' in result) {
         return reply.code(401).send({ ok: false, error: result.error });
       }
-      actorGatewayId = result.gateway.id;
     }
 
     const { key, label, summary, tone, sceneHint, startsAt, endsAt, metadata } = request.body ?? {};
@@ -2661,7 +2675,7 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.patch<{ Body: UpdateAquaBody }>('/api/v1/aqua/me', async (request, reply) => {
-    let actorGatewayId: string;
+    let actorHostId: string;
 
     if (deploymentMode === 'hosted') {
       const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
@@ -2675,13 +2689,13 @@ export function buildApp(options: BuildAppOptions = {}) {
           },
         });
       }
-      actorGatewayId = hostedOwner.session.gateway.id;
+      actorHostId = hostedOwner.session.host.id;
     } else {
-      const result = getAuthedGateway(store, request.headers.authorization);
+      const result = getAuthedLocalSession(store, request.headers.authorization);
       if ('error' in result) {
         return reply.code(401).send({ ok: false, error: result.error });
       }
-      actorGatewayId = result.gateway.id;
+      actorHostId = result.host.id;
     }
 
     const { displayName } = request.body ?? {};
@@ -2697,7 +2711,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     try {
       const aqua = store.updateAquaProfile({
-        gatewayId: actorGatewayId,
+        hostId: actorHostId,
         displayName,
       });
       return {
@@ -2972,7 +2986,7 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Body: SetEnvironmentBody }>('/api/v1/environment', async (request, reply) => {
-    let actorGatewayId: string;
+    let actorGatewayId: string | null = null;
 
     if (deploymentMode === 'hosted') {
       const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
@@ -2986,13 +3000,11 @@ export function buildApp(options: BuildAppOptions = {}) {
           },
         });
       }
-      actorGatewayId = hostedOwner.session.gateway.id;
     } else {
-      const result = getAuthedGateway(store, request.headers.authorization);
+      const result = getAuthedLocalSession(store, request.headers.authorization);
       if ('error' in result) {
         return reply.code(401).send({ ok: false, error: result.error });
       }
-      actorGatewayId = result.gateway.id;
     }
 
     const { waterTemperatureC, clarity, tideDirection, surfaceState, phenomenon, summary, metadata } = request.body ?? {};
@@ -3222,9 +3234,12 @@ export function buildApp(options: BuildAppOptions = {}) {
         });
       }
     } else {
-      const result = getAuthedGateway(store, request.headers.authorization);
-      if ('error' in result) {
-        return reply.code(401).send({ ok: false, error: result.error });
+      const localSession = getAuthedLocalSession(store, request.headers.authorization);
+      if ('error' in localSession) {
+        const result = getAuthedGateway(store, request.headers.authorization);
+        if ('error' in result) {
+          return reply.code(401).send({ ok: false, error: result.error });
+        }
       }
     }
 
@@ -3279,37 +3294,38 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     let viewerGatewayId: string;
     let includeSystemEvents = true;
-    if (deploymentMode === 'hosted' && scope === 'system') {
-      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
-      if (!hostedOwner.ok) {
-        const endpointError = hostedOwner.error;
-        return reply.code(endpointError.statusCode).send({
-          ok: false,
-          error: {
-            code: endpointError.code,
-            message: endpointError.message,
-          },
-        });
-      }
-      viewerGatewayId = hostedOwner.session.gateway.id;
-    } else if (deploymentMode === 'hosted') {
+    if (deploymentMode === 'hosted') {
       const hostedSession = getAuthedHostedSession(store, request.headers.authorization);
-      if ('error' in hostedSession) {
+      if (!('error' in hostedSession)) {
+        viewerGatewayId = `host-viewer:${hostedSession.host.id}`;
+      } else {
+        const result = getAuthedGateway(store, request.headers.authorization);
+        if ('error' in result) {
+          return reply.code(401).send({ ok: false, error: result.error });
+        }
+        if (scope === 'system') {
+          return reply.code(403).send({
+            ok: false,
+            error: {
+              code: 'forbidden',
+              message: 'endpoint requires hosted owner session token',
+            },
+          });
+        }
+        viewerGatewayId = result.gateway.id;
+        includeSystemEvents = false;
+      }
+    } else {
+      const localSession = getAuthedLocalSession(store, request.headers.authorization);
+      if (!('error' in localSession)) {
+        viewerGatewayId = `host-viewer:${localSession.host.id}`;
+      } else {
         const result = getAuthedGateway(store, request.headers.authorization);
         if ('error' in result) {
           return reply.code(401).send({ ok: false, error: result.error });
         }
         viewerGatewayId = result.gateway.id;
-        includeSystemEvents = false;
-      } else {
-        viewerGatewayId = hostedSession.gateway.id;
       }
-    } else {
-      const result = getAuthedGateway(store, request.headers.authorization);
-      if ('error' in result) {
-        return reply.code(401).send({ ok: false, error: result.error });
-      }
-      viewerGatewayId = result.gateway.id;
     }
 
     try {
@@ -3352,13 +3368,18 @@ export function buildApp(options: BuildAppOptions = {}) {
           },
         });
       }
-      viewerGatewayId = hostedOwner.session.gateway.id;
+      viewerGatewayId = `host-viewer:${hostedOwner.session.host.id}`;
     } else {
-      const result = getAuthedGateway(store, request.headers.authorization);
-      if ('error' in result) {
-        return reply.code(401).send({ ok: false, error: result.error });
+      const localSession = getAuthedLocalSession(store, request.headers.authorization);
+      if (!('error' in localSession)) {
+        viewerGatewayId = `host-viewer:${localSession.host.id}`;
+      } else {
+        const result = getAuthedGateway(store, request.headers.authorization);
+        if ('error' in result) {
+          return reply.code(401).send({ ok: false, error: result.error });
+        }
+        viewerGatewayId = result.gateway.id;
       }
-      viewerGatewayId = result.gateway.id;
     }
 
     const cursor = parseSeaStreamCursor(request.headers, request.query.cursor);
@@ -3453,7 +3474,8 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Body: CreateInviteBody }>('/api/v1/invites', async (request, reply) => {
-    let createdByGatewayId: string;
+    let createdByGatewayId: string | undefined;
+    let createdByHostId: string | undefined;
     if (deploymentMode === 'hosted') {
       const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
       if (!hostedOwner.ok) {
@@ -3466,18 +3488,24 @@ export function buildApp(options: BuildAppOptions = {}) {
           },
         });
       }
-      createdByGatewayId = hostedOwner.session.gateway.id;
+      createdByHostId = hostedOwner.session.host.id;
     } else {
-      const result = getAuthedGateway(store, request.headers.authorization);
-      if ('error' in result) {
-        return reply.code(401).send({ ok: false, error: result.error });
+      const gateway = getAuthedGateway(store, request.headers.authorization);
+      if (!('error' in gateway)) {
+        createdByGatewayId = gateway.gateway.id;
+      } else {
+        const result = getAuthedLocalSession(store, request.headers.authorization);
+        if ('error' in result) {
+          return reply.code(401).send({ ok: false, error: result.error });
+        }
+        createdByHostId = result.host.id;
       }
-      createdByGatewayId = result.gateway.id;
     }
 
     try {
       const invite = store.createInvite({
         createdByGatewayId,
+        createdByHostId,
         maxUses: request.body?.maxUses,
         expiresAt: request.body?.expiresAt,
       });
@@ -3501,7 +3529,8 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.post<{ Params: RevokeInviteParams }>('/api/v1/invites/:inviteId/revoke', async (request, reply) => {
-    let revokedByGatewayId: string;
+    let revokedByGatewayId: string | undefined;
+    let revokedByHostId: string | undefined;
     if (deploymentMode === 'hosted') {
       const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
       if (!hostedOwner.ok) {
@@ -3514,13 +3543,18 @@ export function buildApp(options: BuildAppOptions = {}) {
           },
         });
       }
-      revokedByGatewayId = hostedOwner.session.gateway.id;
+      revokedByHostId = hostedOwner.session.host.id;
     } else {
-      const result = getAuthedGateway(store, request.headers.authorization);
-      if ('error' in result) {
-        return reply.code(401).send({ ok: false, error: result.error });
+      const gateway = getAuthedGateway(store, request.headers.authorization);
+      if (!('error' in gateway)) {
+        revokedByGatewayId = gateway.gateway.id;
+      } else {
+        const result = getAuthedLocalSession(store, request.headers.authorization);
+        if ('error' in result) {
+          return reply.code(401).send({ ok: false, error: result.error });
+        }
+        revokedByHostId = result.host.id;
       }
-      revokedByGatewayId = result.gateway.id;
     }
 
     const inviteId = request.params?.inviteId?.trim();
@@ -3538,6 +3572,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       const invite = store.revokeInvite({
         inviteId,
         revokedByGatewayId,
+        revokedByHostId,
       });
       return {
         ok: true,
@@ -3586,7 +3621,7 @@ export function buildApp(options: BuildAppOptions = {}) {
         code,
         claimedByGatewayId: result.gateway.id,
       });
-      const inviter = store.findById(claimed.invite.createdByGatewayId);
+      const inviter = claimed.invite.createdByGatewayId ? store.findById(claimed.invite.createdByGatewayId) : null;
       const friendRequest = claimed.friendRequest
         ? {
             ...claimed.friendRequest,

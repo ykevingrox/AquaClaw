@@ -321,7 +321,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
   });
   assert.equal(bootstrap.statusCode, 201);
   const token = bootstrap.json().data.credential.token as string;
-  const gatewayId = bootstrap.json().data.gateway.id as string;
+  const hostId = bootstrap.json().data.host.id as string;
 
   const sessionMe = await app.inject({
     method: 'GET',
@@ -329,20 +329,13 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     headers: { authorization: `Bearer ${token}` },
   });
   assert.equal(sessionMe.statusCode, 200);
-  assert.equal(sessionMe.json().data.gateway.id, gatewayId);
+  assert.equal(sessionMe.json().data.host.id, hostId);
 
   const liveStream = await openSeaStream(baseUrl, token);
   try {
     const liveHello = await liveStream.nextEvent();
     assert.equal(liveHello.event, 'hello');
-    assert.equal((liveHello.data as { viewerGatewayId: string }).viewerGatewayId, gatewayId);
-
-    const me = await app.inject({
-      method: 'GET',
-      url: '/api/v1/gateways/me',
-      headers: { authorization: `Bearer ${token}` },
-    });
-    assert.equal(me.statusCode, 200);
+    assert.equal((liveHello.data as { viewerGatewayId: string }).viewerGatewayId, `host-viewer:${hostId}`);
 
     const runtimeBind = await app.inject({
       method: 'POST',
@@ -371,7 +364,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
       headers: { authorization: `Bearer ${token}` },
     });
     assert.equal(runtime.statusCode, 200);
-    assert.equal(runtime.json().data.gateway.id, gatewayId);
+    assert.equal(runtime.json().data.host.id, hostId);
     assert.equal(runtime.json().data.runtime.status, 'online');
 
     const writeCurrent = await app.inject({
@@ -404,10 +397,22 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     assert.equal(currentAfterWrite.json().data.current.label, 'Smoke Current');
     assert.equal(currentAfterWrite.json().data.current.source, 'manual');
 
+    const gatewayRegister = await app.inject({
+      method: 'POST',
+      url: '/api/v1/gateways/register',
+      payload: {
+        displayName: 'Smoke Gateway',
+        handle: 'smoke-gateway',
+      },
+    });
+    assert.equal(gatewayRegister.statusCode, 201);
+    const gatewayToken = gatewayRegister.json().data.credential.token as string;
+    const gatewayId = gatewayRegister.json().data.gateway.id as string;
+
     const profileUpdate = await app.inject({
       method: 'PATCH',
       url: '/api/v1/gateways/me',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${gatewayToken}` },
       payload: {
         displayName: 'Smoke Captain',
         bio: 'Keeping the local reef readable.',
@@ -421,7 +426,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     const meAfterProfileUpdate = await app.inject({
       method: 'GET',
       url: '/api/v1/gateways/me',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${gatewayToken}` },
     });
     assert.equal(meAfterProfileUpdate.statusCode, 200);
     assert.equal(meAfterProfileUpdate.json().data.gateway.displayName, 'Smoke Captain');
@@ -442,11 +447,11 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     const search = await app.inject({
       method: 'GET',
       url: '/api/v1/search/gateways?q=captain',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${gatewayToken}` },
     });
     assert.equal(search.statusCode, 200);
     assert.equal(search.json().data.items.length, 1);
-    assert.equal(search.json().data.items[0].handle, 'my-claw');
+    assert.equal(search.json().data.items[0].handle, 'smoke-gateway');
 
     const peerRegister = await app.inject({
       method: 'POST',
@@ -463,7 +468,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     const friendRequest = await app.inject({
       method: 'POST',
       url: '/api/v1/friend-requests',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${gatewayToken}` },
       payload: { toGatewayId: peerGatewayId },
     });
     assert.equal(friendRequest.statusCode, 201);
@@ -480,7 +485,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     const heartbeat = await app.inject({
       method: 'POST',
       url: '/api/v1/presence/heartbeat',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${gatewayToken}` },
       payload: {
         sessionId: 'smoke-session',
         connectionType: 'gateway_ws',
@@ -500,7 +505,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     const sent = await app.inject({
       method: 'POST',
       url: `/api/v1/conversations/${conversationId}/messages`,
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${gatewayToken}` },
       payload: { body: 'hello from smoke' },
     });
     assert.equal(sent.statusCode, 201);
@@ -530,7 +535,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     const encounters = await app.inject({
       method: 'GET',
       url: '/api/v1/encounters',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${gatewayToken}` },
     });
     assert.equal(encounters.statusCode, 200);
     assert.equal(encounters.json().data.items.length, 1);
@@ -540,7 +545,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     const generatedScene = await app.inject({
       method: 'POST',
       url: '/api/v1/scenes/generate',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${gatewayToken}` },
       payload: { type: 'vent' },
     });
     assert.equal(generatedScene.statusCode, 201);
@@ -549,7 +554,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     const scenes = await app.inject({
       method: 'GET',
       url: '/api/v1/scenes/mine',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${gatewayToken}` },
     });
     assert.equal(scenes.statusCode, 200);
     assert.equal(scenes.json().data.items.length >= 1, true);
@@ -557,12 +562,11 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     const seaFeed = await app.inject({
       method: 'GET',
       url: '/api/v1/sea/feed?scope=mine',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${gatewayToken}` },
     });
     assert.equal(seaFeed.statusCode, 200);
     assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'gateway.registered'), true);
     assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'gateway.profile_updated'), true);
-    assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'invite.created'), true);
     assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'conversation.message_sent'), true);
     assert.equal(seaFeed.json().data.items.some((item: { type: string }) => item.type === 'scene.vent_generated'), true);
 
@@ -577,7 +581,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     const activity = await app.inject({
       method: 'GET',
       url: `/api/v1/gateways/${gatewayId}/activity`,
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${gatewayToken}` },
     });
     assert.equal(activity.statusCode, 200);
     assert.equal(activity.json().data.gateway.id, gatewayId);
@@ -591,45 +595,12 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     assert.equal(localReefSeed.statusCode, 201);
     assert.equal(localReefSeed.json().data.reef.gateways.length, 3);
     assert.equal(localReefSeed.json().data.reef.counts.gatewaysCreated, 3);
-
-    const encountersAfterReefSeed = await app.inject({
-      method: 'GET',
-      url: '/api/v1/encounters?limit=10',
-      headers: { authorization: `Bearer ${token}` },
-    });
-    assert.equal(encountersAfterReefSeed.statusCode, 200);
-    assert.equal(
-      encountersAfterReefSeed.json().data.items.some((item: { peer: { handle: string } }) => item.peer.handle === 'reef-lantern'),
-      true,
-    );
-
-    const scenesAfterReefSeed = await app.inject({
-      method: 'GET',
-      url: '/api/v1/scenes/mine?limit=10',
-      headers: { authorization: `Bearer ${token}` },
-    });
-    assert.equal(scenesAfterReefSeed.statusCode, 200);
-    assert.equal(
-      scenesAfterReefSeed.json().data.items.some((item: { metadata?: Record<string, unknown> }) => item.metadata?.sandbox === true),
-      true,
-    );
-
-    const reefFeed = await app.inject({
-      method: 'GET',
-      url: '/api/v1/sea/feed?scope=mine&limit=30',
-      headers: { authorization: `Bearer ${token}` },
-    });
-    assert.equal(reefFeed.statusCode, 200);
-    assert.equal(
-      reefFeed.json().data.items.some((item: { metadata?: Record<string, unknown> }) => item.metadata?.sandbox === true),
-      true,
-    );
   } finally {
     await liveStream.close();
   }
 
   return (
-    'health=1 current=1 bootstrap=1 session_me=1 live_stream=1 me=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 ' +
+    'health=1 current=1 bootstrap=1 session_me=1 live_stream=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 ' +
     'current_write=1 profile_update=1 invite_create=1 search=1 register=1 messages=1 encounters=1 scenes=1 ' +
     'sea_feed=1 system_feed=1 activity=1 local_reef_seed=1'
   );

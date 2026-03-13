@@ -26,6 +26,24 @@ async function registerGateway(
   };
 }
 
+async function bootstrapLocalHost(app: ReturnType<typeof buildApp>, payload?: { displayName?: string; handle?: string }) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-local',
+    payload,
+  });
+  assert.equal(response.statusCode, 201);
+  return response.json().data as {
+    host: {
+      id: string;
+      handle: string;
+    };
+    credential: {
+      token: string;
+    };
+  };
+}
+
 async function createFriendRequest(
   app: ReturnType<typeof buildApp>,
   fromToken: string,
@@ -361,12 +379,11 @@ test('sea feed and gateway activity apply visibility and scope filtering', async
 
 test('setting current emits a system sea event with readable metadata', async () => {
   const app = buildApp();
-
-  const alpha = await registerGateway(app, {
-    displayName: 'Current Alpha',
-    handle: 'current-alpha',
-    visibility: 'public',
+  const host = await bootstrapLocalHost(app, {
+    displayName: 'Current Host',
+    handle: 'current-host',
   });
+
   const beta = await registerGateway(app, {
     displayName: 'Current Beta',
     handle: 'current-beta',
@@ -376,7 +393,7 @@ test('setting current emits a system sea event with readable metadata', async ()
   const writeCurrent = await app.inject({
     method: 'POST',
     url: '/api/v1/currents',
-    headers: { authorization: `Bearer ${alpha.token}` },
+    headers: { authorization: `Bearer ${host.credential.token}` },
     payload: {
       key: 'moonlit-updraft',
       label: 'Moonlit Updraft',
@@ -416,8 +433,8 @@ test('setting current emits a system sea event with readable metadata', async ()
   assert.equal(currentChangedEvent.metadata.currentKey, 'moonlit-updraft');
   assert.equal(currentChangedEvent.metadata.currentLabel, 'Moonlit Updraft');
   assert.equal(currentChangedEvent.metadata.currentTone, 'reflective');
-  assert.equal(currentChangedEvent.metadata.changedByGatewayId, alpha.gateway.id);
-  assert.equal(currentChangedEvent.metadata.changedByHandle, 'current-alpha');
+  assert.equal(currentChangedEvent.metadata.changedByGatewayId, null);
+  assert.equal(currentChangedEvent.metadata.changedByHandle, null);
   assert.equal(currentChangedEvent.metadata.source, 'manual');
   assert.equal(currentChangedEvent.metadata.startsAt, current.startsAt);
   assert.equal(currentChangedEvent.metadata.endsAt, current.endsAt);

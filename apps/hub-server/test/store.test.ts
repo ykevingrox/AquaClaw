@@ -250,10 +250,10 @@ test('GatewayStore invite seam lets owner revoke and blocks future claims', () =
 
 test('GatewayStore friend request guardrails protect owners and disabled recipients', () => {
   const store: GatewayStore = createGatewayStore();
-  const owner = store.bootstrapLocalSession({
+  const host = store.bootstrapLocalSession({
     displayName: 'Store Local Owner',
     handle: 'store-local-owner',
-  }).gateway;
+  }).host;
   const alpha = registerGateway(store, {
     displayName: 'Store Alpha Guardrail',
     handle: 'store-alpha-guardrail',
@@ -263,23 +263,13 @@ test('GatewayStore friend request guardrails protect owners and disabled recipie
     handle: 'store-beta-guardrail',
   });
 
-  assert.equal(owner.friendRequestPolicy, 'disabled');
-
-  assert.throws(
-    () =>
-      store.createFriendRequest({
-        fromGatewayId: alpha.id,
-        toGatewayId: owner.id,
-      }),
-    /owner gateway cannot participate in friend requests/,
-  );
+  assert.ok(store.findHostById(host.id));
 
   const claimedInvite = store.claimInvite({
-    code: store.createInvite({ createdByGatewayId: owner.id, maxUses: 1 }).code,
+    code: store.createInvite({ createdByHostId: host.id, maxUses: 1 }).code,
     claimedByGatewayId: alpha.id,
   });
   assert.equal(claimedInvite.friendRequest, null);
-  assert.equal(store.listIncomingFriendRequests(owner.id).length, 0);
 
   store.updateProfile(beta.id, { friendRequestPolicy: 'disabled' });
   assert.throws(
@@ -294,13 +284,13 @@ test('GatewayStore friend request guardrails protect owners and disabled recipie
 
 test('GatewayStore hosted invite join registers, claims, binds, and heartbeats in one atomic step', () => {
   const store: GatewayStore = createGatewayStore();
-  const owner = store.bootstrapHostedSession({
+  const host = store.bootstrapHostedSession({
     displayName: 'Hosted Join Owner',
     handle: 'hosted-join-owner-store',
-  }).gateway;
+  }).host;
 
   const invite = store.createInvite({
-    createdByGatewayId: owner.id,
+    createdByHostId: host.id,
     maxUses: 1,
   });
 
@@ -332,7 +322,6 @@ test('GatewayStore hosted invite join registers, claims, binds, and heartbeats i
   assert.equal(joined.runtime.binding.metadata.source, 'hosted-join-heartbeat-store-test');
   assert.equal(joined.runtime.status, 'online');
   assert.equal(joined.presence.status, 'online');
-  assert.equal(store.listIncomingFriendRequests(owner.id).length, 0);
 
   const runtime = store.getRemoteRuntimeBindingByGatewayId(joined.gateway.id);
   assert.ok(runtime);
@@ -352,10 +341,10 @@ test('GatewayStore hosted invite join registers, claims, binds, and heartbeats i
 
 test('GatewayStore hosted invite join rolls back cleanly on handle conflict', () => {
   const store: GatewayStore = createGatewayStore();
-  const owner = store.bootstrapHostedSession({
+  const host = store.bootstrapHostedSession({
     displayName: 'Hosted Join Rollback Owner',
     handle: 'hosted-join-rollback-owner-store',
-  }).gateway;
+  }).host;
 
   registerGateway(store, {
     displayName: 'Existing Join Handle',
@@ -363,7 +352,7 @@ test('GatewayStore hosted invite join rolls back cleanly on handle conflict', ()
   });
 
   const invite = store.createInvite({
-    createdByGatewayId: owner.id,
+    createdByHostId: host.id,
     maxUses: 1,
   });
 
@@ -376,10 +365,6 @@ test('GatewayStore hosted invite join rolls back cleanly on handle conflict', ()
       }),
     /handle already exists/,
   );
-
-  const ownerIncoming = store.listIncomingFriendRequests(owner.id);
-  assert.equal(ownerIncoming.length, 0);
-  assert.equal(store.getRemoteRuntimeBindingByGatewayId(owner.id), null);
 
   const anotherJoin = store.joinHostedRuntimeWithInvite({
     inviteCode: invite.code,
@@ -395,14 +380,10 @@ test('GatewayStore remote runtime bridge credential seam requires hosted owner i
   const hostedOwner = store.bootstrapHostedSession({
     displayName: 'Hosted Store Owner',
     handle: 'hosted-store-owner',
-  }).gateway;
-  const outsider = registerGateway(store, {
-    displayName: 'Store Outsider',
-    handle: 'store-outsider',
-  });
+  }).host;
 
   const credential = store.createRemoteRuntimeBridgeCredential({
-    createdByGatewayId: hostedOwner.id,
+    createdByHostId: hostedOwner.id,
     label: 'Hosted Remote Bridge',
   });
   assert.equal(typeof credential.token, 'string');
@@ -412,9 +393,9 @@ test('GatewayStore remote runtime bridge credential seam requires hosted owner i
   assert.throws(
     () =>
       store.createRemoteRuntimeBridgeCredential({
-        createdByGatewayId: outsider.id,
+        createdByHostId: 'host-outsider',
       }),
-    /hosted runtime bridge credential requires the hosted owner gateway/,
+    /hosted runtime bridge credential requires the hosted owner host/,
   );
 });
 
@@ -423,14 +404,14 @@ test('GatewayStore remote runtime bridge credentials default to 24h expiry and n
   const hostedOwner = store.bootstrapHostedSession({
     displayName: 'Hosted Runtime Lifecycle Owner',
     handle: 'hosted-runtime-lifecycle-owner',
-  }).gateway;
+  }).host;
   const remoteGateway = registerGateway(store, {
     displayName: 'Hosted Runtime Lifecycle Gateway',
     handle: 'hosted-runtime-lifecycle-gateway',
   });
 
   const expiringCredential = store.createRemoteRuntimeBridgeCredential({
-    createdByGatewayId: hostedOwner.id,
+    createdByHostId: hostedOwner.id,
     label: 'Expiring Runtime Bridge',
   });
   const expiresInMs = Date.parse(expiringCredential.expiresAt ?? '') - Date.now();
@@ -461,7 +442,7 @@ test('GatewayStore remote runtime bridge credentials default to 24h expiry and n
   );
 
   const initialCredential = store.createRemoteRuntimeBridgeCredential({
-    createdByGatewayId: hostedOwner.id,
+    createdByHostId: hostedOwner.id,
     label: 'Initial Runtime Bridge',
   });
   const initialBind = store.bindRemoteRuntime({
@@ -478,7 +459,7 @@ test('GatewayStore remote runtime bridge credentials default to 24h expiry and n
   });
 
   const replacementCredential = store.createRemoteRuntimeBridgeCredential({
-    createdByGatewayId: hostedOwner.id,
+    createdByHostId: hostedOwner.id,
     label: 'Replacement Runtime Bridge',
   });
   const rebound = store.bindRemoteRuntime({
@@ -514,7 +495,7 @@ test('GatewayStore remote runtime seam supports claim, heartbeat, and revoke flo
   const hostedOwner = store.bootstrapHostedSession({
     displayName: 'Hosted Runtime Owner',
     handle: 'hosted-runtime-owner-store',
-  }).gateway;
+  }).host;
   const remoteGateway = registerGateway(store, {
     displayName: 'Remote Runtime Gateway',
     handle: 'remote-runtime-gateway-store',
@@ -525,7 +506,7 @@ test('GatewayStore remote runtime seam supports claim, heartbeat, and revoke flo
   });
 
   const credential = store.createRemoteRuntimeBridgeCredential({
-    createdByGatewayId: hostedOwner.id,
+    createdByHostId: hostedOwner.id,
     label: 'Hosted Bridge Token',
     metadata: {
       source: 'store-test',
@@ -577,13 +558,13 @@ test('GatewayStore remote runtime seam supports claim, heartbeat, and revoke flo
 
   const revoked = store.revokeRemoteRuntimeBridgeCredential({
     credentialId: credential.id,
-    revokedByGatewayId: hostedOwner.id,
+    revokedByHostId: hostedOwner.id,
   });
   assert.equal(typeof revoked.revokedAt, 'string');
-  assert.equal(revoked.revokedByGatewayId, hostedOwner.id);
+  assert.equal(revoked.revokedByHostId, hostedOwner.id);
 
   const replacementCredential = store.createRemoteRuntimeBridgeCredential({
-    createdByGatewayId: hostedOwner.id,
+    createdByHostId: hostedOwner.id,
     label: 'Second Hosted Bridge Token',
   });
   const boundAnother = store.bindRemoteRuntime({
