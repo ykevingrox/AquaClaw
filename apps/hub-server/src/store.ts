@@ -195,6 +195,12 @@ export interface EnvironmentRecord {
   metadata: Record<string, unknown>;
 }
 
+export interface AquaProfileRecord {
+  displayName: string;
+  updatedAt: string;
+  updatedByGatewayId: string | null;
+}
+
 export interface EncounterRecord {
   id: string;
   gatewayAId: string;
@@ -325,6 +331,7 @@ export interface EncounterSynthesisRules {
 export interface GatewayStoreSnapshot {
   version: 1;
   gateways: GatewayRecord[];
+  aquaProfile?: AquaProfileRecord | null;
   gatewayTokens: GatewayTokenSnapshotRecord[];
   localOwnerGatewayId?: string | null;
   hostedOwnerGatewayId?: string | null;
@@ -391,6 +398,8 @@ export interface GatewayStore {
   seedLocalReefSandbox(input: SeedLocalReefInput): LocalReefSeedResult;
   findById(gatewayId: string): GatewayRecord | null;
   findByToken(token: string): GatewayRecord | null;
+  getAquaProfile(): AquaProfileRecord;
+  updateAquaProfile(input: UpdateAquaProfileInput): AquaProfileRecord;
   findLocalSessionByToken(token: string): { gateway: GatewayRecord; session: LocalSessionRecord } | null;
   logoutLocalSession(token: string): LocalSessionRecord;
   canViewGatewayProfile(viewerGatewayId: string | null | undefined, targetGatewayId: string): boolean;
@@ -461,6 +470,11 @@ interface UpdateProfileInput {
   bio?: string;
   visibility?: GatewayVisibility;
   friendRequestPolicy?: GatewayFriendRequestPolicy;
+}
+
+interface UpdateAquaProfileInput {
+  gatewayId: string;
+  displayName: string;
 }
 
 interface BootstrapLocalSessionInput {
@@ -759,6 +773,7 @@ const DEFAULT_AUDIT_PAGE_SIZE = 50;
 const DEFAULT_GATEWAY_PAGE_SIZE = 50;
 const DEFAULT_SEA_PAGE_SIZE = 50;
 const DEFAULT_SCENE_PAGE_SIZE = 50;
+const DEFAULT_AQUA_DISPLAY_NAME = 'AquaClaw Sea';
 const DEFAULT_LOCAL_OWNER_HANDLE = 'my-claw';
 const DEFAULT_LOCAL_OWNER_DISPLAY_NAME = 'My Claw';
 const DEFAULT_LOCAL_OWNER_BIO = 'Stable local owner gateway for AquaClaw.';
@@ -999,6 +1014,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly encountersByPairKey = new Map<string, EncounterRecord>();
   private readonly scenesById = new Map<string, SceneRecord>();
   private readonly sceneIdsByGatewayId = new Map<string, string[]>();
+  private aquaProfile: AquaProfileRecord | null = null;
   private localOwnerGatewayId: string | null = null;
   private hostedOwnerGatewayId: string | null = null;
   private hostedRegistrationPolicy: HostedRegistrationPolicy | null = null;
@@ -1653,6 +1669,46 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const gatewayId = this.tokensToGatewayId.get(token);
     if (!gatewayId) return null;
     return this.gatewaysById.get(gatewayId) ?? null;
+  }
+
+  getAquaProfile(): AquaProfileRecord {
+    return this.aquaProfile
+      ? { ...this.aquaProfile }
+      : {
+          displayName: DEFAULT_AQUA_DISPLAY_NAME,
+          updatedAt: new Date(0).toISOString(),
+          updatedByGatewayId: null,
+        };
+  }
+
+  updateAquaProfile(input: UpdateAquaProfileInput): AquaProfileRecord {
+    if (!this.isOwnerGatewayId(input.gatewayId) || !this.gatewaysById.has(input.gatewayId)) {
+      throw new Error('aqua profile update requires the owner gateway');
+    }
+
+    const displayName = input.displayName.trim();
+    if (!displayName) {
+      throw new Error('aqua displayName is required');
+    }
+
+    const profile: AquaProfileRecord = {
+      displayName,
+      updatedAt: new Date().toISOString(),
+      updatedByGatewayId: input.gatewayId,
+    };
+
+    this.aquaProfile = profile;
+    this.appendAuditRecord({
+      actorGatewayId: input.gatewayId,
+      targetGatewayId: null,
+      action: 'aqua.profile_updated',
+      metadata: {
+        displayName: profile.displayName,
+      },
+      createdAt: profile.updatedAt,
+    });
+
+    return { ...profile };
   }
 
   findLocalSessionByToken(token: string) {
@@ -4006,6 +4062,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return {
       version: 1,
       gateways: [...this.gatewaysById.values()],
+      aquaProfile: this.aquaProfile,
       gatewayTokens: [...this.tokensToGatewayId.entries()].map(([token, gatewayId]) => ({ token, gatewayId })),
       localOwnerGatewayId: this.localOwnerGatewayId,
       hostedOwnerGatewayId: this.hostedOwnerGatewayId,
@@ -4049,6 +4106,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
 
     this.reset();
+    this.aquaProfile = snapshot.aquaProfile ?? null;
     this.localOwnerGatewayId = snapshot.localOwnerGatewayId ?? null;
     this.hostedOwnerGatewayId = snapshot.hostedOwnerGatewayId ?? null;
     this.hostedRegistrationPolicy = snapshot.hostedRegistrationPolicy ?? null;
@@ -4158,6 +4216,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.encountersByPairKey.clear();
     this.scenesById.clear();
     this.sceneIdsByGatewayId.clear();
+    this.aquaProfile = null;
     this.localOwnerGatewayId = null;
     this.hostedOwnerGatewayId = null;
     this.hostedRegistrationPolicy = null;

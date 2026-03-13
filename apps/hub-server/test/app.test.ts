@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/app.js';
 
+function buildActiveCurrentWindow(durationMinutes = 6 * 60) {
+  return {
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + durationMinutes * 60_000).toISOString(),
+  };
+}
+
 async function registerGateway(
   app: ReturnType<typeof buildApp>,
   payload: { displayName: string; handle: string; bio?: string; visibility?: string; friendRequestPolicy?: string },
@@ -133,6 +140,97 @@ test('patch /api/v1/gateways/me rejects unauthorized requests', async () => {
   await app.close();
 });
 
+test('local owner can rename aqua and outsiders cannot', async () => {
+  const app = buildApp();
+
+  const bootstrap = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-local',
+  });
+  assert.equal(bootstrap.statusCode, 201);
+  const ownerToken = bootstrap.json().data.credential.token as string;
+
+  const rename = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/aqua/me',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      displayName: 'Crown Tide',
+    },
+  });
+  assert.equal(rename.statusCode, 200);
+  assert.equal(rename.json().data.aqua.displayName, 'Crown Tide');
+
+  const publicAqua = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/aqua',
+  });
+  assert.equal(publicAqua.statusCode, 200);
+  assert.equal(publicAqua.json().data.aqua.displayName, 'Crown Tide');
+
+  const outsider = await registerGateway(app, {
+    displayName: 'Outsider',
+    handle: 'outsider-aqua',
+  });
+  const forbidden = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/aqua/me',
+    headers: {
+      authorization: `Bearer ${outsider.token}`,
+    },
+    payload: {
+      displayName: 'Should Fail',
+    },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal(forbidden.json().error.message, 'aqua profile update requires the owner gateway');
+
+  await app.close();
+});
+
+test('hosted owner session can rename aqua', async () => {
+  const app = buildApp({
+    deploymentMode: 'hosted',
+    hostedOwnerBootstrapKey: 'hosted-boot-key',
+  });
+
+  const bootstrap = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-hosted',
+    payload: {
+      bootstrapKey: 'hosted-boot-key',
+      displayName: 'Hosted Owner',
+      handle: 'hosted-owner-test',
+    },
+  });
+  assert.equal(bootstrap.statusCode, 201);
+  const ownerToken = bootstrap.json().data.credential.token as string;
+
+  const rename = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/aqua/me',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      displayName: 'Aquaclaw Bay',
+    },
+  });
+  assert.equal(rename.statusCode, 200);
+  assert.equal(rename.json().data.aqua.displayName, 'Aquaclaw Bay');
+
+  const publicAqua = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/aqua',
+  });
+  assert.equal(publicAqua.statusCode, 200);
+  assert.equal(publicAqua.json().data.aqua.displayName, 'Aquaclaw Bay');
+
+  await app.close();
+});
+
 test('patch /api/v1/gateways/me rejects invalid visibility', async () => {
   const app = buildApp();
 
@@ -255,8 +353,7 @@ test('public aquarium endpoints expose only anonymous current, allowlisted publi
       summary: 'The surface is readable and bright.',
       tone: 'calm',
       sceneHint: 'open-water',
-      startsAt: '2026-03-12T12:00:00.000Z',
-      endsAt: '2026-03-12T18:00:00.000Z',
+      ...buildActiveCurrentWindow(),
       metadata: {
         ownerNote: 'should stay private',
       },

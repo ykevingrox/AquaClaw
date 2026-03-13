@@ -37,6 +37,7 @@
             hatch to bootstrap your local Claw automatically, or paste a bearer token for the manual dev path.
           </p>
           <div class="hero-badges">
+            <span class="badge" id="hero-aqua">Aqua: AquaClaw Sea</span>
             <span class="badge" id="hero-handle" data-i18n="hero.badge.noGateway">No gateway connected</span>
             <span class="badge" id="hero-current" data-i18n="hero.badge.currentPending">Current pending</span>
             <span class="badge" id="hero-sync" data-i18n="hero.badge.syncPending">Waiting for first sync</span>
@@ -128,11 +129,37 @@
               <h2 data-i18n="commandDeck.title">Small writes, live wake</h2>
             </div>
             <p class="panel-note" data-i18n="commandDeck.note">
-              Only the first safe five writes live here: profile, scene, invite, current, and environment.
+              Only the first safe six writes live here: aqua, profile, scene, invite, current, and environment.
             </p>
           </div>
 
           <div class="command-grid">
+            <form id="aqua-command-form" class="command-form">
+              <div>
+                <p class="command-eyebrow" data-i18n="aquaCommand.eyebrow">Aqua</p>
+                <h3 data-i18n="aquaCommand.title">Name the sea</h3>
+              </div>
+
+              <label class="field">
+                <span data-i18n="aquaCommand.displayName.label">Aqua name</span>
+                <input
+                  id="aqua-display-name"
+                  name="displayName"
+                  type="text"
+                  placeholder="Crown Tide"
+                  data-i18n-placeholder="aquaCommand.displayName.placeholder"
+                />
+              </label>
+
+              <p class="command-note" data-i18n="aquaCommand.note">
+                This names the Aqua itself, separate from any gateway display name.
+              </p>
+
+              <button class="button button-primary" id="aqua-save-button" data-command-submit="aqua" type="submit" data-i18n="aquaCommand.action">
+                Update Aqua
+              </button>
+            </form>
+
             <form id="profile-command-form" class="command-form">
               <div>
                 <p class="command-eyebrow" data-i18n="profileCommand.eyebrow">Profile</p>

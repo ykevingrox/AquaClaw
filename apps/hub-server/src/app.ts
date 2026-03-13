@@ -5,6 +5,7 @@ import type { DeploymentMode } from './config.js';
 import { SeaLiveHub, type SeaLiveHubOptions } from './live-hub.js';
 import { createInMemoryRateLimiter, type RateLimitPolicy } from './rate-limiter.js';
 import {
+  type AquaProfileRecord,
   type CurrentRecord,
   createGatewayStore,
   type ConversationListItem,
@@ -113,6 +114,10 @@ interface UpdateMeBody {
   bio?: string;
   visibility?: GatewayVisibility;
   friendRequestPolicy?: GatewayFriendRequestPolicy;
+}
+
+interface UpdateAquaBody {
+  displayName?: string;
 }
 
 interface CreateFriendRequestBody {
@@ -593,6 +598,13 @@ function toPublicCurrentSummary(current: CurrentRecord) {
   };
 }
 
+function toAquaProfileSummary(profile: AquaProfileRecord) {
+  return {
+    displayName: profile.displayName,
+    updatedAt: profile.updatedAt,
+  };
+}
+
 function toEnvironmentSummary(environment: EnvironmentRecord) {
   return {
     id: environment.id,
@@ -983,6 +995,13 @@ function environmentErrorToHttp(_message: string) {
   return { statusCode: 400, code: 'validation_failed' };
 }
 
+function aquaProfileErrorToHttp(message: string) {
+  if (message === 'aqua profile update requires the owner gateway') {
+    return { statusCode: 403, code: 'forbidden' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
 function encounterErrorToHttp(message: string) {
   if (message === 'gateway not found') {
     return { statusCode: 404, code: 'not_found' };
@@ -1123,6 +1142,13 @@ export function buildApp(options: BuildAppOptions = {}) {
   }
 
   app.get('/health', async () => ({ ok: true, data: { status: 'ok' } }));
+
+  app.get('/api/v1/public/aqua', async () => ({
+    ok: true,
+    data: {
+      aqua: toAquaProfileSummary(store.getAquaProfile()),
+    },
+  }));
 
   app.get('/api/v1/public/current', async () => ({
     ok: true,
@@ -2629,6 +2655,65 @@ export function buildApp(options: BuildAppOptions = {}) {
         gateway: result.gateway,
       },
     };
+  });
+
+  app.patch<{ Body: UpdateAquaBody }>('/api/v1/aqua/me', async (request, reply) => {
+    let actorGatewayId: string;
+
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorGatewayId = hostedOwner.session.gateway.id;
+    } else {
+      const result = getAuthedGateway(store, request.headers.authorization);
+      if ('error' in result) {
+        return reply.code(401).send({ ok: false, error: result.error });
+      }
+      actorGatewayId = result.gateway.id;
+    }
+
+    const { displayName } = request.body ?? {};
+    if (typeof displayName !== 'string' || !displayName.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'displayName is required',
+        },
+      });
+    }
+
+    try {
+      const aqua = store.updateAquaProfile({
+        gatewayId: actorGatewayId,
+        displayName,
+      });
+      return {
+        ok: true,
+        data: {
+          aqua: toAquaProfileSummary(aqua),
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to update aqua profile';
+      const mapped = aquaProfileErrorToHttp(message);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message,
+        },
+      });
+    }
   });
 
   app.get<{ Params: { gatewayId: string } }>('/api/v1/gateways/:gatewayId', async (request, reply) => {

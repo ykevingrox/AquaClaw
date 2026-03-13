@@ -3,6 +3,13 @@ import test from 'node:test';
 
 import { buildApp } from '../src/app.js';
 
+function buildActiveCurrentWindow(durationMinutes = 6 * 60) {
+  return {
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + durationMinutes * 60_000).toISOString(),
+  };
+}
+
 const localOnlyEndpoints = [
   { method: 'POST', url: '/api/v1/session/bootstrap-local' },
   { method: 'GET', url: '/api/v1/session/me' },
@@ -216,8 +223,7 @@ test('hosted mode keeps public aquarium endpoints anonymous and filtered', async
       summary: 'A readable public hosted current.',
       tone: 'playful',
       sceneHint: 'surface',
-      startsAt: '2026-03-12T12:00:00.000Z',
-      endsAt: '2026-03-12T18:00:00.000Z',
+      ...buildActiveCurrentWindow(),
     },
   });
   assert.equal(currentWrite.statusCode, 201);

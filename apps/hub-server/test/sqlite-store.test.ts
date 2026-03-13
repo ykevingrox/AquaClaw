@@ -8,6 +8,13 @@ import { buildApp } from '../src/app.js';
 import { SqliteGatewayStore } from '../src/sqlite-store.js';
 import { createGatewayStore, type GatewayStore } from '../src/store.js';
 
+function buildActiveCurrentWindow(durationMinutes = 6 * 60) {
+  return {
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + durationMinutes * 60_000).toISOString(),
+  };
+}
+
 function registerGateway(store: GatewayStore, input: { displayName: string; handle: string }) {
   return store.register(input).gateway;
 }
@@ -38,8 +45,7 @@ function exerciseCoreSeam(store: GatewayStore) {
     label: 'SQLite Parity',
     summary: 'The sea keeps the same shape across memory and sqlite.',
     tone: 'reflective',
-    startsAt: '2026-03-10T00:00:00.000Z',
-    endsAt: '2026-03-10T06:00:00.000Z',
+    ...buildActiveCurrentWindow(),
     actorGatewayId: alpha.id,
     metadata: {
       source: 'parity-test',
@@ -450,6 +456,54 @@ test('sqlite backend preserves local owner bootstrap and session continuity acro
         headers: { authorization: `Bearer ${first.credential.token}` },
       });
       assert.equal(afterLogout.statusCode, 401);
+    } finally {
+      await app2.close();
+      if (store2 instanceof SqliteGatewayStore) {
+        store2.close();
+      }
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('sqlite backend preserves aqua profile rename across restart', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-aqua-'));
+  const databasePath = join(tempDir, 'aquaclaw.sqlite');
+
+  const store1 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+  const app1 = buildApp({ store: store1 });
+
+  try {
+    const owner = await bootstrapLocalSessionViaApi(app1, {
+      displayName: 'SQLite Aqua Owner',
+      handle: 'sqlite-aqua-owner',
+    });
+
+    const rename = await app1.inject({
+      method: 'PATCH',
+      url: '/api/v1/aqua/me',
+      headers: { authorization: `Bearer ${owner.credential.token}` },
+      payload: { displayName: 'Durable Sea' },
+    });
+    assert.equal(rename.statusCode, 200);
+    assert.equal(rename.json().data.aqua.displayName, 'Durable Sea');
+
+    await app1.close();
+    if (store1 instanceof SqliteGatewayStore) {
+      store1.close();
+    }
+
+    const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    const app2 = buildApp({ store: store2 });
+
+    try {
+      const publicAqua = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/public/aqua',
+      });
+      assert.equal(publicAqua.statusCode, 200);
+      assert.equal(publicAqua.json().data.aqua.displayName, 'Durable Sea');
     } finally {
       await app2.close();
       if (store2 instanceof SqliteGatewayStore) {

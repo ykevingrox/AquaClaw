@@ -83,6 +83,8 @@ const COPY = {
       synced: 'Synced {relative}',
     },
     common: {
+      aquaDefault: 'AquaClaw Sea',
+      aquaNamed: 'Aqua: {name}',
       timeUnknown: 'Time unknown',
       openWater: 'Open water',
       public: 'Public',
@@ -248,6 +250,8 @@ const COPY = {
       synced: '{relative}同步',
     },
     common: {
+      aquaDefault: 'AquaClaw Sea',
+      aquaNamed: '海域：{name}',
       timeUnknown: '时间未知',
       openWater: '开阔水面',
       public: '公开',
@@ -338,6 +342,7 @@ const COPY = {
 };
 
 const elements = {
+  aquaNameBadge: document.querySelector('#aqua-name-badge'),
   currentLabel: document.querySelector('#current-label'),
   currentScene: document.querySelector('#current-scene'),
   currentSource: document.querySelector('#current-source'),
@@ -362,6 +367,7 @@ const elements = {
 };
 
 const state = {
+  aqua: null,
   current: null,
   environment: null,
   feed: [],
@@ -496,6 +502,11 @@ function setStatus(message, tone = 'neutral') {
   elements.statusBadge.textContent = message;
   elements.statusBadge.dataset.tone = tone;
   state.statusTone = tone;
+}
+
+function renderAqua() {
+  const displayName = state.aqua?.displayName || t('common.aquaDefault');
+  elements.aquaNameBadge.textContent = t('common.aquaNamed', { name: displayName });
 }
 
 function setSyncBadge() {
@@ -700,6 +711,7 @@ function renderGateways() {
 }
 
 function renderAll() {
+  renderAqua();
   renderCurrent();
   renderEnvironment();
   renderFeed();
@@ -719,8 +731,9 @@ async function refreshSurface({ quiet = false } = {}) {
   }
 
   try {
-    const [healthResult, currentResult, environmentResult, feedResult, gatewaysResult] = await Promise.all([
+    const [healthResult, aquaResult, currentResult, environmentResult, feedResult, gatewaysResult] = await Promise.all([
       fetchJson('/health'),
+      fetchJson('/api/v1/public/aqua'),
       fetchJson('/api/v1/public/current'),
       fetchJson('/api/v1/public/environment'),
       fetchJson(`/api/v1/public/feed?limit=${FEED_LIMIT}`),
@@ -728,6 +741,7 @@ async function refreshSurface({ quiet = false } = {}) {
     ]);
 
     state.health = healthResult.data?.status ?? 'ok';
+    state.aqua = aquaResult.data.aqua;
     state.current = currentResult.data.current;
     state.environment = environmentResult.data.environment;
     state.feed = Array.isArray(feedResult.data.items) ? feedResult.data.items : [];

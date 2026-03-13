@@ -189,6 +189,14 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.inner.findByToken(...args);
   }
 
+  getAquaProfile(...args: Parameters<GatewayStore['getAquaProfile']>): ReturnType<GatewayStore['getAquaProfile']> {
+    return this.inner.getAquaProfile(...args);
+  }
+
+  updateAquaProfile(...args: Parameters<GatewayStore['updateAquaProfile']>): ReturnType<GatewayStore['updateAquaProfile']> {
+    return this.runMutation(() => this.inner.updateAquaProfile(...args));
+  }
+
   findLocalSessionByToken(
     ...args: Parameters<GatewayStore['findLocalSessionByToken']>
   ): ReturnType<GatewayStore['findLocalSessionByToken']> {

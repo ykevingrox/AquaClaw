@@ -21,6 +21,8 @@ const TRUTHY_QUERY_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const VALID_LOCALES = new Set(['en', 'zh']);
 
 const elements = {
+  aquaCommandForm: document.querySelector('#aqua-command-form'),
+  aquaDisplayName: document.querySelector('#aqua-display-name'),
   activityGatewayId: document.querySelector('#activity-gateway-id'),
   activityNote: document.querySelector('#activity-note'),
   activityPanel: document.querySelector('#activity-panel'),
@@ -51,6 +53,7 @@ const elements = {
   feedNote: document.querySelector('#feed-note'),
   feedPanel: document.querySelector('#feed-panel'),
   feedScope: document.querySelector('#feed-scope'),
+  heroAqua: document.querySelector('#hero-aqua'),
   heroCurrent: document.querySelector('#hero-current'),
   heroHandle: document.querySelector('#hero-handle'),
   heroSync: document.querySelector('#hero-sync'),
@@ -76,6 +79,7 @@ const elements = {
   sceneCommandForm: document.querySelector('#scene-command-form'),
   sceneGenerateButton: document.querySelector('#scene-generate-button'),
   sceneType: document.querySelector('#scene-type'),
+  aquaSaveButton: document.querySelector('#aqua-save-button'),
   currentCommandForm: document.querySelector('#current-command-form'),
   token: document.querySelector('#bearer-token'),
   translatable: Array.from(document.querySelectorAll('[data-i18n]')),
@@ -83,6 +87,7 @@ const elements = {
 };
 
 const aquariumState = {
+  aqua: null,
   apiOrigin: window.location.origin,
   gateway: null,
   lastSyncedAt: null,
@@ -102,6 +107,7 @@ const liveState = {
 const commandControls = Array.from(document.querySelectorAll('.command-form input, .command-form textarea, .command-form select, .command-form button'));
 
 const commandState = {
+  aquaDirty: false,
   busy: false,
   currentDirty: false,
   currentId: null,
@@ -172,9 +178,19 @@ const COPY = {
     commandDeck: {
       kicker: 'Owner Command Deck',
       title: 'Small writes, live wake',
-      note: 'Only the first safe five writes live here: profile, scene, invite, current, and environment.',
+      note: 'Only the first safe six writes live here: aqua, profile, scene, invite, current, and environment.',
       status: {
         locked: 'Enter the aquarium to unlock the command deck.',
+      },
+    },
+    aquaCommand: {
+      eyebrow: 'Aqua',
+      title: 'Name the sea',
+      action: 'Update Aqua',
+      note: 'This names the Aqua itself, separate from any gateway display name.',
+      displayName: {
+        label: 'Aqua name',
+        placeholder: 'Crown Tide',
       },
     },
     profileCommand: {
@@ -299,6 +315,8 @@ const COPY = {
       },
     },
     common: {
+      aquaDefault: 'AquaClaw Sea',
+      aquaNamed: 'Aqua: {name}',
       timeUnknown: 'time unknown',
       unknownTime: 'Unknown time',
       unknown: 'Unknown',
@@ -366,6 +384,7 @@ const COPY = {
       currentSetResult: 'Set current to {label}.',
       environmentSetResult: 'Set environment to {temperature} and {clarity} water.',
       sceneGenerated: 'Generated a {type} scene.',
+      aquaUpdated: 'Updated Aqua name to {name}.',
       profileUpdated: "Updated @{handle}'s profile.",
       inviteCreated: 'Created invite {code}.',
       reefApplied: 'Local reef {mode}.',
@@ -444,6 +463,7 @@ const COPY = {
       seeding: 'Seeding...',
     },
     validation: {
+      aquaDisplayNameRequired: 'Aqua name is required.',
       displayNameRequired: 'Display name is required.',
       maxUsesPositive: 'Max uses must be a positive integer.',
       currentKeyRequired: 'Current key is required.',
@@ -508,9 +528,19 @@ const COPY = {
     commandDeck: {
       kicker: '主人指挥甲板',
       title: '小范围写入，实时回响',
-      note: '这里只放第一批安全写操作：资料、场景、邀请、海流与环境。',
+      note: '这里只放第一批安全写操作：Aqua 名称、资料、场景、邀请、海流与环境。',
       status: {
         locked: '进入水族箱后才能解锁指挥甲板。',
+      },
+    },
+    aquaCommand: {
+      eyebrow: 'Aqua',
+      title: '给这片海命名',
+      action: '更新 Aqua',
+      note: '这里修改的是 Aqua 本身的名字，不等同于任何单个 gateway 的显示名。',
+      displayName: {
+        label: 'Aqua 名称',
+        placeholder: '冠潮海湾',
       },
     },
     profileCommand: {
@@ -635,6 +665,8 @@ const COPY = {
       },
     },
     common: {
+      aquaDefault: 'AquaClaw Sea',
+      aquaNamed: '海域：{name}',
       timeUnknown: '时间未知',
       unknownTime: '未知时间',
       unknown: '未知',
@@ -702,6 +734,7 @@ const COPY = {
       currentSetResult: '已将海流设置为 {label}。',
       environmentSetResult: '已将环境设置为 {temperature}，{clarity}水体。',
       sceneGenerated: '已生成一条 {type} 场景。',
+      aquaUpdated: '已将 Aqua 名称更新为 {name}。',
       profileUpdated: '已更新 @{handle} 的资料。',
       inviteCreated: '已创建邀请码 {code}。',
       reefApplied: '本地礁区已{mode}。',
@@ -780,6 +813,7 @@ const COPY = {
       seeding: '播种中...',
     },
     validation: {
+      aquaDisplayNameRequired: 'Aqua 名称不能为空。',
       displayNameRequired: '显示名不能为空。',
       maxUsesPositive: '最大使用次数必须是正整数。',
       currentKeyRequired: 'Current key 不能为空。',
@@ -848,6 +882,7 @@ function applyTranslations() {
     button.dataset.active = button.dataset.locale === aquariumState.locale ? 'true' : 'false';
   }
 
+  renderAquaBadge();
   if (isLoading) {
     elements.connectButton.textContent = t('pending.reading');
   }
@@ -893,6 +928,11 @@ function setCommandStatus(message, tone = 'neutral') {
 function setDeckAndConsoleStatus(message, tone = 'neutral') {
   setStatus(message, tone);
   setCommandStatus(message, tone);
+}
+
+function renderAquaBadge() {
+  const displayName = aquariumState.aqua?.displayName ?? t('common.aquaDefault');
+  elements.heroAqua.textContent = t('common.aquaNamed', { name: displayName });
 }
 
 function syncCommandDeckInteractivity() {
@@ -1254,6 +1294,7 @@ function renderReefResult(reef) {
 }
 
 function resetCommandDeck() {
+  commandState.aquaDirty = false;
   commandState.busy = false;
   commandState.currentDirty = false;
   commandState.currentId = null;
@@ -1261,6 +1302,7 @@ function resetCommandDeck() {
   commandState.environmentId = null;
   commandState.gatewayId = null;
   commandState.profileDirty = false;
+  elements.aquaDisplayName.value = aquariumState.aqua?.displayName ?? t('common.aquaDefault');
   elements.profileDisplayName.value = '';
   elements.profileBio.value = '';
   elements.profileVisibility.value = 'invite_only';
@@ -1283,6 +1325,18 @@ function resetCommandDeck() {
   renderReefResult(null);
   setDefaultCommandStatus();
   syncCommandDeckInteractivity();
+}
+
+function hydrateAquaForm(aqua, { force = false } = {}) {
+  aquariumState.aqua = aqua;
+  renderAquaBadge();
+
+  if (!force && commandState.aquaDirty) {
+    return;
+  }
+
+  elements.aquaDisplayName.value = aqua.displayName;
+  commandState.aquaDirty = false;
 }
 
 function hydrateProfileForm(gateway, { force = false } = {}) {
@@ -1660,6 +1714,7 @@ function resetAquariumSurface() {
   renderEmpty(elements.scenePanel, t('panel.scenes.empty'));
   elements.feedNote.textContent = t('panel.feed.note');
   elements.activityNote.textContent = t('panel.activity.note');
+  renderAquaBadge();
   elements.heroHandle.textContent = t('hero.badge.noGateway');
   elements.heroCurrent.textContent = t('hero.badge.currentPending');
   elements.heroSync.textContent = t('hero.badge.syncPending');
@@ -1680,6 +1735,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
 
   const activityGatewayId = elements.activityGatewayId.value.trim() || gateway.id;
   const feedScope = elements.feedScope.value;
+  const aquaRequest = requestJson('/api/v1/public/aqua', { apiOrigin });
   const currentRequest = requestJson('/api/v1/currents/current', { apiOrigin, token });
   const environmentRequest = requestJson('/api/v1/environment/current', { apiOrigin, token });
   const feedRequest = requestJson(`/api/v1/sea/feed?scope=${encodeURIComponent(feedScope)}&limit=12`, { apiOrigin, token });
@@ -1695,6 +1751,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
       : null;
 
   const results = await Promise.allSettled([
+    aquaRequest,
     currentRequest,
     environmentRequest,
     feedRequest,
@@ -1704,9 +1761,15 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     runtimeRequest ?? Promise.resolve(null),
   ]);
 
-  const [currentResult, environmentResult, feedResult, encountersResult, scenesResult, activityResult, runtimeResult] = results;
+  const [aquaResult, currentResult, environmentResult, feedResult, encountersResult, scenesResult, activityResult, runtimeResult] = results;
   const syncedAt = new Date().toISOString();
   aquariumState.lastSyncedAt = syncedAt;
+  if (aquaResult.status === 'fulfilled') {
+    hydrateAquaForm(aquaResult.value.data.aqua);
+  } else {
+    aquariumState.aqua = null;
+    renderAquaBadge();
+  }
   renderProfile(gateway, syncedAt);
   hydrateProfileForm(gateway);
 
@@ -2125,6 +2188,10 @@ elements.refreshButton.addEventListener('click', () => {
   void loadAquarium();
 });
 
+elements.aquaDisplayName.addEventListener('input', () => {
+  commandState.aquaDirty = true;
+});
+
 elements.profileDisplayName.addEventListener('input', () => {
   commandState.profileDirty = true;
 });
@@ -2183,6 +2250,31 @@ elements.environmentPhenomenon.addEventListener('change', () => {
 
 elements.environmentSummary.addEventListener('input', () => {
   commandState.environmentDirty = true;
+});
+
+elements.aquaCommandForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void runDeckCommand(elements.aquaSaveButton, t('pending.saving'), async ({ apiOrigin, token }) => {
+    const displayName = elements.aquaDisplayName.value.trim();
+    if (!displayName) {
+      throw new Error(t('validation.aquaDisplayNameRequired'));
+    }
+
+    const payload = await requestJson('/api/v1/aqua/me', {
+      apiOrigin,
+      token,
+      method: 'PATCH',
+      payload: {
+        displayName,
+      },
+    });
+
+    hydrateAquaForm(payload.data.aqua, { force: true });
+
+    return {
+      successMessage: t('common.aquaUpdated', { name: payload.data.aqua.displayName }),
+    };
+  });
 });
 
 elements.profileCommandForm.addEventListener('submit', (event) => {
