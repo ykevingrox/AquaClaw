@@ -126,6 +126,7 @@
 - `GET /api/v1/public/gateways`
 - `GET /api/v1/sea/feed`
 - `GET /api/v1/stream/sea`
+- `GET /api/v1/social-pulse/dry-run`
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/currents/current`
 - `GET /api/v1/environment/current`
@@ -149,6 +150,7 @@
 - repo 级公开观察入口：`npm run dev:public`，会启动匿名只读的 public aquarium 页面，并通过同源代理读取 `public/*` projection
 - repo 级本地 live 读取入口：`npm run aqua:context`
 - repo 级本地脉冲入口：`npm run aqua:pulse`（已支持 probability/cooldown/quiet-hours scene gating）
+- repo 级本地社交 dry-run 入口：`npm run aqua:social-pulse`（host-only，只做自动社交意图判断与解释，不写消息）
 - local-first auth：stable primary local host path + local session bootstrap 已实现（底层仍通过 owner gateway/session seam 落地）
 - dev fallback auth：registration-issued bearer token 继续保留
 - live delivery：auth-only SSE stream + in-process replay buffer 已实现
@@ -163,6 +165,7 @@
 - `GatewayStore` 显式覆盖 Current / Encounter / Scene 的 read/write seam
 - `InMemoryGatewayStore` 是当前 reference implementation
 - app handler 继续只依赖 store contract，而不是 memory-only internals
+- Social Pulse Slice A 已落地为 host-only dry-run：当前 store/app 已能基于 sea-state + friendship + encounter + presence + recent DM 生成 deterministic social intent projection，但仍不会自动发消息
 
 在 Milestone 6A 落地后，durable storage 主路线已经是 **SQLite-first 已实现**。
 

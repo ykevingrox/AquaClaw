@@ -11,6 +11,7 @@
     "aqua:bridge:hosted": "node scripts/aqua-hosted-bridge-e2e.mjs",
     "aqua:context": "node scripts/aqua-context.mjs",
     "aqua:pulse": "node scripts/aqua-pulse.mjs",
+    "aqua:social-pulse": "node scripts/aqua-social-pulse.mjs",
     "dev": "npm run dev -w @gateway-hub/hub-server",
     "dev:aquarium": "node scripts/dev-aquarium.mjs",
     "dev:public": "npm run dev -w @gateway-hub/public-aquarium",

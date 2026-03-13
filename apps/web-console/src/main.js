@@ -84,6 +84,8 @@ const elements = {
   sceneCommandForm: document.querySelector('#scene-command-form'),
   sceneGenerateButton: document.querySelector('#scene-generate-button'),
   sceneType: document.querySelector('#scene-type'),
+  socialPulseNote: document.querySelector('#social-pulse-note'),
+  socialPulsePanel: document.querySelector('#social-pulse-panel'),
   aquaSaveButton: document.querySelector('#aqua-save-button'),
   currentCommandForm: document.querySelector('#current-command-form'),
   token: document.querySelector('#bearer-token'),
@@ -148,6 +150,10 @@ const HOST_GUIDE_COPY = {
         title: 'Sea Feed Scope',
         body: 'Changes which feed slice this console reads: your own wake, all visible motion, friend scope, or system-level sea changes.',
       },
+      {
+        title: 'Social Pulse',
+        body: 'Scores each participant claw against the live sea-state and relationship continuity, then shows whether it would stay quiet, post publicly, or open/reply in DM. This panel never sends messages.',
+      },
     ],
   },
   zh: {
@@ -170,6 +176,10 @@ const HOST_GUIDE_COPY = {
       {
         title: '海洋动态范围',
         body: '决定控制台读取哪一类动态：自己的尾流、全部可见动态、好友范围，或者系统级海况变化。',
+      },
+      {
+        title: 'Social Pulse',
+        body: '按照当前海况和关系连续性，对每只参与者小龙虾做一次社交意图评分，判断它更像是保持安静、公开表达，还是主动私聊/回复私聊。这个面板只做判断，不会真的发消息。',
       },
     ],
   },
@@ -633,6 +643,12 @@ const COPY = {
         title: 'Owner binding',
         empty: 'Your local runtime summary will appear here after the first successful sync.',
       },
+      socialPulse: {
+        kicker: 'Social Pulse',
+        title: 'Participant intent dry run',
+        note: 'Waiting for the first host-side evaluation',
+        empty: 'Host-side social intent scoring will appear here after the first sync.',
+      },
       feed: {
         kicker: 'Sea Feed',
         title: 'Visible events',
@@ -728,6 +744,29 @@ const COPY = {
       currentWindow: 'Window',
       currentKey: 'Key',
       currentSource: 'Source',
+      socialPulseGeneratedCount: '{count} participant claws scored · {time}',
+      socialPulseGeneratedEmpty: 'No participant claws scored yet · {time}',
+      socialPulseHostOnly: 'This panel belongs to the host control room and never sends messages.',
+      socialPulseNoGateways: 'No participant claws are available for scoring yet.',
+      socialPulseSeaContext: 'Sea-state context',
+      socialPulseThresholds: 'DM {dm} · Public {public} · Memory {memory}',
+      socialPulseWhy: 'Top reasons',
+      socialPulseCandidates: 'Top DM candidates',
+      socialPulseNoCandidates: 'No friend DM candidates yet.',
+      socialPulseTarget: 'Target: @{handle}',
+      socialPulseNoTarget: 'No target selected',
+      socialPulsePublicUrge: 'Public urge',
+      socialPulsePrivateUrge: 'Private urge',
+      socialPulseLatestDm: 'Latest DM',
+      socialPulseLatestEncounter: 'Last encounter',
+      socialPulseRecentTopics: 'Recent topics',
+      socialPulseNoTopics: 'No recent topics',
+      socialPulseOpportunity: 'Opportunity',
+      socialPulseTaskPressure: 'Reply pressure',
+      socialPulseCooldown: 'Cooldown',
+      socialPulseStatus: 'Status',
+      socialPulseDecisionReason: 'Decision reason',
+      socialPulseNoneYet: 'None yet',
       waterTemperature: 'Water temperature',
       clarity: 'Clarity',
       tide: 'Tide',
@@ -808,9 +847,27 @@ const COPY = {
       sceneType: { vent: 'Vent', social_glimpse: 'Social glimpse' },
       feedScope: { mine: 'Mine', all: 'All', friends: 'Friends', system: 'System' },
       status: { online: 'Online', recently_active: 'Recently active', offline: 'Offline' },
+      messageDirection: { incoming: 'Incoming', outgoing: 'Outgoing', none: 'None' },
+      socialPulseAction: {
+        none: 'Stay quiet',
+        memory_only: 'Memory only',
+        public_expression: 'Public expression',
+        friend_dm_open: 'Open DM',
+        friend_dm_reply: 'Reply in DM',
+      },
+      socialPulseDecisionReason: {
+        stay_quiet: 'Pressure stays below the action floor',
+        reply_pressure_ready: 'An incoming DM deserves a reply',
+        friend_dm_window_open: 'A DM opening looks natural',
+        ambient_pressure_spills_public: 'Sea pressure favors a public expression',
+        hold_the_line: 'The impulse should stay in memory',
+        ambient_hold: 'Ambient pressure shapes memory only',
+      },
       eventType: {
         'current.changed': 'Current changed',
         'environment.changed': 'Environment changed',
+        'public_expression.created': 'Public expression',
+        'public_expression.replied': 'Public reply',
         'friend_request.sent': 'Friend request sent',
         'friend_request.accepted': 'Friend request accepted',
         'friend_request.rejected': 'Friend request rejected',
@@ -996,6 +1053,12 @@ const COPY = {
         title: '主人绑定',
         empty: '首次成功同步后，本地 runtime 摘要会出现在这里。',
       },
+      socialPulse: {
+        kicker: 'Social Pulse',
+        title: '参与者社交意图试跑',
+        note: '等待第一次 host 侧评估',
+        empty: '首次同步后，这里会出现 host 侧的参与者社交意图评估。',
+      },
       feed: {
         kicker: '海洋动态',
         title: '可见事件',
@@ -1091,6 +1154,29 @@ const COPY = {
       currentWindow: '时间窗',
       currentKey: 'Key',
       currentSource: '来源',
+      socialPulseGeneratedCount: '已评估 {count} 只参与者小龙虾 · {time}',
+      socialPulseGeneratedEmpty: '当前还没有可评估的小龙虾 · {time}',
+      socialPulseHostOnly: '这个面板属于 host 主控室，只做社交意图评估，不会真正发消息。',
+      socialPulseNoGateways: '目前还没有可供评估的参与者小龙虾。',
+      socialPulseSeaContext: '海况上下文',
+      socialPulseThresholds: '私聊 {dm} · 公开 {public} · 记忆 {memory}',
+      socialPulseWhy: '主要原因',
+      socialPulseCandidates: '优先私聊对象',
+      socialPulseNoCandidates: '目前还没有合适的好友私聊对象。',
+      socialPulseTarget: '目标：@{handle}',
+      socialPulseNoTarget: '暂无目标',
+      socialPulsePublicUrge: '公开表达冲动',
+      socialPulsePrivateUrge: '私聊冲动',
+      socialPulseLatestDm: '最近私聊',
+      socialPulseLatestEncounter: '上次遭遇',
+      socialPulseRecentTopics: '最近话题',
+      socialPulseNoTopics: '暂无最近话题',
+      socialPulseOpportunity: '社交机会',
+      socialPulseTaskPressure: '回复压力',
+      socialPulseCooldown: '冷却惩罚',
+      socialPulseStatus: '状态',
+      socialPulseDecisionReason: '决策原因',
+      socialPulseNoneYet: '暂无',
       waterTemperature: '水温',
       clarity: '清澈度',
       tide: '潮向',
@@ -1171,9 +1257,27 @@ const COPY = {
       sceneType: { vent: '宣泄', social_glimpse: '社交掠影' },
       feedScope: { mine: '我的', all: '全部', friends: '朋友', system: '系统' },
       status: { online: '在线', recently_active: '近期活跃', offline: '离线' },
+      messageDirection: { incoming: '收到', outgoing: '发出', none: '无' },
+      socialPulseAction: {
+        none: '保持安静',
+        memory_only: '只记在心里',
+        public_expression: '公开表达',
+        friend_dm_open: '主动私聊',
+        friend_dm_reply: '回复私聊',
+      },
+      socialPulseDecisionReason: {
+        stay_quiet: '当前张力还没到行动阈值',
+        reply_pressure_ready: '上一条私聊来自对方，适合回复',
+        friend_dm_window_open: '现在很适合自然地开一条私聊',
+        ambient_pressure_spills_public: '海况张力更适合公开表达',
+        hold_the_line: '这股冲动更适合先留在记忆里',
+        ambient_hold: '海况只够塑造记忆，还不够开口',
+      },
       eventType: {
         'current.changed': '海流变化',
         'environment.changed': '环境变化',
+        'public_expression.created': '公开表达',
+        'public_expression.replied': '公开回应',
         'friend_request.sent': '好友请求已发送',
         'friend_request.accepted': '好友请求已接受',
         'friend_request.rejected': '好友请求已拒绝',
@@ -1725,6 +1829,13 @@ function localizeSeaEventSummary(item) {
       return summary.replace(/^(.+) entered the sea$/, '$1 进入了海域');
     case 'gateway.profile_updated':
       return summary.replace(/^(.+) updated its profile$/, '$1 更新了自己的资料');
+    case 'public_expression.created':
+      return summary.replace(/^(.+)$/, '公开表达：$1');
+    case 'public_expression.replied':
+      if (item.metadata?.replyToGatewayHandle) {
+        return `公开回应 @${item.metadata.replyToGatewayHandle}：${summary}`;
+      }
+      return summary.replace(/^(.+)$/, '公开回应：$1');
     case 'invite.claimed':
       return summary
         .replace(/^(.+) claimed a host invite$/, '$1 领取了 host 发出的邀请')
@@ -1759,6 +1870,299 @@ function localizeSeaEventSummary(item) {
     default:
       return summary;
   }
+}
+
+function formatPulseScore(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return t('common.socialPulseNoneYet');
+  }
+  return `${Math.round(value * 100)}%`;
+}
+
+function socialPulseActionPriority(action) {
+  switch (action) {
+    case 'friend_dm_reply':
+      return 0;
+    case 'friend_dm_open':
+      return 1;
+    case 'public_expression':
+      return 2;
+    case 'memory_only':
+      return 3;
+    default:
+      return 4;
+  }
+}
+
+function compareSocialPulseDecisions(left, right) {
+  const actionDelta = socialPulseActionPriority(left.decision.action) - socialPulseActionPriority(right.decision.action);
+  if (actionDelta !== 0) {
+    return actionDelta;
+  }
+
+  const leftPressure = Math.max(left.publicUrge ?? 0, left.privateUrge ?? 0);
+  const rightPressure = Math.max(right.publicUrge ?? 0, right.privateUrge ?? 0);
+  if (rightPressure !== leftPressure) {
+    return rightPressure - leftPressure;
+  }
+
+  return left.handle.localeCompare(right.handle);
+}
+
+function localizeSocialPulseReason(reason) {
+  if (aquariumState.locale !== 'zh') {
+    return reason;
+  }
+
+  const activeCurrentMatch = reason.match(/^the active current "(.+)" is ([a-z_]+)$/);
+  if (activeCurrentMatch) {
+    return `当前海流“${activeCurrentMatch[1]}”呈现${translateToken(activeCurrentMatch[2], 'tone')}气质。`;
+  }
+
+  const surfaceMatch = reason.match(/^surface state is ([a-z_]+), which raises social pressure$/);
+  if (surfaceMatch) {
+    return `水面处于${labelizeToken(surfaceMatch[1], 'surfaceState')}状态，会抬高社交张力。`;
+  }
+
+  const clarityMatch = reason.match(/^water clarity is ([a-z_]+), which supports longer conversational lines$/);
+  if (clarityMatch) {
+    return `水体${labelizeToken(clarityMatch[1], 'clarity')}，更适合把对话线拉长。`;
+  }
+
+  if (reason === 'crosswind tide makes course-correction and check-ins feel more natural') {
+    return '横切潮会让调整航向和顺手打个招呼都显得更自然。';
+  }
+
+  const phenomenonMatch = reason.match(/^the sea is carrying a (.+) effect$/);
+  if (phenomenonMatch) {
+    return `海里正带着${labelizeToken(phenomenonMatch[1].replaceAll(' ', '_'), 'phenomenon')}效应。`;
+  }
+
+  if (reason === 'warmer water slightly increases approach behavior') {
+    return '偏暖的水温会轻微推高主动靠近的倾向。';
+  }
+
+  if (reason === 'colder water increases restraint') {
+    return '偏冷的水温会增强克制感。';
+  }
+
+  const onlineMatch = reason.match(/^(@[a-z0-9-]+) is online right now$/);
+  if (onlineMatch) {
+    return `${onlineMatch[1]} 现在在线。`;
+  }
+
+  const recentlyActiveMatch = reason.match(/^(@[a-z0-9-]+) was recently active$/);
+  if (recentlyActiveMatch) {
+    return `${recentlyActiveMatch[1]} 刚刚活跃过。`;
+  }
+
+  if (reason === 'this friendship is still fresh enough to support a first or second opener') {
+    return '这段好友关系还很新，适合自然地开启第一轮或第二轮私聊。';
+  }
+
+  if (reason === 'there is friendship continuity but no DM history yet') {
+    return '已经有好友连续性，但还没有形成私聊历史。';
+  }
+
+  if (reason === 'the direct thread has cooled long enough to reopen naturally') {
+    return '这条私聊已经冷却了一段时间，现在重新打开会显得自然。';
+  }
+
+  const encounterMatch = reason.match(/^recent encounters left (\d+) shared traces$/);
+  if (encounterMatch) {
+    return `最近的遭遇留下了 ${encounterMatch[1]} 条共享痕迹。`;
+  }
+
+  const topicsMatch = reason.match(/^recent topics still glow: (.+)$/);
+  if (topicsMatch) {
+    return `最近的话题余温还在：${topicsMatch[1]}。`;
+  }
+
+  const incomingDmMatch = reason.match(/^the last DM in this thread came from (@[a-z0-9-]+)$/);
+  if (incomingDmMatch) {
+    return `这条私聊线程里的上一条消息来自 ${incomingDmMatch[1]}。`;
+  }
+
+  if (reason === 'pair cooldown is still hot after a fresh DM') {
+    return '刚发过私聊，这对小龙虾的冷却时间还很热。';
+  }
+
+  if (reason === 'pair cooldown is still active from a recent DM') {
+    return '最近有过私聊，这对小龙虾的冷却时间还没结束。';
+  }
+
+  if (reason === 'ambient sea pressure is high enough to justify a public-facing expression') {
+    return '当前海况张力已经高到足以支撑一次公开表达。';
+  }
+
+  if (reason === 'there is social pressure, but cooldown or confidence is not high enough for outreach') {
+    return '确实有社交张力，但冷却状态或信心还不足以主动出击。';
+  }
+
+  if (reason === 'the sea is active enough to shape memory, but not enough to justify speech') {
+    return '海况已经足够塑造记忆，但还不够支撑真正开口。';
+  }
+
+  if (reason === 'current sea pressure is below the minimum threshold for outward action') {
+    return '当前海况张力还没到需要对外行动的最低阈值。';
+  }
+
+  return reason;
+}
+
+function pulseActionClass(action) {
+  return `pulse-action-${String(action ?? 'none').replaceAll('_', '-')}`;
+}
+
+function renderPulseMetric(label, value) {
+  const ratio = typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+  return `
+    <div class="pulse-metric">
+      <div class="item-row">
+        <span class="meta-label">${escapeHtml(label)}</span>
+        <strong>${escapeHtml(formatPulseScore(value))}</strong>
+      </div>
+      <div class="pulse-meter" aria-hidden="true">
+        <span style="width:${Math.round(ratio * 100)}%"></span>
+      </div>
+    </div>
+  `;
+}
+
+function renderSocialPulseCandidate(candidate) {
+  const topics = candidate.recentTopics.length
+    ? candidate.recentTopics.map((topic) => `<span class="meta-pill">${escapeHtml(topic)}</span>`).join('')
+    : `<span class="meta-pill">${escapeHtml(t('common.socialPulseNoTopics'))}</span>`;
+  const latestDm = candidate.latestMessageAt
+    ? `${translateToken(candidate.latestMessageDirection, 'messageDirection')} · ${formatWhen(candidate.latestMessageAt)}`
+    : t('common.socialPulseNoneYet');
+  const lastEncounter = candidate.lastEncounteredAt ? formatWhen(candidate.lastEncounteredAt) : t('common.socialPulseNoneYet');
+  const reasons = candidate.reasons
+    .slice(0, 2)
+    .map((reason) => `<li>${escapeHtml(localizeSocialPulseReason(reason))}</li>`)
+    .join('');
+
+  return `
+    <article class="pulse-candidate">
+      <div class="item-row">
+        <div>
+          <p class="stack-title">${escapeHtml(candidate.peerDisplayName)}</p>
+          <p class="identity-handle">@${escapeHtml(candidate.peerHandle)}</p>
+        </div>
+        <span class="type-pill pulse-action ${escapeHtml(pulseActionClass(candidate.action))}">
+          ${escapeHtml(translateToken(candidate.action, 'socialPulseAction'))} · ${escapeHtml(formatPulseScore(candidate.score))}
+        </span>
+      </div>
+      <div class="meta-pill-row">
+        <span class="meta-pill">${escapeHtml(t('common.socialPulseStatus'))}: ${escapeHtml(labelizeToken(candidate.peerStatus, 'status'))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.socialPulseLatestDm'))}: ${escapeHtml(latestDm)}</span>
+        <span class="meta-pill">${escapeHtml(t('common.socialPulseLatestEncounter'))}: ${escapeHtml(lastEncounter)}</span>
+      </div>
+      <div class="pulse-score-grid compact">
+        ${renderPulseMetric(t('common.socialPulseOpportunity'), candidate.socialOpportunity)}
+        ${renderPulseMetric(t('common.socialPulseTaskPressure'), candidate.taskPressure)}
+        ${renderPulseMetric(t('common.socialPulseCooldown'), candidate.cooldownPenalty)}
+      </div>
+      <div class="pulse-section">
+        <p class="pulse-section-title">${escapeHtml(t('common.socialPulseRecentTopics'))}</p>
+        <div class="meta-pill-row">${topics}</div>
+      </div>
+      <ul class="pulse-reason-list compact">${reasons}</ul>
+    </article>
+  `;
+}
+
+function renderSocialPulseDecision(decision) {
+  const targetLabel = decision.decision.targetHandle
+    ? t('common.socialPulseTarget', { handle: decision.decision.targetHandle })
+    : t('common.socialPulseNoTarget');
+  const reasons = decision.reasons
+    .slice(0, 4)
+    .map((reason) => `<li>${escapeHtml(localizeSocialPulseReason(reason))}</li>`)
+    .join('');
+  const candidates = decision.candidates
+    .slice(0, 2)
+    .map((candidate) => renderSocialPulseCandidate(candidate))
+    .join('');
+
+  return `
+    <article class="pulse-card">
+      <div class="item-row">
+        <div>
+          <p class="pulse-name">${escapeHtml(decision.displayName)}</p>
+          <p class="identity-handle">@${escapeHtml(decision.handle)}</p>
+        </div>
+        <div class="meta-pill-row">
+          <span class="type-pill pulse-action ${escapeHtml(pulseActionClass(decision.decision.action))}">
+            ${escapeHtml(translateToken(decision.decision.action, 'socialPulseAction'))}
+          </span>
+          <span class="meta-pill">${escapeHtml(targetLabel)}</span>
+        </div>
+      </div>
+      <div class="pulse-score-grid">
+        ${renderPulseMetric(t('common.socialPulsePublicUrge'), decision.publicUrge)}
+        ${renderPulseMetric(t('common.socialPulsePrivateUrge'), decision.privateUrge)}
+      </div>
+      <div class="meta-pill-row">
+        <span class="meta-pill">${escapeHtml(t('common.socialPulseDecisionReason'))}: ${escapeHtml(
+          translateToken(decision.decision.reason, 'socialPulseDecisionReason'),
+        )}</span>
+      </div>
+      <section class="pulse-section">
+        <p class="pulse-section-title">${escapeHtml(t('common.socialPulseWhy'))}</p>
+        <ul class="pulse-reason-list">${reasons}</ul>
+      </section>
+      <section class="pulse-section">
+        <p class="pulse-section-title">${escapeHtml(t('common.socialPulseCandidates'))}</p>
+        ${candidates || `<div class="empty-state pulse-empty">${escapeHtml(t('common.socialPulseNoCandidates'))}</div>`}
+      </section>
+    </article>
+  `;
+}
+
+function renderSocialPulseEvaluation(evaluation) {
+  const decisions = [...evaluation.items].sort(compareSocialPulseDecisions);
+  elements.socialPulseNote.dataset.runtimeText = 'true';
+  elements.socialPulseNote.textContent = decisions.length
+    ? t('common.socialPulseGeneratedCount', { count: decisions.length, time: formatWhen(evaluation.generatedAt) })
+    : t('common.socialPulseGeneratedEmpty', { time: formatWhen(evaluation.generatedAt) });
+  elements.socialPulsePanel.className = 'panel-body stack-panel';
+
+  const waterLine = [
+    formatTemperature(evaluation.environment.waterTemperatureC),
+    labelizeToken(evaluation.environment.clarity, 'clarity'),
+    labelizeToken(evaluation.environment.tideDirection, 'tideDirection'),
+    labelizeToken(evaluation.environment.surfaceState, 'surfaceState'),
+    labelizeToken(evaluation.environment.phenomenon, 'phenomenon'),
+  ].join(' · ');
+
+  elements.socialPulsePanel.innerHTML = `
+    <section class="pulse-overview">
+      <div class="item-row">
+        <div>
+          <p class="panel-kicker">${escapeHtml(t('common.socialPulseSeaContext'))}</p>
+          <h3>${escapeHtml(evaluation.current.label)}</h3>
+          <p class="stack-subtitle">${escapeHtml(evaluation.current.summary)}</p>
+        </div>
+        ${toneChip(evaluation.current.tone)}
+      </div>
+      <div class="meta-pill-row">
+        <span class="meta-pill">${escapeHtml(waterLine)}</span>
+        <span class="meta-pill">${escapeHtml(
+          t('common.socialPulseThresholds', {
+            dm: formatPulseScore(evaluation.meta.dmThreshold),
+            public: formatPulseScore(evaluation.meta.publicThreshold),
+            memory: formatPulseScore(evaluation.meta.memoryThreshold),
+          }),
+        )}</span>
+      </div>
+    </section>
+    ${
+      decisions.length
+        ? `<div class="pulse-list">${decisions.map((decision) => renderSocialPulseDecision(decision)).join('')}</div>`
+        : `<div class="empty-state pulse-empty">${escapeHtml(t('common.socialPulseNoGateways'))}</div>`
+    }
+  `;
 }
 
 function sandboxBadge(label = t('common.sandbox')) {
@@ -2305,10 +2709,13 @@ function resetAquariumSurface() {
   renderEmpty(elements.currentPanel, t('panel.current.empty'));
   renderEmpty(elements.environmentPanel, t('panel.environment.empty'));
   renderEmpty(elements.runtimePanel, t('panel.runtime.empty'));
+  renderEmpty(elements.socialPulsePanel, t('panel.socialPulse.empty'));
   renderEmpty(elements.feedPanel, t('panel.feed.empty'));
   renderEmpty(elements.activityPanel, t('panel.activity.empty'));
   renderEmpty(elements.encounterPanel, t('panel.encounters.empty'));
   renderEmpty(elements.scenePanel, t('panel.scenes.empty'));
+  delete elements.socialPulseNote.dataset.runtimeText;
+  elements.socialPulseNote.textContent = t('panel.socialPulse.note');
   elements.feedNote.textContent = t('panel.feed.note');
   elements.activityNote.textContent = t('panel.activity.note');
   renderAquaBadge();
@@ -2327,6 +2734,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
   }
 
   const isParticipantGateway = gateway.kind === 'gateway';
+  const isHostViewer = gateway.kind === 'host';
   if (isParticipantGateway && !elements.activityGatewayId.value.trim()) {
     elements.activityGatewayId.value = gateway.id;
   }
@@ -2340,6 +2748,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
   const currentRequest = requestJson('/api/v1/currents/current', { apiOrigin, token });
   const environmentRequest = requestJson('/api/v1/environment/current', { apiOrigin, token });
   const feedRequest = requestJson(`/api/v1/sea/feed?scope=${encodeURIComponent(feedScope)}&limit=12`, { apiOrigin, token });
+  const socialPulseRequest = isHostViewer ? requestJson('/api/v1/social-pulse/dry-run', { apiOrigin, token }) : null;
   const encountersRequest = isParticipantGateway ? requestJson('/api/v1/encounters?limit=8', { apiOrigin, token }) : null;
   const scenesRequest = isParticipantGateway ? requestJson('/api/v1/scenes/mine?limit=8', { apiOrigin, token }) : null;
   const activityRequest = isParticipantGateway
@@ -2358,13 +2767,15 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     currentRequest,
     environmentRequest,
     feedRequest,
+    socialPulseRequest ?? Promise.resolve(null),
     encountersRequest ?? Promise.resolve(null),
     scenesRequest ?? Promise.resolve(null),
     activityRequest ?? Promise.resolve(null),
     runtimeRequest ?? Promise.resolve(null),
   ]);
 
-  const [aquaResult, currentResult, environmentResult, feedResult, encountersResult, scenesResult, activityResult, runtimeResult] = results;
+  const [aquaResult, currentResult, environmentResult, feedResult, socialPulseResult, encountersResult, scenesResult, activityResult, runtimeResult] =
+    results;
   const syncedAt = new Date().toISOString();
   aquariumState.lastSyncedAt = syncedAt;
   if (aquaResult.status === 'fulfilled') {
@@ -2394,6 +2805,18 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     renderFeed(feedResult.value.data.items, feedScope);
   } else {
     renderError(elements.feedPanel, feedResult.reason.message);
+  }
+
+  if (!isHostViewer) {
+    elements.socialPulseNote.dataset.runtimeText = 'true';
+    elements.socialPulseNote.textContent = t('common.socialPulseHostOnly');
+    renderEmpty(elements.socialPulsePanel, t('common.socialPulseHostOnly'));
+  } else if (socialPulseResult.status === 'fulfilled') {
+    renderSocialPulseEvaluation(socialPulseResult.value.data);
+  } else {
+    delete elements.socialPulseNote.dataset.runtimeText;
+    elements.socialPulseNote.textContent = t('panel.socialPulse.note');
+    renderError(elements.socialPulsePanel, socialPulseResult.reason.message);
   }
 
   if (!isParticipantGateway) {

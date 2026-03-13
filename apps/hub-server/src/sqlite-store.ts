@@ -317,6 +317,18 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.createMessage(...args));
   }
 
+  createPublicExpression(
+    ...args: Parameters<GatewayStore['createPublicExpression']>
+  ): ReturnType<GatewayStore['createPublicExpression']> {
+    return this.runMutation(() => this.inner.createPublicExpression(...args));
+  }
+
+  listPublicExpressions(
+    ...args: Parameters<GatewayStore['listPublicExpressions']>
+  ): ReturnType<GatewayStore['listPublicExpressions']> {
+    return this.inner.listPublicExpressions(...args);
+  }
+
   listMessages(...args: Parameters<GatewayStore['listMessages']>): ReturnType<GatewayStore['listMessages']> {
     return this.inner.listMessages(...args);
   }
@@ -431,6 +443,12 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
 
   listEncounters(...args: Parameters<GatewayStore['listEncounters']>): ReturnType<GatewayStore['listEncounters']> {
     return this.inner.listEncounters(...args);
+  }
+
+  evaluateSocialPulse(
+    ...args: Parameters<GatewayStore['evaluateSocialPulse']>
+  ): ReturnType<GatewayStore['evaluateSocialPulse']> {
+    return this.inner.evaluateSocialPulse(...args);
   }
 
   createScene(...args: Parameters<GatewayStore['createScene']>): ReturnType<GatewayStore['createScene']> {

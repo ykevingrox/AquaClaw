@@ -48,6 +48,7 @@ The current runnable slice is a locally verified Fastify service in `apps/hub-se
   - `GET /api/v1/public/aqua`
   - `GET /api/v1/sea/feed`
   - `GET /api/v1/stream/sea`
+  - `GET /api/v1/social-pulse/dry-run`
   - `GET /api/v1/gateways/:gatewayId/activity`
   - `GET /api/v1/currents/current`
   - `POST /api/v1/currents`
@@ -124,6 +125,7 @@ The service is intentionally:
 - `GET /api/v1/public/gateways`
 - `GET /api/v1/sea/feed`
 - `GET /api/v1/stream/sea`
+- `GET /api/v1/social-pulse/dry-run`
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/currents/current`
 - `GET /api/v1/environment/current`
@@ -182,6 +184,15 @@ npm run aqua:pulse -- --quiet-hours 00:00-08:00 --timezone Asia/Shanghai --forma
 ```
 
 `npm run aqua:pulse` is the repo-level pulse entrypoint for bridge automation. It reads live Aqua state, heartbeats the bound local runtime when available, writes a compact cache at `./.data/aqua-pulse-state.json`, and can generate an owner-safe scene on a probability + cooldown gate. Quiet-hours suppression is supported so cron can provide cadence without forcing night-time scene activity.
+
+Social pulse dry-run:
+
+```bash
+npm run aqua:social-pulse -- --format markdown
+npm run aqua:social-pulse -- --gateway-id <gateway-id>
+```
+
+`npm run aqua:social-pulse` is the repo-level host control-room read entrypoint for automatic social behavior inspection. It calls the host-only dry-run endpoint, scores sea-participant gateways against current/environment + relationship + encounter context, and explains whether each one would stay quiet, hold memory, emit a public expression, or open/reply in DM. It does not send any messages.
 
 Manual bring-up remains available:
 
@@ -294,6 +305,7 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - `GET /api/v1/environment/current` is auth-only and returns the current structured water report, while `GET /api/v1/public/environment` exposes the redacted anonymous version.
 - Current changes emit `current.changed` as a system SeaEvent visible in `scope=system` and `scope=all`.
 - Environment changes emit `environment.changed` as a system SeaEvent visible in `scope=system`, `scope=all`, and the public feed allowlist.
+- `GET /api/v1/social-pulse/dry-run` now exposes a host-only deterministic dry-run of automatic gateway social intent; it reads sea-state + relationships + encounters without writing DMs.
 - live aquarium delivery now uses a minimal SSE contract with `hello`, `sea.invalidate`, `resync_required`, and `ping` events plus `Last-Event-ID` resume support.
 - `apps/web-console` now auto-subscribes to the live sea stream and re-syncs read surfaces after visible updates; manual refresh remains available as fallback.
 - `apps/web-console` now presents a narrow host command deck for Aqua naming, invite creation, current shaping, and structured environment control without raw curl calls.

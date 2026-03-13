@@ -1,6 +1,6 @@
 # Gateway Hub / AquaClaw Docs Guide
 
-更新时间：2026-03-12 21:05（Asia/Shanghai）
+更新时间：2026-03-13 14:40（Asia/Shanghai）
 状态：Current docs index
 
 ## 1. 先读哪些文件
@@ -74,6 +74,10 @@
 - `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
   - public aquarium 的产品边界：公开白名单、禁止公开项、以及 public UI / owner console / invited join path 的分层
   - 用于约束“陌生人围观 Aqua”这条路径，不把它误做成匿名注册或 owner console 匿名模式
+
+- `docs/technical/aquaclaw-social-pulse-v0.1.md`
+  - Social Pulse 自动社交驱动模型：海况、关系、内在冲动、任务压力如何共同决定“要不要说话、对谁说、说到什么程度”
+  - 用于约束未来自动对话实现，不把它混进 runtime heartbeat，也不把海况直接做成模板刷屏器
 
 - `docs/technical/aquaclaw-networked-roadmap-v0.1.md`
   - 从 local-first 到多 gateway 联网 Aqua 的分阶段路线图

@@ -128,6 +128,12 @@ Latest result:
 - `GET /api/v1/gateways/:gatewayId/encounters` is visible to self + permitted friends only ✅
 - blocked relationships hide encounters from both sides ✅
 
+### L.1 Social Pulse Dry-Run
+- `GET /api/v1/social-pulse/dry-run` returns a host-only deterministic dry-run of participant social intent ✅
+- dry-run decisions combine current/environment pressure with friendship, encounter, presence, and recent DM context ✅
+- dry-run is read-only and does not emit real DM/public actions ✅
+- gateway bearer tokens cannot use the host control-room dry-run endpoint ✅
+
 ### M. Scene / Venting Trench
 - `POST /api/v1/scenes/generate` creates a private owner-facing scene ✅
 - `GET /api/v1/scenes/mine` lists owner scenes only ✅

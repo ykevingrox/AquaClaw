@@ -1076,6 +1076,196 @@ test('hosted owner session token cannot act as gateway identity on hosted social
   await app.close();
 });
 
+test('hosted owner session can inspect social pulse dry-run while gateways cannot', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-owner-social-pulse');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Pulse Alpha',
+      handle: 'hosted-pulse-alpha',
+    },
+  });
+  assert.equal(alphaRegister.statusCode, 201);
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+  const alphaGatewayId = alphaRegister.json().data.gateway.id as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Pulse Beta',
+      handle: 'hosted-pulse-beta',
+    },
+  });
+  assert.equal(betaRegister.statusCode, 201);
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: {
+      authorization: `Bearer ${alphaToken}`,
+    },
+    payload: {
+      toGatewayId: betaGatewayId,
+    },
+  });
+  assert.equal(friendRequest.statusCode, 201);
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accept = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: {
+      authorization: `Bearer ${betaToken}`,
+    },
+  });
+  assert.equal(accept.statusCode, 200);
+  const conversationId = accept.json().data.conversation.id as string;
+
+  const ownerCurrent = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      key: 'hosted-social-pulse-current',
+      label: 'Hosted Social Pulse Current',
+      summary: 'A lively hosted current for social pulse dry-run.',
+      tone: 'playful',
+      ...buildActiveCurrentWindow(),
+    },
+  });
+  assert.equal(ownerCurrent.statusCode, 201);
+
+  const ownerEnvironment = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      waterTemperatureC: 19,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'warm_bloom',
+    },
+  });
+  assert.equal(ownerEnvironment.statusCode, 201);
+
+  const betaPresence = await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: {
+      authorization: `Bearer ${betaToken}`,
+    },
+    payload: {
+      sessionId: 'hosted-pulse-beta-session',
+      connectionType: 'gateway_ws',
+    },
+  });
+  assert.equal(betaPresence.statusCode, 200);
+
+  const betaMessage = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: {
+      authorization: `Bearer ${betaToken}`,
+    },
+    payload: {
+      body: 'The hosted tide needs a reply.',
+    },
+  });
+  assert.equal(betaMessage.statusCode, 201);
+
+  const ownerSocialPulse = await app.inject({
+    method: 'GET',
+    url: `/api/v1/social-pulse/dry-run?gatewayId=${alphaGatewayId}`,
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(ownerSocialPulse.statusCode, 200);
+  assert.equal(ownerSocialPulse.json().data.items[0].gatewayId, alphaGatewayId);
+  assert.equal(ownerSocialPulse.json().data.items[0].decision.action, 'friend_dm_reply');
+  assert.equal(ownerSocialPulse.json().data.items[0].decision.targetGatewayId, betaGatewayId);
+
+  const forbiddenSocialPulse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/dry-run',
+    headers: {
+      authorization: `Bearer ${alphaToken}`,
+    },
+  });
+  assert.equal(forbiddenSocialPulse.statusCode, 403);
+  assert.equal(forbiddenSocialPulse.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
+test('hosted public expression write requires a gateway bearer token while owner sessions remain read-only', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-public-expression-owner');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Public Expression Alpha',
+      handle: 'hosted-public-expression-alpha',
+    },
+  });
+  assert.equal(alphaRegister.statusCode, 201);
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+
+  const ownerWrite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      body: 'Host should not speak from inside the sea.',
+    },
+  });
+  assert.equal(ownerWrite.statusCode, 403);
+  assert.equal(ownerWrite.json().error.code, 'forbidden');
+
+  const alphaWrite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${alphaToken}`,
+    },
+    payload: {
+      body: 'A hosted participant can speak publicly.',
+    },
+  });
+  assert.equal(alphaWrite.statusCode, 201);
+
+  const list = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public-expressions',
+  });
+  assert.equal(list.statusCode, 200);
+  assert.deepEqual(
+    list.json().data.items.map((item: { gateway: { handle: string } | null }) => item.gateway?.handle),
+    ['hosted-public-expression-alpha'],
+  );
+
+  await app.close();
+});
+
 test('hosted owner session gate protects owner-only hosted-session/current/audit/system feed/stream/invite/remote-bridge endpoints from gateway tokens', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 

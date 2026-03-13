@@ -18,6 +18,7 @@ import {
   type GatewayVisibility,
   type HostRecord,
   type HostedRegistrationPolicy,
+  type PublicExpressionRecord,
   type SeaEvent,
   type SeaEventLiveSource,
 } from './store.js';
@@ -153,9 +154,21 @@ interface GatewayActivityQuerystring {
   cursor?: string;
 }
 
+interface SocialPulseQuerystring {
+  gatewayId?: string;
+}
+
 interface PublicGatewayQuerystring {
   limit?: string;
   cursor?: string;
+}
+
+interface PublicExpressionQuerystring {
+  limit?: string;
+  cursor?: string;
+  gatewayId?: string;
+  rootExpressionId?: string;
+  includeReplies?: string;
 }
 
 interface FriendRequestParams {
@@ -176,6 +189,13 @@ interface FriendScopesParams {
 
 interface CreateMessageBody {
   body?: string;
+}
+
+interface CreatePublicExpressionBody {
+  body?: string;
+  replyToExpressionId?: string | null;
+  tone?: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface UpdateConversationReadStateBody {
@@ -429,6 +449,51 @@ function getAuthedHostedSession(store: GatewayStore, authorization: string | und
   return session;
 }
 
+type LocalOwnerSessionEndpointResult =
+  | {
+      ok: true;
+      session: NonNullable<ReturnType<GatewayStore['findLocalSessionByToken']>>;
+    }
+  | {
+      ok: false;
+      error: {
+        statusCode: 401 | 403;
+        code: 'unauthorized' | 'forbidden';
+        message: string;
+      };
+    };
+
+function getLocalOwnerSessionForEndpoint(store: GatewayStore, authorization: string | undefined): LocalOwnerSessionEndpointResult {
+  const localSession = getAuthedLocalSession(store, authorization);
+  if ('error' in localSession) {
+    const gateway = getOptionalAuthedGateway(store, authorization);
+    if (gateway) {
+      return {
+        ok: false,
+        error: {
+          statusCode: 403,
+          code: 'forbidden',
+          message: 'endpoint requires local session token',
+        },
+      };
+    }
+
+    return {
+      ok: false,
+      error: {
+        statusCode: 401,
+        code: localSession.error.code,
+        message: localSession.error.message,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    session: localSession,
+  };
+}
+
 type HostedOwnerSessionEndpointResult =
   | {
       ok: true;
@@ -592,6 +657,25 @@ function toPublicGatewaySummary(gateway: GatewayRecord) {
   };
 }
 
+function toPublicExpressionSummary(store: GatewayStore, expression: PublicExpressionRecord) {
+  const gateway = store.findById(expression.gatewayId);
+  const replyToGateway = expression.replyToGatewayId ? store.findById(expression.replyToGatewayId) : null;
+
+  return {
+    id: expression.id,
+    rootExpressionId: expression.rootExpressionId,
+    parentExpressionId: expression.parentExpressionId,
+    replyToGatewayId: expression.replyToGatewayId,
+    visibility: expression.visibility,
+    body: expression.body,
+    tone: expression.tone,
+    createdAt: expression.createdAt,
+    updatedAt: expression.updatedAt,
+    gateway: gateway ? toPublicGatewaySummary(gateway) : null,
+    replyToGateway: replyToGateway ? toPublicGatewaySummary(replyToGateway) : null,
+  };
+}
+
 function toPublicCurrentSummary(current: CurrentRecord) {
   return {
     id: current.id,
@@ -667,6 +751,16 @@ function toPublicSeaEventMetadata(event: SeaEvent) {
       phenomenon: typeof event.metadata.phenomenon === 'string' ? event.metadata.phenomenon : null,
       environmentSummary: typeof event.metadata.environmentSummary === 'string' ? event.metadata.environmentSummary : null,
       source: typeof event.metadata.source === 'string' ? event.metadata.source : null,
+    };
+  }
+
+  if (event.type === 'public_expression.created' || event.type === 'public_expression.replied') {
+    return {
+      expressionId: typeof event.metadata.expressionId === 'string' ? event.metadata.expressionId : null,
+      rootExpressionId: typeof event.metadata.rootExpressionId === 'string' ? event.metadata.rootExpressionId : null,
+      parentExpressionId: typeof event.metadata.parentExpressionId === 'string' ? event.metadata.parentExpressionId : null,
+      replyToGatewayId: typeof event.metadata.replyToGatewayId === 'string' ? event.metadata.replyToGatewayId : null,
+      replyToGatewayHandle: typeof event.metadata.replyToGatewayHandle === 'string' ? event.metadata.replyToGatewayHandle : null,
     };
   }
 
@@ -886,6 +980,22 @@ function parsePositiveIntegerQuery(value: string | undefined) {
   return { value: parsed } as const;
 }
 
+function parseBooleanQuery(value: string | undefined, fieldName: string) {
+  if (value === undefined) {
+    return { value: undefined } as const;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true' || normalized === '1') {
+    return { value: true } as const;
+  }
+  if (normalized === 'false' || normalized === '0') {
+    return { value: false } as const;
+  }
+
+  return { error: `${fieldName} must be a boolean` } as const;
+}
+
 function friendRequestErrorToHttp(message: string) {
   if (message === 'pending request already exists') {
     return { statusCode: 409, code: 'pending_request_exists' };
@@ -927,6 +1037,19 @@ function conversationErrorToHttp(message: string) {
   }
   if (message === 'blocked relationship') {
     return { statusCode: 403, code: 'blocked' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function publicExpressionErrorToHttp(message: string) {
+  if (message === 'gateway not found' || message === 'public expression not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'blocked relationship' || message === 'owner gateway cannot create public expressions') {
+    return { statusCode: 403, code: 'forbidden' };
+  }
+  if (message === 'invalid public expression cursor') {
+    return { statusCode: 400, code: 'invalid_cursor' };
   }
   return { statusCode: 400, code: 'validation_failed' };
 }
@@ -1017,6 +1140,13 @@ function encounterErrorToHttp(message: string) {
   }
   if (message === 'invalid encounter cursor') {
     return { statusCode: 400, code: 'invalid_cursor' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function socialPulseErrorToHttp(message: string) {
+  if (message === 'gateway not found' || message === 'host not found') {
+    return { statusCode: 404, code: 'not_found' };
   }
   return { statusCode: 400, code: 'validation_failed' };
 }
@@ -1235,6 +1365,144 @@ export function buildApp(options: BuildAppOptions = {}) {
         ok: false,
         error: {
           code: 'validation_failed',
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.get<{ Querystring: PublicExpressionQuerystring }>('/api/v1/public-expressions', async (request, reply) => {
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+
+    const parsedIncludeReplies = parseBooleanQuery(request.query.includeReplies, 'includeReplies');
+    if ('error' in parsedIncludeReplies) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedIncludeReplies.error,
+        },
+      });
+    }
+
+    try {
+      const viewer = getOptionalAuthedGateway(store, request.headers.authorization);
+      const expressions = store.listPublicExpressions({
+        viewerGatewayId: viewer?.id ?? null,
+        gatewayId: request.query.gatewayId?.trim() || undefined,
+        rootExpressionId: request.query.rootExpressionId?.trim() || undefined,
+        includeReplies: parsedIncludeReplies.value,
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+      });
+
+      return {
+        ok: true,
+        data: {
+          items: expressions.items.map((expression) => toPublicExpressionSummary(store, expression)),
+          nextCursor: expressions.nextCursor,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list public expressions';
+      const mapped = publicExpressionErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: CreatePublicExpressionBody }>('/api/v1/public-expressions', async (request, reply) => {
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    if (typeof request.body?.body !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'body is required',
+        },
+      });
+    }
+    if (
+      request.body?.replyToExpressionId !== undefined &&
+      request.body.replyToExpressionId !== null &&
+      typeof request.body.replyToExpressionId !== 'string'
+    ) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'replyToExpressionId must be a string when provided',
+        },
+      });
+    }
+    if (request.body?.tone !== undefined && typeof request.body.tone !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'tone must be a string when provided',
+        },
+      });
+    }
+    if (
+      request.body?.metadata !== undefined &&
+      (request.body.metadata === null || typeof request.body.metadata !== 'object' || Array.isArray(request.body.metadata))
+    ) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'metadata must be an object when provided',
+        },
+      });
+    }
+
+    try {
+      const expression = store.createPublicExpression({
+        gatewayId: result.gateway.id,
+        body: request.body.body,
+        replyToExpressionId: request.body.replyToExpressionId ?? undefined,
+        tone: request.body.tone as PublicExpressionRecord['tone'] | undefined,
+        metadata: request.body.metadata,
+      });
+
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          expression: toPublicExpressionSummary(store, expression),
+        },
+      });
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to create public expression';
+      const mapped = publicExpressionErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
           message: messageText,
         },
       });
@@ -2728,6 +2996,60 @@ export function buildApp(options: BuildAppOptions = {}) {
         error: {
           code: mapped.code,
           message,
+        },
+      });
+    }
+  });
+
+  app.get<{ Querystring: SocialPulseQuerystring }>('/api/v1/social-pulse/dry-run', async (request, reply) => {
+    let actorHostId: string;
+
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorHostId = hostedOwner.session.host.id;
+    } else {
+      const localOwner = getLocalOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!localOwner.ok) {
+        const endpointError = localOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorHostId = localOwner.session.host.id;
+    }
+
+    try {
+      const evaluation = store.evaluateSocialPulse({
+        hostId: actorHostId,
+        gatewayId: request.query.gatewayId?.trim() || undefined,
+      });
+
+      return {
+        ok: true,
+        data: evaluation,
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to evaluate social pulse';
+      const mapped = socialPulseErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
         },
       });
     }

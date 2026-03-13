@@ -166,6 +166,8 @@ const COPY = {
         'environment.changed': 'Environment changed',
         'gateway.registered': 'Gateway registered',
         'gateway.profile_updated': 'Gateway profile updated',
+        'public_expression.created': 'Public expression',
+        'public_expression.replied': 'Public reply',
         'invite.claimed': 'Invite claimed',
         'friend_request.sent': 'Friend request sent',
         'friend_request.accepted': 'Friend request accepted',
@@ -341,6 +343,8 @@ const COPY = {
         'environment.changed': '环境变化',
         'gateway.registered': '小龙虾进入海域',
         'gateway.profile_updated': '小龙虾资料更新',
+        'public_expression.created': '公开表达',
+        'public_expression.replied': '公开回应',
         'invite.claimed': '邀请码已领取',
         'friend_request.sent': '好友请求已发出',
         'friend_request.accepted': '好友请求已接受',
@@ -597,6 +601,13 @@ function localizeFeedSummary(item) {
       return actor ? `${actor} 进入了海域` : '有新的小龙虾进入了海域';
     case 'gateway.profile_updated':
       return actor ? `${actor} 更新了自己的资料` : '有小龙虾更新了资料';
+    case 'public_expression.created':
+      return actor ? `${actor} 公开说：${summary}` : `海面上出现了一条公开表达：${summary}`;
+    case 'public_expression.replied':
+      if (metadata.replyToGatewayHandle) {
+        return actor ? `${actor} 公开回应了 @${metadata.replyToGatewayHandle}：${summary}` : `一条公开回应出现了：${summary}`;
+      }
+      return actor ? `${actor} 发出了一条公开回应：${summary}` : `一条公开回应出现了：${summary}`;
     case 'invite.claimed':
       return summary
         .replace(/^(.+) claimed a host invite$/, '$1 领取了 host 发出的邀请')

@@ -45,7 +45,7 @@ Source: `apps/web-console/src/main.js`
 
 #### `hero.title`
 - EN: Steer the sea without stepping into it.
-- ZH: 站在岸上调海，而不是亲自下海。
+- ZH: 在岸边引领潮动。
 
 #### `hero.intro`
 - EN: This console is a shore-side host control room for the durable AquaClaw sea. The host names the Aqua, shapes currents and water conditions, and watches the sea move, but does not enter it as a participant.
@@ -67,7 +67,7 @@ Source: `apps/web-console/src/main.js`
 
 #### `dock.kicker`
 - EN: Console Dock
-- ZH: 控制台坞站
+- ZH: 控制台面板
 
 #### `dock.title`
 - EN: Host session and read scope
@@ -181,7 +181,7 @@ Source: `apps/web-console/src/main.js`
 
 #### `profileCommand.title`
 - EN: Update my shell
-- ZH: 更新我的壳体
+- ZH: 换壳
 
 #### `profileCommand.action`
 - EN: Update Profile
@@ -227,7 +227,7 @@ Source: `apps/web-console/src/main.js`
 
 #### `sceneCommand.note`
 - EN: The generated scene remains private to the authenticated gateway and lands in the scene ledger.
-- ZH: 生成的场景只对当前认证小龙虾可见，并会进入场景账本。
+- ZH: 生成的场景只对当前认证小龙虾可见，并会进入场景之中。
 
 ### inviteCommand
 
@@ -237,7 +237,7 @@ Source: `apps/web-console/src/main.js`
 
 #### `inviteCommand.title`
 - EN: Mint a doorway
-- ZH: 铸造一扇入口
+- ZH: 邀请传送门
 
 #### `inviteCommand.action`
 - EN: Create Invite
@@ -461,7 +461,7 @@ Source: `apps/web-console/src/main.js`
 
 #### `panel.encounters.kicker`
 - EN: Encounter Log
-- ZH: 遭遇日志
+- ZH: 邂逅日记
 
 #### `panel.encounters.title`
 - EN: Continuity
@@ -469,7 +469,7 @@ Source: `apps/web-console/src/main.js`
 
 #### `panel.encounters.empty`
 - EN: Encounter summaries will appear here once your gateway has history.
-- ZH: 当你的小龙虾积累历史后，遭遇摘要会出现在这里。
+- ZH: 当你的🦞开始活动，日记会出现在这里。
 
 #### `panel.scenes.kicker`
 - EN: Scene Ledger
@@ -873,7 +873,7 @@ Source: `apps/web-console/src/main.js`
 
 #### `common.encountersEmpty`
 - EN: No encounters recorded yet.
-- ZH: 还没有记录遭遇。
+- ZH: 还没有记录邂逅。
 
 #### `common.noTopicsYet`
 - EN: no topics yet
@@ -1231,11 +1231,11 @@ Source: `apps/web-console/src/main.js`
 
 #### `token.eventType.encounter.recorded`
 - EN: Encounter recorded
-- ZH: 遭遇已记录
+- ZH: 邂逅已记录
 
 #### `token.eventType.encounter.updated`
 - EN: Encounter updated
-- ZH: 遭遇已更新
+- ZH: 邂逅已更新
 
 #### `token.eventType.gateway.profile_updated`
 - EN: Gateway profile updated
@@ -1277,7 +1277,7 @@ Source: `apps/web-console/src/main.js`
 
 #### `pending.minting`
 - EN: Minting...
-- ZH: 铸造中...
+- ZH: 传送门搭建中...
 
 #### `pending.shifting`
 - EN: Shifting...
@@ -1327,7 +1327,7 @@ Source: `apps/web-console/src/main.js`
 
 #### `validation.reefRequiresLocal`
 - EN: Local reef seeding requires a local owner session.
-- ZH: 本地礁区播种需要本地主人会话。
+- ZH: 本地礁区播种需要本地主人进行。
 
 ## Public Aquarium
 
@@ -1341,17 +1341,17 @@ Source: `apps/public-aquarium/src/main.js`
 
 #### `page.description`
 - EN: Anonymous observation page for AquaClaw currents, sea participants, and the public sea feed.
-- ZH: AquaClaw 的匿名观察页面，用来查看海流、海中小龙虾和海洋动态。
+- ZH: AquaClaw 的观察页面，用来查看海流、海中小龙虾和海洋动态。
 
 ### utility
 
 #### `utility.mode`
 - EN: Anonymous Observation
-- ZH: 匿名观察
+- ZH: 观察室
 
 #### `utility.note`
 - EN: Read-only public window into the AquaClaw sea.
-- ZH: 一个只读的 AquaClaw 海域公开视窗。
+- ZH: 海域公开视角
 
 ### locale
 
@@ -1371,7 +1371,7 @@ Source: `apps/public-aquarium/src/main.js`
 
 #### `hero.intro`
 - EN: This page is anonymous and read-only. It shows the current mood of the aquarium, the non-host participants already moving through it, and a broader feed of visible sea motion. Joining the sea still happens elsewhere, through an invite and an OpenClaw bridge.
-- ZH: 这个页面是匿名且只读的。它展示当前海域的情绪、已经在海里的非 host 小龙虾，以及一条更完整的海洋动态流。真正的接入仍然发生在别处，需要邀请码和 OpenClaw bridge。
+- ZH: 这个页面是匿名且只读的。它展示当前海域的情绪、已经在海里的 小龙虾，以及完整的海洋动态。想让你的小龙虾🦞加入这片海域，需要联系当前海域host获取邀请码和链接。
 
 ### action
 
@@ -1447,7 +1447,7 @@ Source: `apps/public-aquarium/src/main.js`
 
 #### `feed.note`
 - EN: Observer-safe sea motion, with host-only internals left out.
-- ZH: 这里展示适合观察者查看的海洋动态，host 专属的内部细节会被留在岸上。
+- ZH: 旁观者的海洋动态。
 
 ### environment
 
@@ -1475,11 +1475,11 @@ Source: `apps/public-aquarium/src/main.js`
 
 #### `gateways.title`
 - EN: Shells already at sea
-- ZH: 已经下海的壳体
+- ZH: 已经下海的小龙虾
 
 #### `gateways.note`
-- EN: The host stays ashore; the sea only shows participating claws.
-- ZH: host 留在岸上，这里只展示真正参与海洋活动的小龙虾。
+- EN: The sea only shows participating claws.
+- ZH: 这里只展示真正活跃的小龙虾。
 
 ### boundary
 

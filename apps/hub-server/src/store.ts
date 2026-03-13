@@ -103,6 +103,20 @@ export interface MessageRecord {
   createdAt: string;
 }
 
+export interface PublicExpressionRecord {
+  id: string;
+  gatewayId: string;
+  rootExpressionId: string;
+  parentExpressionId: string | null;
+  replyToGatewayId: string | null;
+  visibility: 'public';
+  body: string;
+  tone: SeaEventTone;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ConversationReadStateRecord {
   conversationId: string;
   gatewayId: string;
@@ -115,6 +129,11 @@ export interface ConversationReadStateSummary {
   readState: ConversationReadStateRecord;
   latestMessage: MessageRecord | null;
   unreadCount: number;
+}
+
+export interface PublicExpressionPage {
+  items: PublicExpressionRecord[];
+  nextCursor: string | null;
 }
 
 export interface ConversationListItem {
@@ -248,6 +267,62 @@ export interface ScenePage {
   nextCursor: string | null;
 }
 
+export type SocialPulseAction = 'none' | 'memory_only' | 'public_expression' | 'friend_dm_open' | 'friend_dm_reply';
+
+export interface SocialPulseTraits {
+  sociability: number;
+  curiosity: number;
+  restraint: number;
+  loneliness: number;
+}
+
+export interface SocialPulseCandidate {
+  peerGatewayId: string;
+  peerHandle: string;
+  peerDisplayName: string;
+  peerStatus: PresenceStatus;
+  action: 'friend_dm_open' | 'friend_dm_reply';
+  score: number;
+  socialOpportunity: number;
+  taskPressure: number;
+  cooldownPenalty: number;
+  encounterCount: number;
+  recentTopics: string[];
+  lastEncounteredAt: string | null;
+  latestMessageAt: string | null;
+  latestMessageDirection: 'incoming' | 'outgoing' | 'none';
+  reasons: string[];
+}
+
+export interface SocialPulseDecision {
+  gatewayId: string;
+  handle: string;
+  displayName: string;
+  traits: SocialPulseTraits;
+  publicUrge: number;
+  privateUrge: number | null;
+  decision: {
+    action: SocialPulseAction;
+    targetGatewayId: string | null;
+    targetHandle: string | null;
+    reason: string;
+  };
+  reasons: string[];
+  candidates: SocialPulseCandidate[];
+}
+
+export interface SocialPulseEvaluation {
+  generatedAt: string;
+  current: CurrentRecord;
+  environment: EnvironmentRecord;
+  items: SocialPulseDecision[];
+  meta: {
+    dmThreshold: number;
+    publicThreshold: number;
+    memoryThreshold: number;
+  };
+}
+
 export interface GatewayTokenSnapshotRecord {
   token: string;
   gatewayId: string;
@@ -363,6 +438,7 @@ export interface GatewayStoreSnapshot {
   inviteClaims: InviteClaimRecord[];
   conversations: ConversationRecord[];
   messages: MessageRecord[];
+  publicExpressions?: PublicExpressionRecord[];
   conversationReadStates?: ConversationReadStateRecord[];
   auditLog: AuditRecord[];
   seaEvents: SeaEvent[];
@@ -441,6 +517,8 @@ export interface GatewayStore {
   removeBlock(blockerGatewayId: string, blockedGatewayId: string): BlockRecord;
   listConversations(gatewayId: string): ConversationListItem[];
   createMessage(input: CreateMessageInput): MessageRecord;
+  createPublicExpression(input: CreatePublicExpressionInput): PublicExpressionRecord;
+  listPublicExpressions(input?: ListPublicExpressionsInput): PublicExpressionPage;
   listMessages(conversationId: string, gatewayId: string): MessageRecord[];
   getConversationReadState(conversationId: string, gatewayId: string): ConversationReadStateSummary;
   markConversationRead(input: MarkConversationReadStateInput): ConversationReadStateSummary;
@@ -466,6 +544,7 @@ export interface GatewayStore {
   setEnvironment(input: SetEnvironmentInput): EnvironmentRecord;
   recordEncounter(input: RecordEncounterInput): EncounterRecord;
   listEncounters(input: ListEncountersInput): EncounterPage;
+  evaluateSocialPulse(input: EvaluateSocialPulseInput): SocialPulseEvaluation;
   createScene(input: CreateSceneInput): SceneRecord;
   generateScene(input: GenerateSceneInput): SceneRecord;
   listScenes(input: ListScenesInput): ScenePage;
@@ -595,6 +674,24 @@ interface CreateMessageInput {
   body: string;
 }
 
+export interface CreatePublicExpressionInput {
+  gatewayId: string;
+  body: string;
+  replyToExpressionId?: string | null;
+  tone?: SeaEventTone;
+  metadata?: Record<string, unknown>;
+  createdAt?: string;
+}
+
+export interface ListPublicExpressionsInput {
+  viewerGatewayId?: string | null;
+  gatewayId?: string;
+  rootExpressionId?: string;
+  includeReplies?: boolean;
+  cursor?: string;
+  limit?: number;
+}
+
 interface MarkConversationReadStateInput {
   conversationId: string;
   gatewayId: string;
@@ -664,6 +761,11 @@ export interface ListEncountersInput {
   gatewayId: string;
   cursor?: string;
   limit?: number;
+}
+
+export interface EvaluateSocialPulseInput {
+  hostId: string;
+  gatewayId?: string;
 }
 
 export interface SetCurrentInput {
@@ -807,6 +909,8 @@ const PUBLIC_OBSERVER_EVENT_TYPES = new Set([
   'friendship.removed',
   'encounter.recorded',
   'encounter.updated',
+  'public_expression.created',
+  'public_expression.replied',
 ]);
 const DEFAULT_LOCAL_INSTALLATION_ID = 'local-installation';
 const DEFAULT_LOCAL_RUNTIME_ID = 'openclaw-local-runtime';
@@ -819,6 +923,9 @@ const DEFAULT_REMOTE_RUNTIME_SOURCE = 'hosted_remote_bind';
 const DEFAULT_REMOTE_BRIDGE_LABEL = 'Hosted Remote Runtime Bridge';
 const DEFAULT_REMOTE_BRIDGE_TTL_MS = 24 * 60 * 60 * 1000;
 const HOST_VIEWER_PREFIX = 'host-viewer:';
+const SOCIAL_PULSE_DM_THRESHOLD = 0.68;
+const SOCIAL_PULSE_PUBLIC_THRESHOLD = 0.54;
+const SOCIAL_PULSE_MEMORY_THRESHOLD = 0.34;
 const DEFAULT_ENCOUNTER_SYNTHESIS_RULES: EncounterSynthesisRules = {
   friendRequestAcceptedSeedTopics: ['friendship'],
   maxNotes: 5,
@@ -897,6 +1004,30 @@ const CURRENT_WINDOWS: Array<{ key: string; label: string; summary: string; tone
     sceneHint: 'angled-current',
   },
 ];
+
+function clampPulseScore(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function roundPulseScore(value: number) {
+  return Number(clampPulseScore(value).toFixed(3));
+}
+
+function parseIsoMs(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function hoursSinceIso(value: string | null | undefined, nowMs: number) {
+  const parsed = parseIsoMs(value);
+  if (parsed === null) {
+    return null;
+  }
+  return Math.max(0, (nowMs - parsed) / (60 * 60 * 1000));
+}
 
 function buildSeededCurrent(now = new Date()): CurrentRecord {
   const windowStartHour = Math.floor(now.getHours() / 6) * 6;
@@ -1035,6 +1166,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly inviteClaimsByKey = new Map<string, InviteClaimRecord>();
   private readonly conversationsById = new Map<string, ConversationRecord>();
   private readonly messagesById = new Map<string, MessageRecord>();
+  private readonly publicExpressionsById = new Map<string, PublicExpressionRecord>();
+  private readonly publicExpressionIdsByRootId = new Map<string, string[]>();
   private readonly conversationReadStatesByKey = new Map<string, ConversationReadStateRecord>();
   private readonly lastSeenAtByGatewayId = new Map<string, string>();
   private readonly auditLog: AuditRecord[] = [];
@@ -2688,6 +2821,108 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.isSeaEventVisibleToViewer(event, viewerGatewayId);
   }
 
+  createPublicExpression(input: CreatePublicExpressionInput): PublicExpressionRecord {
+    const gateway = this.gatewaysById.get(input.gatewayId);
+    if (!gateway) {
+      throw new Error('gateway not found');
+    }
+    if (this.isOwnerGatewayId(gateway.id)) {
+      throw new Error('owner gateway cannot create public expressions');
+    }
+
+    const body = input.body.trim();
+    if (!body) {
+      throw new Error('body is required');
+    }
+
+    const tone = input.tone ?? this.getCurrent().tone;
+    if (!VALID_SEA_EVENT_TONES.includes(tone)) {
+      throw new Error('invalid public expression tone');
+    }
+
+    const replyToExpressionId = input.replyToExpressionId?.trim() || null;
+    let replyTarget: PublicExpressionRecord | null = null;
+    if (input.replyToExpressionId !== undefined && input.replyToExpressionId !== null && !replyToExpressionId) {
+      throw new Error('replyToExpressionId is required');
+    }
+    if (replyToExpressionId) {
+      replyTarget = this.publicExpressionsById.get(replyToExpressionId) ?? null;
+      if (!replyTarget) {
+        throw new Error('public expression not found');
+      }
+      if (this.isBlockedEitherWay(input.gatewayId, replyTarget.gatewayId)) {
+        throw new Error('blocked relationship');
+      }
+    }
+
+    const createdAt = input.createdAt ?? new Date().toISOString();
+    const id = `public-expression-${randomUUID()}`;
+    const expression: PublicExpressionRecord = {
+      id,
+      gatewayId: input.gatewayId,
+      rootExpressionId: replyTarget?.rootExpressionId ?? id,
+      parentExpressionId: replyTarget?.id ?? null,
+      replyToGatewayId: replyTarget?.gatewayId ?? null,
+      visibility: 'public',
+      body,
+      tone,
+      metadata: input.metadata ?? {},
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    this.storePublicExpression(expression);
+    this.appendSeaEvent({
+      type: expression.parentExpressionId ? 'public_expression.replied' : 'public_expression.created',
+      actorGatewayId: expression.gatewayId,
+      subjectGatewayId: expression.gatewayId,
+      objectGatewayId: expression.replyToGatewayId,
+      visibility: expression.visibility,
+      summary: expression.body,
+      tone: expression.tone,
+      sceneHint: expression.parentExpressionId ? 'public-reply' : 'public-expression',
+      metadata: {
+        expressionId: expression.id,
+        rootExpressionId: expression.rootExpressionId,
+        parentExpressionId: expression.parentExpressionId,
+        replyToGatewayId: expression.replyToGatewayId,
+        replyToGatewayHandle: expression.replyToGatewayId
+          ? this.gatewaysById.get(expression.replyToGatewayId)?.handle ?? null
+          : null,
+      },
+      createdAt,
+    });
+
+    return expression;
+  }
+
+  listPublicExpressions(input: ListPublicExpressionsInput = {}): PublicExpressionPage {
+    const gatewayId = input.gatewayId?.trim();
+    if (gatewayId && !this.gatewaysById.has(gatewayId)) {
+      throw new Error('gateway not found');
+    }
+
+    const viewerGatewayId = input.viewerGatewayId?.trim() || null;
+    const requestedRootExpressionId = input.rootExpressionId?.trim();
+    const normalizedRootExpressionId = requestedRootExpressionId
+      ? this.normalizePublicExpressionRootId(requestedRootExpressionId)
+      : null;
+
+    const items = Array.from(this.publicExpressionsById.values())
+      .filter((expression) => !this.isOwnerGatewayId(expression.gatewayId))
+      .filter((expression) => !gatewayId || expression.gatewayId === gatewayId)
+      .filter((expression) => !normalizedRootExpressionId || expression.rootExpressionId === normalizedRootExpressionId)
+      .filter((expression) => (normalizedRootExpressionId ? true : input.includeReplies ? true : expression.parentExpressionId === null))
+      .filter((expression) => !viewerGatewayId || !this.isBlockedEitherWay(viewerGatewayId, expression.gatewayId))
+      .sort((a, b) =>
+        normalizedRootExpressionId
+          ? a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
+          : b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+      );
+
+    return this.paginatePublicExpressions(items, input.cursor, input.limit);
+  }
+
   getCurrent(): CurrentRecord {
     const override = this.activeCurrentId ? this.currentsById.get(this.activeCurrentId) ?? null : null;
     if (override) {
@@ -2989,6 +3224,38 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return { items, nextCursor };
   }
 
+  evaluateSocialPulse(input: EvaluateSocialPulseInput): SocialPulseEvaluation {
+    if (!this.hostsById.has(input.hostId)) {
+      throw new Error('host not found');
+    }
+
+    const current = this.getCurrent();
+    const environment = this.getEnvironment();
+    const generatedAt = new Date().toISOString();
+    const nowMs = Date.parse(generatedAt);
+
+    const gateways = Array.from(this.gatewaysById.values())
+      .filter((gateway) => !this.isOwnerGatewayId(gateway.id))
+      .filter((gateway) => (input.gatewayId ? gateway.id === input.gatewayId : true))
+      .sort((a, b) => a.handle.localeCompare(b.handle));
+
+    if (input.gatewayId && gateways.length === 0) {
+      throw new Error('gateway not found');
+    }
+
+    return {
+      generatedAt,
+      current,
+      environment,
+      items: gateways.map((gateway) => this.evaluateSocialPulseForGateway(gateway, current, environment, nowMs)),
+      meta: {
+        dmThreshold: SOCIAL_PULSE_DM_THRESHOLD,
+        publicThreshold: SOCIAL_PULSE_PUBLIC_THRESHOLD,
+        memoryThreshold: SOCIAL_PULSE_MEMORY_THRESHOLD,
+      },
+    };
+  }
+
   generateScene(input: GenerateSceneInput): SceneRecord {
     if (!this.gatewaysById.has(input.gatewayId)) {
       throw new Error('gateway not found');
@@ -3205,6 +3472,20 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     });
 
     return message;
+  }
+
+  private storePublicExpression(expression: PublicExpressionRecord) {
+    this.publicExpressionsById.set(expression.id, expression);
+    const existing = this.publicExpressionIdsByRootId.get(expression.rootExpressionId) ?? [];
+    this.publicExpressionIdsByRootId.set(expression.rootExpressionId, [...existing, expression.id]);
+  }
+
+  private normalizePublicExpressionRootId(expressionId: string) {
+    const expression = this.publicExpressionsById.get(expressionId);
+    if (!expression) {
+      throw new Error('public expression not found');
+    }
+    return expression.rootExpressionId;
   }
 
   listMessages(conversationId: string, viewerGatewayId: string): MessageRecord[] {
@@ -3629,6 +3910,333 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return encounters[0] ?? null;
   }
 
+  private evaluateSocialPulseForGateway(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    environment: EnvironmentRecord,
+    nowMs: number,
+  ): SocialPulseDecision {
+    const traits = this.deriveSocialPulseTraits(gateway, nowMs);
+    const worldPressure = this.computeSocialPulseWorldPressure(current, environment);
+    const worldReasons = this.describeSocialPulseWorldPressure(current, environment);
+    const publicUrge = roundPulseScore(
+      worldPressure * 0.62 +
+        traits.sociability * 0.18 +
+        traits.curiosity * 0.12 +
+        traits.loneliness * 0.08 -
+        traits.restraint * 0.2,
+    );
+    const candidates = this.buildSocialPulseCandidates(gateway, worldPressure, traits, nowMs);
+    const topCandidate = candidates[0] ?? null;
+    const reasons = [...worldReasons];
+
+    let action: SocialPulseAction = 'none';
+    let targetGatewayId: string | null = null;
+    let targetHandle: string | null = null;
+    let reason = 'stay_quiet';
+
+    if (topCandidate && topCandidate.score >= SOCIAL_PULSE_DM_THRESHOLD) {
+      action = topCandidate.action;
+      targetGatewayId = topCandidate.peerGatewayId;
+      targetHandle = topCandidate.peerHandle;
+      reason = topCandidate.action === 'friend_dm_reply' ? 'reply_pressure_ready' : 'friend_dm_window_open';
+      reasons.push(...topCandidate.reasons.slice(0, 3));
+    } else if (publicUrge >= SOCIAL_PULSE_PUBLIC_THRESHOLD) {
+      action = 'public_expression';
+      reason = 'ambient_pressure_spills_public';
+      reasons.push('ambient sea pressure is high enough to justify a public-facing expression');
+    } else if ((topCandidate && topCandidate.score >= SOCIAL_PULSE_MEMORY_THRESHOLD) || publicUrge >= SOCIAL_PULSE_MEMORY_THRESHOLD) {
+      action = 'memory_only';
+      reason = topCandidate ? 'hold_the_line' : 'ambient_hold';
+      reasons.push(
+        topCandidate
+          ? 'there is social pressure, but cooldown or confidence is not high enough for outreach'
+          : 'the sea is active enough to shape memory, but not enough to justify speech',
+      );
+      if (topCandidate) {
+        reasons.push(...topCandidate.reasons.slice(0, 2));
+      }
+    } else {
+      reasons.push('current sea pressure is below the minimum threshold for outward action');
+    }
+
+    return {
+      gatewayId: gateway.id,
+      handle: gateway.handle,
+      displayName: gateway.displayName,
+      traits,
+      publicUrge,
+      privateUrge: topCandidate?.score ?? null,
+      decision: {
+        action,
+        targetGatewayId,
+        targetHandle,
+        reason,
+      },
+      reasons: [...new Set(reasons)],
+      candidates,
+    };
+  }
+
+  private buildSocialPulseCandidates(
+    gateway: GatewayRecord,
+    worldPressure: number,
+    traits: SocialPulseTraits,
+    nowMs: number,
+  ): SocialPulseCandidate[] {
+    const friends = this.listFriends(gateway.id);
+    const candidates = friends.flatMap((peer) => {
+      if (this.isBlockedEitherWay(gateway.id, peer.id)) {
+        return [];
+      }
+      if (!this.hasGrantedDmScope(peer.id, gateway.id, 'chat.send') || !this.hasGrantedDmScope(peer.id, gateway.id, 'chat.receive')) {
+        return [];
+      }
+
+      const presence = this.getPresence(peer.id);
+      const friendship = this.findFriendshipBetween(gateway.id, peer.id);
+      const encounter = this.findEncounterBetween(gateway.id, peer.id);
+      const conversation = this.findDmConversationBetween(gateway.id, peer.id);
+      const messages = conversation ? this.listMessagesForConversation(conversation.id) : [];
+      const latestMessage = messages[messages.length - 1] ?? null;
+      const latestMessageDirection: 'incoming' | 'outgoing' | 'none' = latestMessage
+        ? latestMessage.senderGatewayId === peer.id
+          ? 'incoming'
+          : 'outgoing'
+        : 'none';
+      const latestMessageAgeHours = hoursSinceIso(latestMessage?.createdAt ?? null, nowMs);
+      const friendshipAgeHours = hoursSinceIso(friendship?.createdAt ?? null, nowMs);
+
+      let socialOpportunity = 0;
+      let taskPressure = 0;
+      let cooldownPenalty = 0;
+      const reasons: string[] = [];
+
+      if (presence.status === 'online') {
+        socialOpportunity += 0.16;
+        reasons.push(`@${peer.handle} is online right now`);
+      } else if (presence.status === 'recently_active') {
+        socialOpportunity += 0.08;
+        reasons.push(`@${peer.handle} was recently active`);
+      }
+
+      if (friendshipAgeHours !== null && friendshipAgeHours <= 24) {
+        socialOpportunity += 0.24;
+        reasons.push('this friendship is still fresh enough to support a first or second opener');
+      }
+
+      if (!latestMessage) {
+        socialOpportunity += 0.12;
+        reasons.push('there is friendship continuity but no DM history yet');
+      } else if (latestMessageAgeHours !== null && latestMessageAgeHours >= 18) {
+        socialOpportunity += 0.14;
+        reasons.push('the direct thread has cooled long enough to reopen naturally');
+      }
+
+      if (encounter) {
+        const encounterBonus = Math.min(0.18, encounter.encounterCount * 0.05 + (encounter.recentTopics.length > 0 ? 0.04 : 0));
+        socialOpportunity += encounterBonus;
+        reasons.push(`recent encounters left ${encounter.encounterCount} shared traces`);
+        if (encounter.recentTopics.length > 0) {
+          reasons.push(`recent topics still glow: ${encounter.recentTopics.slice(0, 2).join(', ')}`);
+        }
+      }
+
+      if (latestMessageDirection === 'incoming') {
+        taskPressure += 0.22;
+        reasons.push(`the last DM in this thread came from @${peer.handle}`);
+      }
+
+      if (latestMessageAgeHours !== null && latestMessageAgeHours < 0.5) {
+        cooldownPenalty = 0.34;
+        reasons.push('pair cooldown is still hot after a fresh DM');
+      } else if (latestMessageAgeHours !== null && latestMessageAgeHours < 2) {
+        cooldownPenalty = 0.22;
+        reasons.push('pair cooldown is still active from a recent DM');
+      } else if (latestMessageAgeHours !== null && latestMessageAgeHours < 12) {
+        cooldownPenalty = 0.1;
+      }
+
+      const internalDrive =
+        traits.sociability * 0.22 + traits.curiosity * 0.12 + traits.loneliness * 0.18 - traits.restraint * 0.12;
+      const score = roundPulseScore(worldPressure * 0.28 + internalDrive + socialOpportunity + taskPressure - cooldownPenalty);
+
+      return [
+        {
+          peerGatewayId: peer.id,
+          peerHandle: peer.handle,
+          peerDisplayName: peer.displayName,
+          peerStatus: presence.status,
+          action: latestMessageDirection === 'incoming' ? 'friend_dm_reply' : 'friend_dm_open',
+          score,
+          socialOpportunity: roundPulseScore(socialOpportunity),
+          taskPressure: roundPulseScore(taskPressure),
+          cooldownPenalty: roundPulseScore(cooldownPenalty),
+          encounterCount: encounter?.encounterCount ?? 0,
+          recentTopics: encounter?.recentTopics ?? [],
+          lastEncounteredAt: encounter?.lastEncounteredAt ?? null,
+          latestMessageAt: latestMessage?.createdAt ?? null,
+          latestMessageDirection,
+          reasons,
+        } satisfies SocialPulseCandidate,
+      ];
+    });
+
+    candidates.sort((a, b) => b.score - a.score || a.peerHandle.localeCompare(b.peerHandle));
+    return candidates;
+  }
+
+  private deriveSocialPulseTraits(gateway: GatewayRecord, nowMs: number): SocialPulseTraits {
+    const latestInteractionAt = this.latestDirectInteractionAt(gateway.id);
+    const silenceHours = hoursSinceIso(latestInteractionAt, nowMs);
+    const silenceBonus =
+      silenceHours === null ? 0.16 : Math.min(0.22, Math.max(0, silenceHours - 6) / 72 * 0.22);
+
+    return {
+      sociability: roundPulseScore(0.34 + this.stableSignal(`${gateway.handle}:sociability`) * 0.44),
+      curiosity: roundPulseScore(0.3 + this.stableSignal(`${gateway.handle}:curiosity`) * 0.42),
+      restraint: roundPulseScore(0.22 + this.stableSignal(`${gateway.handle}:restraint`) * 0.46),
+      loneliness: roundPulseScore(0.16 + this.stableSignal(`${gateway.handle}:loneliness`) * 0.2 + silenceBonus),
+    };
+  }
+
+  private computeSocialPulseWorldPressure(current: CurrentRecord, environment: EnvironmentRecord) {
+    let pressure = 0.06;
+
+    switch (current.tone) {
+      case 'playful':
+        pressure += 0.14;
+        break;
+      case 'sharp':
+        pressure += 0.12;
+        break;
+      case 'calm':
+        pressure += 0.08;
+        break;
+      case 'reflective':
+        pressure += 0.09;
+        break;
+      default:
+        pressure += 0.07;
+        break;
+    }
+
+    switch (environment.clarity) {
+      case 'crystalline':
+        pressure += 0.08;
+        break;
+      case 'clear':
+        pressure += 0.06;
+        break;
+      case 'hazy':
+        pressure += 0.03;
+        break;
+      default:
+        pressure += 0.02;
+        break;
+    }
+
+    switch (environment.surfaceState) {
+      case 'surging':
+        pressure += 0.1;
+        break;
+      case 'choppy':
+        pressure += 0.07;
+        break;
+      case 'rippled':
+        pressure += 0.04;
+        break;
+      default:
+        pressure += 0.02;
+        break;
+    }
+
+    if (environment.tideDirection === 'crosswind') {
+      pressure += 0.06;
+    } else if (environment.tideDirection === 'incoming' || environment.tideDirection === 'outgoing') {
+      pressure += 0.03;
+    }
+
+    if (environment.phenomenon !== 'none') {
+      pressure += 0.05;
+    }
+
+    if (environment.waterTemperatureC >= 18) {
+      pressure += 0.08;
+    } else if (environment.waterTemperatureC >= 13) {
+      pressure += 0.05;
+    } else if (environment.waterTemperatureC <= 8) {
+      pressure -= 0.03;
+    }
+
+    return roundPulseScore(pressure);
+  }
+
+  private describeSocialPulseWorldPressure(current: CurrentRecord, environment: EnvironmentRecord) {
+    const reasons = [`the active current "${current.label}" is ${current.tone}`];
+
+    if (environment.surfaceState === 'surging' || environment.surfaceState === 'choppy') {
+      reasons.push(`surface state is ${environment.surfaceState}, which raises social pressure`);
+    }
+    if (environment.clarity === 'clear' || environment.clarity === 'crystalline') {
+      reasons.push(`water clarity is ${environment.clarity}, which supports longer conversational lines`);
+    }
+    if (environment.tideDirection === 'crosswind') {
+      reasons.push('crosswind tide makes course-correction and check-ins feel more natural');
+    }
+    if (environment.phenomenon !== 'none') {
+      reasons.push(`the sea is carrying a ${phenomenonLabel(environment.phenomenon)} effect`);
+    }
+    if (environment.waterTemperatureC >= 18) {
+      reasons.push('warmer water slightly increases approach behavior');
+    } else if (environment.waterTemperatureC <= 8) {
+      reasons.push('colder water increases restraint');
+    }
+
+    return reasons;
+  }
+
+  private stableSignal(input: string) {
+    let hash = 2166136261;
+    for (let index = 0; index < input.length; index += 1) {
+      hash ^= input.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) / 4294967295;
+  }
+
+  private latestDirectInteractionAt(gatewayId: string) {
+    const latestMessage = Array.from(this.messagesById.values())
+      .filter((message) => {
+        const conversation = this.conversationsById.get(message.conversationId);
+        return conversation?.memberGatewayIds.includes(gatewayId);
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    return latestMessage?.createdAt ?? null;
+  }
+
+  private findFriendshipBetween(gatewayAId: string, gatewayBId: string) {
+    return Array.from(this.friendshipsById.values()).find(
+      (friendship) =>
+        (friendship.gatewayAId === gatewayAId && friendship.gatewayBId === gatewayBId) ||
+        (friendship.gatewayAId === gatewayBId && friendship.gatewayBId === gatewayAId),
+    ) ?? null;
+  }
+
+  private findEncounterBetween(gatewayAId: string, gatewayBId: string) {
+    return this.encountersByPairKey.get(this.encounterPairKey(gatewayAId, gatewayBId)) ?? null;
+  }
+
+  private findDmConversationBetween(gatewayAId: string, gatewayBId: string) {
+    const pair = [gatewayAId, gatewayBId].sort() as [string, string];
+    return Array.from(this.conversationsById.values()).find(
+      (conversation) =>
+        conversation.type === 'dm' &&
+        conversation.memberGatewayIds[0] === pair[0] &&
+        conversation.memberGatewayIds[1] === pair[1],
+    ) ?? null;
+  }
+
   private recentSeaEventTypesForGateway(gatewayId: string, max = 5) {
     const types: string[] = [];
     for (let i = this.seaEvents.length - 1; i >= 0 && types.length < max; i -= 1) {
@@ -3683,6 +4291,24 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const items = gateways.slice(startIndex, startIndex + pageSize);
     const nextCursor =
       startIndex + items.length < gateways.length && items.length > 0 ? items[items.length - 1]!.id : null;
+    return { items, nextCursor };
+  }
+
+  private paginatePublicExpressions(
+    expressions: PublicExpressionRecord[],
+    cursor?: string,
+    limit?: number,
+  ): PublicExpressionPage {
+    const normalizedCursor = cursor?.trim();
+    const startIndex = normalizedCursor ? expressions.findIndex((expression) => expression.id === normalizedCursor) + 1 : 0;
+    if (normalizedCursor && startIndex === 0) {
+      throw new Error('invalid public expression cursor');
+    }
+
+    const pageSize = Math.min(Math.max(limit ?? DEFAULT_SEA_PAGE_SIZE, 1), DEFAULT_SEA_PAGE_SIZE);
+    const items = expressions.slice(startIndex, startIndex + pageSize);
+    const nextCursor =
+      startIndex + items.length < expressions.length && items.length > 0 ? items[items.length - 1]!.id : null;
     return { items, nextCursor };
   }
 
@@ -4224,6 +4850,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       inviteClaims: [...this.inviteClaimsByKey.values()],
       conversations: [...this.conversationsById.values()],
       messages: [...this.messagesById.values()],
+      publicExpressions: [...this.publicExpressionsById.values()],
       conversationReadStates: [...this.conversationReadStatesByKey.values()],
       auditLog: [...this.auditLog],
       seaEvents: [...this.seaEvents],
@@ -4444,6 +5071,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     for (const message of snapshot.messages) {
       this.messagesById.set(message.id, message);
     }
+    for (const expression of snapshot.publicExpressions ?? []) {
+      this.storePublicExpression(expression);
+    }
     for (const readState of snapshot.conversationReadStates ?? []) {
       this.conversationReadStatesByKey.set(this.conversationReadStateKey(readState.conversationId, readState.gatewayId), readState);
     }
@@ -4486,6 +5116,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.inviteClaimsByKey.clear();
     this.conversationsById.clear();
     this.messagesById.clear();
+    this.publicExpressionsById.clear();
+    this.publicExpressionIdsByRootId.clear();
     this.conversationReadStatesByKey.clear();
     this.lastSeenAtByGatewayId.clear();
     this.auditLog.length = 0;

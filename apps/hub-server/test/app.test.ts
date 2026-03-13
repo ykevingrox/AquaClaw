@@ -250,6 +250,123 @@ test('hosted owner session can rename aqua', async () => {
   await app.close();
 });
 
+test('local host can inspect social pulse dry-run while gateway tokens cannot', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const alpha = await registerGateway(app, {
+    displayName: 'Pulse Alpha',
+    handle: 'pulse-alpha-app',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Pulse Beta',
+    handle: 'pulse-beta-app',
+  });
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      toGatewayId: beta.gateway.id,
+    },
+  });
+  assert.equal(friendRequest.statusCode, 201);
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accept = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+  });
+  assert.equal(accept.statusCode, 200);
+  const conversationId = accept.json().data.conversation.id as string;
+
+  const current = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      key: 'pulse-app-current',
+      label: 'Pulse App Current',
+      summary: 'A test current for social pulse.',
+      tone: 'playful',
+      ...buildActiveCurrentWindow(),
+    },
+  });
+  assert.equal(current.statusCode, 201);
+
+  const environment = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      waterTemperatureC: 19,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'warm_bloom',
+    },
+  });
+  assert.equal(environment.statusCode, 201);
+
+  const betaPresence = await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      sessionId: 'pulse-beta-session',
+      connectionType: 'gateway_ws',
+    },
+  });
+  assert.equal(betaPresence.statusCode, 200);
+
+  const message = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      body: 'You should answer this tide.',
+    },
+  });
+  assert.equal(message.statusCode, 201);
+
+  const socialPulse = await app.inject({
+    method: 'GET',
+    url: `/api/v1/social-pulse/dry-run?gatewayId=${alpha.gateway.id}`,
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+  });
+  assert.equal(socialPulse.statusCode, 200);
+  assert.equal(socialPulse.json().data.items[0].decision.action, 'friend_dm_reply');
+  assert.equal(socialPulse.json().data.items[0].decision.targetGatewayId, beta.gateway.id);
+  assert.equal(socialPulse.json().data.items[0].candidates[0].peerHandle, beta.gateway.handle);
+
+  const forbidden = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/dry-run',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal(forbidden.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
 test('patch /api/v1/gateways/me rejects invalid visibility', async () => {
   const app = buildApp();
 
@@ -482,6 +599,101 @@ test('public aquarium endpoints expose anonymous sea state plus all non-host par
   assert.equal(environmentChanged.metadata.phenomenon, 'lantern_swarm');
   assert.equal('changedByGatewayId' in environmentChanged.metadata, false);
   assert.equal('ownerNote' in environmentChanged.metadata, false);
+
+  await app.close();
+});
+
+test('public expressions support anonymous reading, participant replies, and reject local host write tokens', async () => {
+  const app = buildApp();
+  const host = await bootstrapLocalHost(app, {
+    displayName: 'Public Expression Host',
+    handle: 'public-expression-host',
+  });
+  const alpha = await registerGateway(app, {
+    displayName: 'Public Expression Alpha',
+    handle: 'public-expression-alpha',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Public Expression Beta',
+    handle: 'public-expression-beta',
+  });
+
+  const create = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      body: 'The sea has a voice now.',
+    },
+  });
+  assert.equal(create.statusCode, 201);
+  const rootId = create.json().data.expression.id as string;
+
+  const reply = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      body: 'Then I will answer it.',
+      replyToExpressionId: rootId,
+    },
+  });
+  assert.equal(reply.statusCode, 201);
+  const replyId = reply.json().data.expression.id as string;
+
+  const list = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public-expressions',
+  });
+  assert.equal(list.statusCode, 200);
+  assert.deepEqual(
+    list.json().data.items.map((item: { id: string }) => item.id),
+    [rootId],
+  );
+
+  const thread = await app.inject({
+    method: 'GET',
+    url: `/api/v1/public-expressions?rootExpressionId=${replyId}`,
+  });
+  assert.equal(thread.statusCode, 200);
+  assert.deepEqual(
+    thread.json().data.items.map((item: { id: string }) => item.id),
+    [rootId, replyId],
+  );
+  assert.equal(thread.json().data.items[1].replyToGateway.handle, 'public-expression-alpha');
+
+  const feed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/feed',
+  });
+  assert.equal(feed.statusCode, 200);
+  assert.equal(
+    (feed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'public_expression.created'),
+    true,
+  );
+  const replyEvent = (feed.json().data.items as Array<{ type: string; metadata: Record<string, unknown> }>).find(
+    (item) => item.type === 'public_expression.replied',
+  );
+  assert.ok(replyEvent);
+  assert.equal(replyEvent.metadata.rootExpressionId, rootId);
+  assert.equal(replyEvent.metadata.parentExpressionId, rootId);
+
+  const hostWrite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${host.token}`,
+    },
+    payload: {
+      body: 'Host should stay ashore.',
+    },
+  });
+  assert.equal(hostWrite.statusCode, 401);
+  assert.equal(hostWrite.json().error.code, 'unauthorized');
 
   await app.close();
 });

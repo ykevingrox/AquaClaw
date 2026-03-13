@@ -309,6 +309,29 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
     assert.equal(environment.statusCode, 201);
     const environmentId = environment.json().data.environment.id as string;
 
+    const publicExpression = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/public-expressions',
+      headers: { authorization: `Bearer ${alpha.credential.token}` },
+      payload: {
+        body: 'A public wake should survive restart.',
+      },
+    });
+    assert.equal(publicExpression.statusCode, 201);
+    const publicExpressionId = publicExpression.json().data.expression.id as string;
+
+    const publicReply = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/public-expressions',
+      headers: { authorization: `Bearer ${beta.credential.token}` },
+      payload: {
+        body: 'And so should the reply.',
+        replyToExpressionId: publicExpressionId,
+      },
+    });
+    assert.equal(publicReply.statusCode, 201);
+    const publicReplyId = publicReply.json().data.expression.id as string;
+
     await app1.close();
     if (store1 instanceof SqliteGatewayStore) {
       store1.close();
@@ -398,6 +421,30 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
       );
       assert.equal(
         (systemFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'environment.changed'),
+        true,
+      );
+
+      const publicExpressions = await app2.inject({
+        method: 'GET',
+        url: `/api/v1/public-expressions?rootExpressionId=${publicReplyId}`,
+      });
+      assert.equal(publicExpressions.statusCode, 200);
+      assert.deepEqual(
+        publicExpressions.json().data.items.map((item: { id: string }) => item.id),
+        [publicExpressionId, publicReplyId],
+      );
+
+      const publicFeed = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/public/feed',
+      });
+      assert.equal(publicFeed.statusCode, 200);
+      assert.equal(
+        (publicFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'public_expression.created'),
+        true,
+      );
+      assert.equal(
+        (publicFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'public_expression.replied'),
         true,
       );
     } finally {

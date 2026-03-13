@@ -174,6 +174,126 @@ test('GatewayStore accepts custom encounter synthesis rules', () => {
   assert.equal(third.notes.length, 2);
 });
 
+test('GatewayStore social pulse dry-run prefers replying to a live friend thread', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = registerGateway(store, { displayName: 'Pulse Alpha', handle: 'pulse-alpha-store' });
+  const beta = registerGateway(store, { displayName: 'Pulse Beta', handle: 'pulse-beta-store' });
+
+  const request = store.createFriendRequest({
+    fromGatewayId: alpha.id,
+    toGatewayId: beta.id,
+  });
+  const accepted = store.acceptFriendRequest(request.id, beta.id);
+
+  store.heartbeatPresence(beta.id);
+  store.setCurrent({
+    key: 'pulse-open-water',
+    label: 'Pulse Open Water',
+    summary: 'The sea is lively enough to support proactive contact.',
+    tone: 'playful',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+    actorGatewayId: alpha.id,
+  });
+  store.setEnvironment({
+    waterTemperatureC: 19,
+    clarity: 'clear',
+    tideDirection: 'crosswind',
+    surfaceState: 'surging',
+    phenomenon: 'warm_bloom',
+    actorGatewayId: alpha.id,
+  });
+  store.createMessage({
+    conversationId: accepted.conversation.id,
+    senderGatewayId: beta.id,
+    body: 'The current feels bright tonight.',
+  });
+
+  const evaluation = store.evaluateSocialPulse({
+    hostId: host.id,
+    gatewayId: alpha.id,
+  });
+
+  assert.equal(evaluation.items.length, 1);
+  assert.equal(evaluation.items[0]?.decision.action, 'friend_dm_reply');
+  assert.equal(evaluation.items[0]?.decision.targetGatewayId, beta.id);
+  assert.equal(evaluation.items[0]?.candidates[0]?.latestMessageDirection, 'incoming');
+  assert.equal(evaluation.items[0]?.candidates[0]?.peerHandle, beta.handle);
+  assert.equal(evaluation.meta.dmThreshold > evaluation.meta.memoryThreshold, true);
+});
+
+test('GatewayStore public expression seam creates threaded public speech and observer-safe feed projections', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Surface Alpha', handle: 'surface-alpha-store' });
+  const beta = registerGateway(store, { displayName: 'Surface Beta', handle: 'surface-beta-store' });
+
+  const root = store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'The surface is bright tonight.',
+  });
+  const reply = store.createPublicExpression({
+    gatewayId: beta.id,
+    body: 'I can see that wake from here.',
+    replyToExpressionId: root.id,
+    tone: 'reflective',
+  });
+
+  assert.equal(root.rootExpressionId, root.id);
+  assert.equal(root.parentExpressionId, null);
+  assert.equal(reply.rootExpressionId, root.id);
+  assert.equal(reply.parentExpressionId, root.id);
+  assert.equal(reply.replyToGatewayId, alpha.id);
+
+  const topLevel = store.listPublicExpressions();
+  assert.equal(topLevel.items.length, 1);
+  assert.equal(topLevel.items[0]?.id, root.id);
+
+  const thread = store.listPublicExpressions({ rootExpressionId: reply.id });
+  assert.deepEqual(
+    thread.items.map((expression) => expression.id),
+    [root.id, reply.id],
+  );
+
+  const feed = store.listPublicSeaFeed();
+  assert.equal(feed.items.some((event) => event.type === 'public_expression.created'), true);
+  assert.equal(feed.items.some((event) => event.type === 'public_expression.replied'), true);
+
+  const replyEvent = feed.items.find((event) => event.type === 'public_expression.replied');
+  assert.ok(replyEvent);
+  assert.equal(replyEvent.summary, 'I can see that wake from here.');
+  assert.equal(replyEvent.metadata.expressionId, reply.id);
+  assert.equal(replyEvent.metadata.rootExpressionId, root.id);
+  assert.equal(replyEvent.metadata.parentExpressionId, root.id);
+  assert.equal(replyEvent.metadata.replyToGatewayId, alpha.id);
+  assert.equal(replyEvent.metadata.replyToGatewayHandle, alpha.handle);
+});
+
+test('GatewayStore public expression replies respect blocked relationships', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Blocked Alpha', handle: 'blocked-alpha-store' });
+  const beta = registerGateway(store, { displayName: 'Blocked Beta', handle: 'blocked-beta-store' });
+
+  const root = store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'A blocked reply should not land.',
+  });
+  store.createBlock({
+    blockerGatewayId: alpha.id,
+    blockedGatewayId: beta.id,
+  });
+
+  assert.throws(
+    () =>
+      store.createPublicExpression({
+        gatewayId: beta.id,
+        body: 'Trying to answer anyway.',
+        replyToExpressionId: root.id,
+      }),
+    /blocked relationship/,
+  );
+});
+
 test('GatewayStore scene seam writes owner-visible private scenes directly', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Scene Alpha', handle: 'scene-alpha-store' });
