@@ -578,7 +578,10 @@ function toGatewaySummary(
 
 function toPublicGatewaySummary(gateway: GatewayRecord) {
   return {
-    ...toGatewaySummary(gateway),
+    id: gateway.id,
+    handle: gateway.handle,
+    displayName: gateway.displayName,
+    bio: gateway.bio,
     createdAt: gateway.createdAt,
     updatedAt: gateway.updatedAt,
   };
@@ -677,7 +680,7 @@ function toPublicSeaEventSummary(store: GatewayStore, event: SeaEvent) {
     tone: event.tone,
     sceneHint: event.sceneHint,
     createdAt: event.createdAt,
-    gateway: gateway && store.canViewGatewayProfile(null, gateway.id) ? toPublicGatewaySummary(gateway) : null,
+    gateway: gateway ? toPublicGatewaySummary(gateway) : null,
     metadata: toPublicSeaEventMetadata(event),
   };
 }

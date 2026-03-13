@@ -780,6 +780,18 @@ const DEFAULT_LOCAL_OWNER_BIO = 'Stable local owner gateway for AquaClaw.';
 const DEFAULT_HOSTED_OWNER_HANDLE = 'hosted-owner';
 const DEFAULT_HOSTED_OWNER_DISPLAY_NAME = 'Hosted Owner';
 const DEFAULT_HOSTED_OWNER_BIO = 'Primary hosted owner gateway for AquaClaw.';
+const PUBLIC_OBSERVER_EVENT_TYPES = new Set([
+  'gateway.registered',
+  'gateway.profile_updated',
+  'invite.claimed',
+  'friend_request.sent',
+  'friend_request.accepted',
+  'friend_request.rejected',
+  'conversation.started',
+  'friendship.removed',
+  'encounter.recorded',
+  'encounter.updated',
+]);
 const DEFAULT_LOCAL_INSTALLATION_ID = 'local-installation';
 const DEFAULT_LOCAL_RUNTIME_ID = 'openclaw-local-runtime';
 const DEFAULT_LOCAL_RUNTIME_LABEL = 'Local OpenClaw Runtime';
@@ -1962,7 +1974,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
 
   listPublicGateways(input: ListPublicGatewaysInput = {}): GatewayPage {
     const visible = Array.from(this.gatewaysById.values())
-      .filter((gateway) => this.canViewGatewayProfile(null, gateway.id))
+      .filter((gateway) => !this.isOwnerGatewayId(gateway.id))
       .sort((a, b) => {
         const updatedAtComparison = b.updatedAt.localeCompare(a.updatedAt);
         if (updatedAtComparison !== 0) {
@@ -3622,25 +3634,40 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.areFriends(viewerGatewayId, primaryGatewayId) && this.hasGrantedFriendScope(primaryGatewayId, viewerGatewayId, 'profile.read');
   }
 
+  private isObserverVisibleGatewayId(gatewayId: string | null | undefined) {
+    return Boolean(gatewayId) && this.gatewaysById.has(gatewayId!) && !this.isOwnerGatewayId(gatewayId!);
+  }
+
+  private isPrimaryObserverSeaEvent(event: SeaEvent) {
+    return event.actorGatewayId === null || event.subjectGatewayId === null || event.subjectGatewayId === event.actorGatewayId;
+  }
+
   private isSeaEventVisiblePublicly(event: SeaEvent) {
     if (event.type === 'current.changed' || event.type === 'environment.changed') {
       return event.visibility === 'system';
     }
 
-    if (event.type !== 'gateway.registered' && event.type !== 'gateway.profile_updated') {
+    if (!PUBLIC_OBSERVER_EVENT_TYPES.has(event.type)) {
       return false;
     }
 
-    if (event.visibility !== 'public') {
+    if (!this.isPrimaryObserverSeaEvent(event)) {
+      return false;
+    }
+
+    const relatedGatewayIds = [event.actorGatewayId, event.subjectGatewayId, event.objectGatewayId].filter(
+      (value): value is string => Boolean(value),
+    );
+    if (relatedGatewayIds.some((gatewayId) => this.isOwnerGatewayId(gatewayId))) {
       return false;
     }
 
     const primaryGatewayId = this.seaEventPrimaryGatewayId(event);
-    if (!primaryGatewayId || !this.gatewaysById.has(primaryGatewayId)) {
+    if (!primaryGatewayId) {
       return false;
     }
 
-    return this.canViewGatewayProfile(null, primaryGatewayId);
+    return this.isObserverVisibleGatewayId(primaryGatewayId);
   }
 
   private gatewayEventVisibility(gatewayId: string | null | undefined): SeaEventVisibility {

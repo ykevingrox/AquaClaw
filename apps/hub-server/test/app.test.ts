@@ -315,7 +315,7 @@ test('public gateway profile can be fetched without auth', async () => {
   await app.close();
 });
 
-test('public aquarium endpoints expose only anonymous current, allowlisted public events, and public gateways', async () => {
+test('public aquarium endpoints expose anonymous sea state plus all non-host participants and observer-safe dynamics', async () => {
   const app = buildApp();
 
   const alpha = await registerGateway(app, {
@@ -416,10 +416,11 @@ test('public aquarium endpoints expose only anonymous current, allowlisted publi
   });
   assert.equal(gateways.statusCode, 200);
   assert.deepEqual(
-    gateways.json().data.items.map((item: { handle: string }) => item.handle),
-    ['alpha-public'],
+    gateways.json().data.items.map((item: { handle: string }) => item.handle).sort(),
+    ['alpha-public', 'beta-invite'],
   );
   assert.equal('status' in gateways.json().data.items[0], false);
+  assert.equal('visibility' in gateways.json().data.items[0], false);
 
   const feed = await app.inject({
     method: 'GET',
@@ -438,7 +439,7 @@ test('public aquarium endpoints expose only anonymous current, allowlisted publi
   assert.equal(itemTypes.has('gateway.profile_updated'), true);
   assert.equal(itemTypes.has('current.changed'), true);
   assert.equal(itemTypes.has('environment.changed'), true);
-  assert.equal(itemTypes.has('friend_request.sent'), false);
+  assert.equal(itemTypes.has('friend_request.sent'), true);
 
   const currentChanged = items.find((item) => item.type === 'current.changed');
   assert.ok(currentChanged);
@@ -462,7 +463,49 @@ test('public aquarium endpoints expose only anonymous current, allowlisted publi
   await app.close();
 });
 
-test('public aquarium stops exposing old public events after a gateway turns private', async () => {
+test('public aquarium hides the bootstrapped local host while still showing non-host participants', async () => {
+  const app = buildApp();
+
+  const hostBootstrap = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-local',
+    payload: {
+      handle: 'shore-host',
+      displayName: 'Shore Host',
+    },
+  });
+  assert.equal(hostBootstrap.statusCode, 201);
+
+  await registerGateway(app, {
+    displayName: 'Sea Claw',
+    handle: 'sea-claw',
+    visibility: 'invite_only',
+  });
+
+  const gateways = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/gateways',
+  });
+  assert.equal(gateways.statusCode, 200);
+  assert.deepEqual(
+    gateways.json().data.items.map((item: { handle: string }) => item.handle),
+    ['sea-claw'],
+  );
+
+  const feed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/feed',
+  });
+  assert.equal(feed.statusCode, 200);
+  assert.equal(
+    feed.json().data.items.some((item: { gateway: { handle: string } | null }) => item.gateway?.handle === 'shore-host'),
+    false,
+  );
+
+  await app.close();
+});
+
+test('public aquarium keeps non-host participants visible after a gateway turns private', async () => {
   const app = buildApp();
 
   const gateway = await registerGateway(app, {
@@ -510,7 +553,7 @@ test('public aquarium stops exposing old public events after a gateway turns pri
   assert.equal(afterFeed.statusCode, 200);
   assert.equal(
     afterFeed.json().data.items.some((item: { gateway: { handle: string } | null }) => item.gateway?.handle === 'turning-tide'),
-    false,
+    true,
   );
 
   const afterGateways = await app.inject({
@@ -520,8 +563,9 @@ test('public aquarium stops exposing old public events after a gateway turns pri
   assert.equal(afterGateways.statusCode, 200);
   assert.equal(
     afterGateways.json().data.items.some((item: { handle: string }) => item.handle === 'turning-tide'),
-    false,
+    true,
   );
+  assert.equal('visibility' in afterGateways.json().data.items[0], false);
 
   await app.close();
 });

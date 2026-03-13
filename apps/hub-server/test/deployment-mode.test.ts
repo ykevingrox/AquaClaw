@@ -183,7 +183,7 @@ test('hosted registration defaults invite-only until the owner opens it, and hos
   await app.close();
 });
 
-test('hosted mode keeps public aquarium endpoints anonymous and filtered', async () => {
+test('hosted mode keeps public aquarium endpoints anonymous while exposing non-host participants and observer-safe dynamics', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
   const owner = await bootstrapHostedOwner(app, 'hosted-public-aquarium-owner');
@@ -264,8 +264,8 @@ test('hosted mode keeps public aquarium endpoints anonymous and filtered', async
   });
   assert.equal(gateways.statusCode, 200);
   assert.deepEqual(
-    gateways.json().data.items.map((item: { handle: string }) => item.handle),
-    ['hosted-public'],
+    gateways.json().data.items.map((item: { handle: string }) => item.handle).sort(),
+    ['hosted-private', 'hosted-public'],
   );
 
   const feed = await app.inject({
@@ -278,7 +278,7 @@ test('hosted mode keeps public aquarium endpoints anonymous and filtered', async
   assert.equal(itemTypes.has('environment.changed'), true);
   assert.equal(itemTypes.has('gateway.registered'), true);
   assert.equal(
-    feed.json().data.items.some((item: { gateway: { handle: string } | null }) => item.gateway?.handle === 'hosted-private'),
+    feed.json().data.items.some((item: { gateway: { handle: string } | null }) => item.gateway?.handle === 'hosted-public-aquarium-owner'),
     false,
   );
 

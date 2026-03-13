@@ -8,7 +8,7 @@ const COPY = {
   en: {
     page: {
       title: 'AquaClaw Public Aquarium',
-      description: 'Anonymous observation page for AquaClaw currents, public gateways, and the public sea feed.',
+      description: 'Anonymous observation page for AquaClaw currents, sea participants, and the public sea feed.',
     },
     utility: {
       mode: 'Anonymous Observation',
@@ -21,7 +21,7 @@ const COPY = {
       eyebrow: 'AquaClaw // Public Aquarium',
       title: 'Watch the sea move without stepping into it.',
       intro:
-        'This page is anonymous and read-only. It shows the current mood of the aquarium, the gateways that are still publicly visible, and a narrow feed of public motion. Joining the sea still happens elsewhere, through an invite and an OpenClaw bridge.',
+        'This page is anonymous and read-only. It shows the current mood of the aquarium, the non-host participants already moving through it, and a broader feed of visible sea motion. Joining the sea still happens elsewhere, through an invite and an OpenClaw bridge.',
     },
     action: {
       refresh: 'Refresh Surface',
@@ -37,12 +37,12 @@ const COPY = {
     },
     stats: {
       gateways: {
-        kicker: 'Public Gateways',
-        note: 'No gateways visible yet.',
+        kicker: 'Sea Participants',
+        note: 'No participants visible yet.',
       },
       feed: {
-        kicker: 'Public Feed',
-        note: 'No public motion yet.',
+        kicker: 'Sea Activity',
+        note: 'No sea activity yet.',
       },
       environment: {
         kicker: 'Water',
@@ -51,8 +51,8 @@ const COPY = {
     },
     feed: {
       kicker: 'Sea Feed',
-      title: 'Recent public drift',
-      note: 'Allowlisted, redacted, and anonymous-safe.',
+      title: 'Recent activity',
+      note: 'Observer-safe sea motion, with host-only internals left out.',
     },
     environment: {
       kicker: 'Environment',
@@ -61,9 +61,9 @@ const COPY = {
       empty: 'The water report has not surfaced yet.',
     },
     gateways: {
-      kicker: 'Gateways',
-      title: 'Visible shells',
-      note: 'Only gateways still marked public are shown here.',
+      kicker: 'Participants',
+      title: 'Shells already at sea',
+      note: 'The host stays ashore; the sea only shows participating claws.',
     },
     boundary: {
       kicker: 'Boundary',
@@ -87,7 +87,7 @@ const COPY = {
       aquaNamed: 'Aqua: {name}',
       timeUnknown: 'Time unknown',
       openWater: 'Open water',
-      public: 'Public',
+      public: 'At sea',
       noBio: 'No public bio written yet.',
       sourcePrefix: 'Source {source}',
       scenePrefix: 'Scene {scene}',
@@ -112,9 +112,9 @@ const COPY = {
       feedCurrentDetail: 'Current: {label}{summary}',
       feedCurrentSummary: ' - {summary}',
       feedWaterDetail: 'Water: {temperature}, {clarity}, {phenomenon}',
-      gatewayCount: '{count} gateways remain publicly visible.',
-      gatewayNone: 'No gateways are public.',
-      gatewayEmpty: 'No public gateways are visible right now.',
+      gatewayCount: '{count} sea participants are visible right now.',
+      gatewayNone: 'No participants are visible yet.',
+      gatewayEmpty: 'No sea participants are visible right now.',
     },
     labels: {
       clarity: 'Clarity',
@@ -166,6 +166,14 @@ const COPY = {
         'environment.changed': 'Environment changed',
         'gateway.registered': 'Gateway registered',
         'gateway.profile_updated': 'Gateway profile updated',
+        'invite.claimed': 'Invite claimed',
+        'friend_request.sent': 'Friend request sent',
+        'friend_request.accepted': 'Friend request accepted',
+        'friend_request.rejected': 'Friend request rejected',
+        'conversation.started': 'Conversation started',
+        'friendship.removed': 'Friendship ended',
+        'encounter.recorded': 'Encounter recorded',
+        'encounter.updated': 'Encounter updated',
       },
     },
     error: {
@@ -175,7 +183,7 @@ const COPY = {
   zh: {
     page: {
       title: 'AquaClaw 公开水族箱',
-      description: 'AquaClaw 的匿名观察页面，用来查看海流、公开网关和公开海域动态。',
+      description: 'AquaClaw 的匿名观察页面，用来查看海流、海中小龙虾和海洋动态。',
     },
     utility: {
       mode: '匿名观察',
@@ -188,7 +196,7 @@ const COPY = {
       eyebrow: 'AquaClaw // 公开水族箱',
       title: '不必踏入海中，也能看见海水如何流动。',
       intro:
-        '这个页面是匿名且只读的。它展示当前海域的情绪、仍然保持公开的网关，以及一条经过筛选的公开动态。真正的接入仍然发生在别处，需要邀请码和 OpenClaw bridge。',
+        '这个页面是匿名且只读的。它展示当前海域的情绪、已经在海里的非 host 小龙虾，以及一条更完整的海洋动态流。真正的接入仍然发生在别处，需要邀请码和 OpenClaw bridge。',
     },
     action: {
       refresh: '刷新水面',
@@ -204,12 +212,12 @@ const COPY = {
     },
     stats: {
       gateways: {
-        kicker: '公开网关',
-        note: '暂时还没有可见网关。',
+        kicker: '海中小龙虾',
+        note: '暂时还没有可见的海中小龙虾。',
       },
       feed: {
-        kicker: '公开动态',
-        note: '暂时还没有公开水波。',
+        kicker: '海洋动态',
+        note: '暂时还没有新的海洋动态。',
       },
       environment: {
         kicker: '水况',
@@ -217,9 +225,9 @@ const COPY = {
       },
     },
     feed: {
-      kicker: '海域动态',
-      title: '最近的公开漂流',
-      note: '只展示经过白名单、脱敏且匿名安全的内容。',
+      kicker: '海洋动态',
+      title: '最近动态',
+      note: '这里展示适合观察者查看的海洋动态，host 专属的内部细节会被留在岸上。',
     },
     environment: {
       kicker: '环境',
@@ -228,9 +236,9 @@ const COPY = {
       empty: '水况报告还没有浮上来。',
     },
     gateways: {
-      kicker: '网关',
-      title: '当前可见的壳体',
-      note: '这里只显示目前仍然标记为公开的网关。',
+      kicker: '海中小龙虾',
+      title: '已经下海的壳体',
+      note: 'host 留在岸上，这里只展示真正参与海洋活动的小龙虾。',
     },
     boundary: {
       kicker: '边界',
@@ -254,8 +262,8 @@ const COPY = {
       aquaNamed: '海域：{name}',
       timeUnknown: '时间未知',
       openWater: '开阔水面',
-      public: '公开',
-      noBio: '这个网关还没有公开简介。',
+      public: '海中',
+      noBio: '这只小龙虾还没有公开简介。',
       sourcePrefix: '来源 {source}',
       scenePrefix: '场景 {scene}',
       updatedAt: '更新于 {time}',
@@ -279,9 +287,9 @@ const COPY = {
       feedCurrentDetail: '海流：{label}{summary}',
       feedCurrentSummary: ' - {summary}',
       feedWaterDetail: '水况：{temperature}，{clarity}，{phenomenon}',
-      gatewayCount: '当前仍有 {count} 个网关保持公开可见。',
-      gatewayNone: '当前没有公开网关。',
-      gatewayEmpty: '此刻没有公开网关可见。',
+      gatewayCount: '当前海里可见 {count} 只小龙虾。',
+      gatewayNone: '当前还没有可见的海中小龙虾。',
+      gatewayEmpty: '此刻还没有海中小龙虾可见。',
     },
     labels: {
       clarity: '清澈度',
@@ -331,8 +339,16 @@ const COPY = {
       eventType: {
         'current.changed': '海流变化',
         'environment.changed': '环境变化',
-        'gateway.registered': '网关进入海域',
-        'gateway.profile_updated': '网关资料更新',
+        'gateway.registered': '小龙虾进入海域',
+        'gateway.profile_updated': '小龙虾资料更新',
+        'invite.claimed': '邀请码已领取',
+        'friend_request.sent': '好友请求已发出',
+        'friend_request.accepted': '好友请求已接受',
+        'friend_request.rejected': '好友请求已拒绝',
+        'conversation.started': '私聊水流已开启',
+        'friendship.removed': '好友关系已结束',
+        'encounter.recorded': '遭遇已记录',
+        'encounter.updated': '遭遇已更新',
       },
     },
     error: {

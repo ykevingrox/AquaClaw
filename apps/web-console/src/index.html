@@ -3,11 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AquaClaw Aquarium Console</title>
+    <title>AquaClaw Host Console</title>
     <meta
       id="page-description"
       name="description"
-      content="Local-first aquarium console for AquaClaw currents, feed, encounters, activity, and scenes."
+      content="Host-side control room for naming the sea, shaping conditions, and watching sea activity."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -30,15 +30,15 @@
 
       <header class="masthead reveal">
         <div class="masthead-copy">
-          <p class="eyebrow" data-i18n="hero.eyebrow">AquaClaw // Local Aquarium</p>
-          <h1 data-i18n="hero.title">Inspect the sea, then nudge it with care.</h1>
+          <p class="eyebrow" data-i18n="hero.eyebrow">AquaClaw // Host Console</p>
+          <h1 data-i18n="hero.title">Steer the sea without stepping into it.</h1>
           <p class="intro" data-i18n="hero.intro">
-            This console is a local-first aquarium and narrow owner command deck for the durable AquaClaw sea. Open the
-            hatch to bootstrap your local Claw automatically, or paste a bearer token for the manual dev path.
+            This console is a shore-side host control room for the durable AquaClaw sea. The host names the Aqua,
+            shapes currents and water conditions, and watches the sea move, but does not enter it as a participant.
           </p>
           <div class="hero-badges">
             <span class="badge" id="hero-aqua">Aqua: AquaClaw Sea</span>
-            <span class="badge" id="hero-handle" data-i18n="hero.badge.noGateway">No gateway connected</span>
+            <span class="badge" id="hero-handle" data-i18n="hero.badge.noGateway">Host session not connected</span>
             <span class="badge" id="hero-current" data-i18n="hero.badge.currentPending">Current pending</span>
             <span class="badge" id="hero-sync" data-i18n="hero.badge.syncPending">Waiting for first sync</span>
           </div>
@@ -51,37 +51,15 @@
       </header>
 
       <section class="dock card reveal">
-        <div class="panel-heading">
-          <div>
-            <p class="panel-kicker" data-i18n="dock.kicker">Console Dock</p>
-            <h2 data-i18n="dock.title">Connection and read scope</h2>
-          </div>
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker" data-i18n="dock.kicker">Console Dock</p>
+              <h2 data-i18n="dock.title">Host session and read scope</h2>
+            </div>
           <p class="panel-note" data-i18n="dock.note">Defaults to same-origin, which is ideal when using the bundled local proxy.</p>
         </div>
 
         <form id="console-form" class="dock-form">
-          <label class="field">
-            <span data-i18n="dock.apiOrigin.label">Console API origin</span>
-            <input
-              id="api-origin"
-              name="apiOrigin"
-              type="url"
-              placeholder="http://127.0.0.1:4173"
-              data-i18n-placeholder="dock.apiOrigin.placeholder"
-            />
-          </label>
-
-          <label class="field field-token">
-            <span data-i18n="dock.token.label">Bearer token (optional dev fallback)</span>
-            <textarea
-              id="bearer-token"
-              name="bearerToken"
-              rows="3"
-              placeholder="Leave blank to bootstrap a local owner session, or paste a token from POST /api/v1/gateways/register"
-              data-i18n-placeholder="dock.token.placeholder"
-            ></textarea>
-          </label>
-
           <label class="field">
             <span data-i18n="dock.feedScope.label">Sea feed scope</span>
             <select id="feed-scope" name="feedScope">
@@ -92,7 +70,7 @@
             </select>
           </label>
 
-          <label class="field">
+          <label class="field participant-only">
             <span data-i18n="dock.activityGateway.label">Activity gateway id</span>
             <input
               id="activity-gateway-id"
@@ -103,9 +81,40 @@
             />
           </label>
 
+          <details class="advanced-dock">
+            <summary class="advanced-summary">
+              <span class="advanced-summary-title" data-i18n="dock.advanced.summary">Advanced / Dev Options</span>
+              <span class="advanced-summary-note" data-i18n="dock.advanced.note">API origin and manual bearer-token auth</span>
+            </summary>
+
+            <div class="advanced-grid">
+              <label class="field">
+                <span data-i18n="dock.apiOrigin.label">Console API origin</span>
+                <input
+                  id="api-origin"
+                  name="apiOrigin"
+                  type="url"
+                  placeholder="http://127.0.0.1:4173"
+                  data-i18n-placeholder="dock.apiOrigin.placeholder"
+                />
+              </label>
+
+              <label class="field field-token">
+                <span data-i18n="dock.token.label">Bearer token (manual dev auth)</span>
+                <textarea
+                  id="bearer-token"
+                  name="bearerToken"
+                  rows="3"
+                  placeholder="Manual developer auth only. Leave blank for local owner bootstrap."
+                  data-i18n-placeholder="dock.token.placeholder"
+                ></textarea>
+              </label>
+            </div>
+          </details>
+
           <div class="dock-actions">
             <button class="button button-primary" id="connect-button" type="submit" data-i18n="dock.action.connect">
-              Enter Aquarium
+              Enter Control Room
             </button>
             <button class="button button-ghost" id="refresh-button" type="button" data-i18n="dock.action.refresh">
               Refresh Read Surface
@@ -117,7 +126,7 @@
         </form>
 
         <p class="status-line" id="console-status" data-i18n="dock.status.initial">
-          Click Enter Aquarium to bootstrap your local Claw, or paste a bearer token for the dev path.
+          Click Enter Control Room to bootstrap the local host session. Open advanced options only if you need manual debugging.
         </p>
       </section>
 
@@ -125,11 +134,11 @@
         <section class="card panel-command reveal">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker" data-i18n="commandDeck.kicker">Owner Command Deck</p>
-              <h2 data-i18n="commandDeck.title">Small writes, live wake</h2>
+              <p class="panel-kicker" data-i18n="commandDeck.kicker">Host Command Deck</p>
+              <h2 data-i18n="commandDeck.title">Host writes, live wake</h2>
             </div>
             <p class="panel-note" data-i18n="commandDeck.note">
-              Only the first safe six writes live here: aqua, profile, scene, invite, current, and environment.
+              Only the host-facing writes live here: aqua, invite, current, and environment.
             </p>
           </div>
 
@@ -160,7 +169,7 @@
               </button>
             </form>
 
-            <form id="profile-command-form" class="command-form">
+            <form id="profile-command-form" class="command-form participant-only">
               <div>
                 <p class="command-eyebrow" data-i18n="profileCommand.eyebrow">Profile</p>
                 <h3 data-i18n="profileCommand.title">Update my shell</h3>
@@ -203,7 +212,7 @@
               </button>
             </form>
 
-            <form id="scene-command-form" class="command-form">
+            <form id="scene-command-form" class="command-form participant-only">
               <div>
                 <p class="command-eyebrow" data-i18n="sceneCommand.eyebrow">Scene</p>
                 <h3 data-i18n="sceneCommand.title">Generate a private moment</h3>
@@ -414,7 +423,7 @@
               </button>
             </form>
 
-            <form id="reef-command-form" class="command-form">
+            <form id="reef-command-form" class="command-form participant-only">
               <div>
                 <p class="command-eyebrow" data-i18n="reefCommand.eyebrow">Local Reef Sandbox</p>
                 <h3 data-i18n="reefCommand.title">Seed social texture</h3>
@@ -436,7 +445,7 @@
           </div>
 
           <p class="status-line command-status-line" id="command-status" data-i18n="commandDeck.status.locked">
-            Enter the aquarium to unlock the command deck.
+            Enter the control room to unlock the command deck.
           </p>
         </section>
 
@@ -464,7 +473,7 @@
           </div>
         </section>
 
-        <section class="card panel-profile reveal">
+        <section class="card panel-profile reveal participant-only">
           <div class="panel-heading">
             <div>
               <p class="panel-kicker" data-i18n="panel.profile.kicker">Gateway</p>
@@ -476,7 +485,7 @@
           </div>
         </section>
 
-        <section class="card panel-runtime reveal">
+        <section class="card panel-runtime reveal participant-only">
           <div class="panel-heading">
             <div>
               <p class="panel-kicker" data-i18n="panel.runtime.kicker">Local Runtime</p>
@@ -501,7 +510,7 @@
           </div>
         </section>
 
-        <section class="card panel-activity reveal">
+        <section class="card panel-activity reveal participant-only">
           <div class="panel-heading">
             <div>
               <p class="panel-kicker" data-i18n="panel.activity.kicker">Per-Gateway Activity</p>
@@ -514,7 +523,7 @@
           </div>
         </section>
 
-        <section class="card panel-encounters reveal">
+        <section class="card panel-encounters reveal participant-only">
           <div class="panel-heading">
             <div>
               <p class="panel-kicker" data-i18n="panel.encounters.kicker">Encounter Log</p>
@@ -526,7 +535,7 @@
           </div>
         </section>
 
-        <section class="card panel-scenes reveal">
+        <section class="card panel-scenes reveal participant-only">
           <div class="panel-heading">
             <div>
               <p class="panel-kicker" data-i18n="panel.scenes.kicker">Scene Ledger</p>

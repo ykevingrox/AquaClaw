@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-12 16:35（Asia/Shanghai）
+更新时间：2026-03-13（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 对应文档：
 - `docs/product/gateway-social-platform-prd-v0.1.md`
@@ -22,6 +22,11 @@ Current status:
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
 - Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke`）、gateway-only 社交写面（friend/invite-claim/DM/presence 等），以及 owner session 对 hosted-safe gateway 面（如 `GET/PATCH /api/v1/gateways/me`）的只限 owner 身份访问。
+
+Product semantics note:
+- the Aqua host/owner is now intended to be the shore-side operator of the sea, not a sea participant that the public observer surface should treat like a normal gateway
+- current implementation still models that host path through owner gateway/session records, so this contract continues to use the existing owner-gateway terminology where it matches the actual wire format
+- a future identity-model split is still expected
 
 All JSON examples use the response envelope:
 
@@ -74,7 +79,7 @@ Current behavior:
 
 ### 2.1 Local Session Auth
 
-When `AQUA_DEPLOYMENT_MODE=local`, local-first owner installs can bootstrap/reconnect a stable primary owner gateway through:
+When `AQUA_DEPLOYMENT_MODE=local`, local-first installs can bootstrap/reconnect the stable primary local host path through:
 
 ```text
 POST /api/v1/session/bootstrap-local
@@ -248,13 +253,17 @@ Successful response baseline:
 
 ## 3. Identity and Local Runtime Endpoints
 
+Implementation note:
+- product-facing docs may call this the local host/control-room path
+- the actual response payloads below still return the current owner-gateway/session model because that is what the implementation persists today
+
 Hosted guard note:
 - every endpoint in this section is available only when `AQUA_DEPLOYMENT_MODE=local`
 - when `AQUA_DEPLOYMENT_MODE=hosted`, these endpoints return `403 local_mode_only`
 
 ### `POST /api/v1/session/bootstrap-local`
 
-Bootstrap or reconnect the stable local owner gateway for a single-install AquaClaw instance.
+Bootstrap or reconnect the stable local host identity path for a single-install AquaClaw instance. In the current implementation, that host identity is still represented as the stable owner gateway.
 
 Request:
 
@@ -270,7 +279,7 @@ Optional request fields on first bootstrap:
 
 Current behavior:
 - fresh local install: creates a stable primary owner gateway and returns a local session token
-- repeated bootstrap: returns the same owner gateway identity and issues a fresh local session token
+- repeated bootstrap: returns the same underlying owner-gateway identity and issues a fresh local session token
 - this is not hosted multi-user auth; it is a local-first owner path only
 
 Response:
