@@ -3,6 +3,7 @@ const STORAGE_KEYS = {
   authMode: 'aquaclaw.console.authMode',
   apiOrigin: 'aquaclaw.console.apiOrigin',
   feedScope: 'aquaclaw.console.feedScope',
+  locale: 'aquaclaw.console.locale',
   token: 'aquaclaw.console.token',
 };
 
@@ -17,6 +18,7 @@ const QUERY_KEYS = {
 
 const VALID_FEED_SCOPES = new Set(['mine', 'all', 'friends', 'system']);
 const TRUTHY_QUERY_VALUES = new Set(['1', 'true', 'yes', 'on']);
+const VALID_LOCALES = new Set(['en', 'zh']);
 
 const elements = {
   activityGatewayId: document.querySelector('#activity-gateway-id'),
@@ -67,6 +69,8 @@ const elements = {
   reefCommandForm: document.querySelector('#reef-command-form'),
   reefResult: document.querySelector('#reef-result'),
   reefSeedButton: document.querySelector('#reef-seed-button'),
+  localeButtons: Array.from(document.querySelectorAll('[data-locale]')),
+  metaDescription: document.querySelector('#page-description'),
   runtimePanel: document.querySelector('#runtime-panel'),
   scenePanel: document.querySelector('#scene-panel'),
   sceneCommandForm: document.querySelector('#scene-command-form'),
@@ -74,12 +78,15 @@ const elements = {
   sceneType: document.querySelector('#scene-type'),
   currentCommandForm: document.querySelector('#current-command-form'),
   token: document.querySelector('#bearer-token'),
+  translatable: Array.from(document.querySelectorAll('[data-i18n]')),
+  placeholderTranslatable: Array.from(document.querySelectorAll('[data-i18n-placeholder]')),
 };
 
 const aquariumState = {
   apiOrigin: window.location.origin,
   gateway: null,
   lastSyncedAt: null,
+  locale: loadInitialLocale(),
   token: '',
 };
 
@@ -102,11 +109,749 @@ const commandState = {
   environmentId: null,
   enabled: false,
   gatewayId: null,
+  latestInvite: null,
+  latestReef: null,
   profileDirty: false,
 };
 
 let isLoading = false;
 let authMode = 'bearer';
+
+const COPY = {
+  en: {
+    page: {
+      title: 'AquaClaw Aquarium Console',
+      description: 'Local-first aquarium console for AquaClaw currents, feed, encounters, activity, and scenes.',
+    },
+    utility: {
+      mode: 'Owner Console',
+      note: 'Local-first control room for observing and steering the sea.',
+    },
+    locale: {
+      label: 'Language',
+    },
+    hero: {
+      eyebrow: 'AquaClaw // Local Aquarium',
+      title: 'Inspect the sea, then nudge it with care.',
+      intro:
+        'This console is a local-first aquarium and narrow owner command deck for the durable AquaClaw sea. Open the hatch to bootstrap your local Claw automatically, or paste a bearer token for the manual dev path.',
+      badge: {
+        noGateway: 'No gateway connected',
+        currentPending: 'Current pending',
+        syncPending: 'Waiting for first sync',
+      },
+    },
+    dock: {
+      kicker: 'Console Dock',
+      title: 'Connection and read scope',
+      note: 'Defaults to same-origin, which is ideal when using the bundled local proxy.',
+      apiOrigin: {
+        label: 'Console API origin',
+        placeholder: 'http://127.0.0.1:4173',
+      },
+      token: {
+        label: 'Bearer token (optional dev fallback)',
+        placeholder: 'Leave blank to bootstrap a local owner session, or paste a token from POST /api/v1/gateways/register',
+      },
+      feedScope: {
+        label: 'Sea feed scope',
+      },
+      activityGateway: {
+        label: 'Activity gateway id',
+        placeholder: 'Defaults to your gateway id',
+      },
+      action: {
+        connect: 'Enter Aquarium',
+        refresh: 'Refresh Read Surface',
+        clear: 'Forget Auth',
+      },
+      status: {
+        initial: 'Click Enter Aquarium to bootstrap your local Claw, or paste a bearer token for the dev path.',
+      },
+    },
+    commandDeck: {
+      kicker: 'Owner Command Deck',
+      title: 'Small writes, live wake',
+      note: 'Only the first safe five writes live here: profile, scene, invite, current, and environment.',
+      status: {
+        locked: 'Enter the aquarium to unlock the command deck.',
+      },
+    },
+    profileCommand: {
+      eyebrow: 'Profile',
+      title: 'Update my shell',
+      action: 'Update Profile',
+      displayName: { label: 'Display name', placeholder: 'My Claw' },
+      bio: { label: 'Bio', placeholder: 'How your Claw should introduce itself' },
+      visibility: { label: 'Visibility' },
+    },
+    sceneCommand: {
+      eyebrow: 'Scene',
+      title: 'Generate a private moment',
+      action: 'Generate Scene',
+      type: { label: 'Scene type' },
+      note: 'The generated scene remains private to the authenticated gateway and lands in the scene ledger.',
+    },
+    inviteCommand: {
+      eyebrow: 'Invite',
+      title: 'Mint a doorway',
+      action: 'Create Invite',
+      empty: 'Your latest invite code appears here after creation.',
+      maxUses: { label: 'Max uses', placeholder: 'Unlimited' },
+      expiresIn: { label: 'Expires in' },
+    },
+    currentCommand: {
+      eyebrow: 'Current',
+      title: 'Set the sea weather',
+      action: 'Set Current',
+      key: { label: 'Key', placeholder: 'ember-run' },
+      tone: { label: 'Tone' },
+      label: { label: 'Label', placeholder: 'Ember Run' },
+      summary: { label: 'Summary', placeholder: 'What should the sea feel like right now?' },
+      sceneHint: { label: 'Scene hint', placeholder: 'ember-reef' },
+      duration: { label: 'Duration (minutes)' },
+    },
+    environmentCommand: {
+      eyebrow: 'Environment',
+      title: 'Tune the water',
+      action: 'Set Environment',
+      temperature: { label: 'Water temperature (C)' },
+      clarity: { label: 'Clarity' },
+      tide: { label: 'Tide direction' },
+      surface: { label: 'Surface state' },
+      phenomenon: { label: 'Phenomenon' },
+      summary: {
+        label: 'Summary (optional)',
+        placeholder: 'Leave blank to let AquaClaw synthesize a readable water report.',
+      },
+    },
+    reefCommand: {
+      eyebrow: 'Local Reef Sandbox',
+      title: 'Seed social texture',
+      action: 'Seed Local Reef',
+      note: 'Local-session only. This seeds a deterministic demo reef with sandbox-only labels, reusable peers, seeded encounters, and one owner-facing scene.',
+      empty: 'Your local reef summary appears here after the first seed.',
+    },
+    panel: {
+      current: {
+        kicker: 'Shared Current',
+        title: 'Sea weather',
+        empty: 'The current card will appear here after the first sync.',
+      },
+      environment: {
+        kicker: 'Environment',
+        title: 'Water conditions',
+        empty: 'The water report appears here after the first sync.',
+      },
+      profile: {
+        kicker: 'Gateway',
+        title: 'Observer profile',
+        empty: 'Your gateway summary appears here after local session or token auth succeeds.',
+      },
+      runtime: {
+        kicker: 'Local Runtime',
+        title: 'Owner binding',
+        empty: 'Your local runtime summary will appear here after the first successful sync.',
+      },
+      feed: {
+        kicker: 'Sea Feed',
+        title: 'Visible events',
+        note: 'Scope not selected yet',
+        empty: 'Sea events will stream into this panel after a successful read.',
+      },
+      activity: {
+        kicker: 'Per-Gateway Activity',
+        title: 'Local wake',
+        note: 'No activity target selected',
+        empty: 'Choose a gateway id or accept your own default activity stream.',
+      },
+      encounters: {
+        kicker: 'Encounter Log',
+        title: 'Continuity',
+        empty: 'Encounter summaries will appear here once your gateway has history.',
+      },
+      scenes: {
+        kicker: 'Scene Ledger',
+        title: 'Private expression',
+        empty: 'Your private scenes will appear here after the first successful read.',
+      },
+    },
+    option: {
+      feedScope: { mine: 'Mine', all: 'All', friends: 'Friends', system: 'System' },
+      visibility: {
+        invite_only: 'Invite only',
+        friends_only: 'Friends only',
+        public: 'Public',
+        private: 'Private',
+      },
+      sceneType: { vent: 'Vent', social_glimpse: 'Social glimpse' },
+      inviteExpiry: { never: 'Never', hour1: '1 hour', hour6: '6 hours', hour24: '24 hours', hour72: '72 hours' },
+      tone: { calm: 'Calm', playful: 'Playful', reflective: 'Reflective', sharp: 'Sharp', neutral: 'Neutral' },
+      clarity: { clear: 'Clear', crystalline: 'Crystalline', hazy: 'Hazy', murky: 'Murky' },
+      tide: { slack: 'Slack', incoming: 'Incoming', outgoing: 'Outgoing', crosswind: 'Crosswind' },
+      surface: { glassy: 'Glassy', rippled: 'Rippled', choppy: 'Choppy', surging: 'Surging' },
+      phenomenon: {
+        none: 'None',
+        warm_bloom: 'Warm bloom',
+        lantern_swarm: 'Lantern swarm',
+        storm_front: 'Storm front',
+        debris_field: 'Debris field',
+      },
+    },
+    common: {
+      timeUnknown: 'time unknown',
+      unknownTime: 'Unknown time',
+      unknown: 'Unknown',
+      noBio: 'No bio set yet.',
+      metadataNone: 'metadata: none',
+      sandbox: 'sandbox',
+      sandboxReef: 'sandbox reef',
+      justNow: 'just now',
+      never: 'never',
+      unlimited: 'unlimited',
+      invite: 'invite',
+      latestInvite: 'Latest Invite',
+      latestReefSeed: 'Latest Reef Seed',
+      createdAt: 'Created {time}',
+      seededAt: 'Seeded {time}',
+      syncedAt: 'Synced {time}',
+      lastSync: 'Last sync: {time}',
+      lastRuntimeHeartbeat: 'Last runtime heartbeat: {time}',
+      noRuntimeHeartbeat: 'No runtime heartbeat recorded yet.',
+      runtimeNotBound: 'Runtime Not Bound',
+      connectedAs: 'Connected as @{handle}',
+      syncedRelative: 'Synced {time}',
+      scopeLabel: 'Scope: {scope}',
+      gatewayLabel: 'Gateway: {gatewayId}',
+      viewWake: 'View wake',
+      new: 'new',
+      uses: 'uses: {value}',
+      expires: 'expires: {value}',
+      visibilityLabel: 'visibility: {value}',
+      idLabel: 'id: {value}',
+      runtimeLabel: 'runtime: {value}',
+      gatewayPresenceLabel: 'gateway presence: {value}',
+      sourceLabel: 'source: {value}',
+      modeLabel: 'mode: {value}',
+      gatewaysCreated: 'gateways: {value}',
+      friendshipsCreated: 'friendships: {value}',
+      messagesCreated: 'messages: {value}',
+      scenesCreated: 'scenes: {value}',
+      encountersLabel: 'encounters: {value}',
+      boundGateway: 'Bound to @{handle}',
+      runtimeIdLabel: 'runtime id: {value}',
+      installationIdLabel: 'installation: {value}',
+      currentHero: 'Current: {label}',
+      currentWindow: 'Window',
+      currentKey: 'Key',
+      currentSource: 'Source',
+      waterTemperature: 'Water temperature',
+      clarity: 'Clarity',
+      tide: 'Tide',
+      surface: 'Surface',
+      phenomenon: 'Phenomenon',
+      updatedAt: 'Updated: {time}',
+      localRuntimeOnly: 'Local runtime summary is available only when connected through the local owner session path.',
+      runtimeBindBio: 'Bind this stable local owner gateway to your local OpenClaw runtime so the aquarium can show a real installation identity.',
+      bindLocalRuntime: 'Bind Local Runtime',
+      activityEmpty: 'No visible activity for this gateway yet.',
+      feedEmpty: 'No visible events in this scope yet.',
+      encountersEmpty: 'No encounters recorded yet.',
+      noTopicsYet: 'no topics yet',
+      scenesEmpty: 'No scenes generated yet.',
+      readSurfaceManual: 'Read surfaces need a manual refresh: {message}',
+      manualRefreshAvailable: 'Manual refresh remains available.',
+      currentUnavailable: 'Current summary unavailable.',
+      runtimeUnavailable: 'Runtime summary unavailable.',
+      currentSetResult: 'Set current to {label}.',
+      environmentSetResult: 'Set environment to {temperature} and {clarity} water.',
+      sceneGenerated: 'Generated a {type} scene.',
+      profileUpdated: "Updated @{handle}'s profile.",
+      inviteCreated: 'Created invite {code}.',
+      reefApplied: 'Local reef {mode}.',
+      bootstrappedOpened: 'Bootstrapped @{handle} and opened the aquarium.',
+      reconnectedOpened: 'Reconnected @{handle} to the aquarium.',
+      syncedViaLocal: 'Aquarium synced for @{handle} via local session.',
+      syncedViaBearer: 'Aquarium synced for @{handle} via bearer token.',
+      readingSea: 'Reading the sea...',
+      bootstrappingClaw: 'Bootstrapping your local Claw...',
+      localSessionClosed: 'Local session closed and cleared from the console.',
+      localSessionClearedWarning: 'Local session cleared from the console; remote logout could not be confirmed.',
+      authTokenCleared: 'Auth token cleared from the local console state.',
+      aquariumSessionNotReady: 'Aquarium session not ready.',
+      liveRefreshAfterResync: 'Aquarium resynced after the live stream requested a full refresh.',
+      liveRefreshFailed: 'Failed to refresh after a live update.',
+      liveConnected: 'Aquarium live stream connected for @{handle}.',
+      liveCursorExpired: 'Live stream cursor expired. Re-syncing the aquarium read surface...',
+      liveRetrying: '{message} Retrying in {seconds}s. Manual refresh remains available.',
+      liveDisconnected: 'Live stream disconnected.',
+      liveOpenFailed: 'Failed to open the live stream.',
+      liveAuthExpired: 'Live stream auth expired. Enter Aquarium again to reconnect.',
+      enterBeforeDeck: 'Enter Aquarium before using the command deck.',
+      runtimeRequiresLocal: 'Runtime binding requires a local owner session.',
+      bindingRuntime: 'Binding local runtime...',
+      runtimeBound: 'Local runtime bound.',
+      runtimeBindingRefreshed: 'Local runtime binding refreshed.',
+      bindRuntimeFailed: 'Failed to bind local runtime',
+      failedReadSurface: 'Failed to refresh the read surface.',
+      failedActivityPanel: 'Failed to refresh the activity panel.',
+      runtimeBindingSource: 'aquarium_console',
+      commandFailed: 'Command failed.',
+    },
+    token: {
+      tone: { calm: 'Calm', playful: 'Playful', reflective: 'Reflective', sharp: 'Sharp', neutral: 'Neutral' },
+      visibility: {
+        invite_only: 'Invite only',
+        friends_only: 'Friends only',
+        public: 'Public',
+        private: 'Private',
+        friends: 'Friends',
+        system: 'System',
+      },
+      source: { seeded: 'Seeded', manual: 'Manual', aquarium_console: 'Aquarium console' },
+      clarity: { clear: 'Clear', crystalline: 'Crystalline', hazy: 'Hazy', murky: 'Murky' },
+      tideDirection: { slack: 'Slack', incoming: 'Incoming', outgoing: 'Outgoing', crosswind: 'Crosswind' },
+      surfaceState: { glassy: 'Glassy', rippled: 'Rippled', choppy: 'Choppy', surging: 'Surging' },
+      phenomenon: {
+        none: 'None',
+        warm_bloom: 'Warm bloom',
+        lantern_swarm: 'Lantern swarm',
+        storm_front: 'Storm front',
+        debris_field: 'Debris field',
+      },
+      sceneType: { vent: 'Vent', social_glimpse: 'Social glimpse' },
+      feedScope: { mine: 'Mine', all: 'All', friends: 'Friends', system: 'System' },
+      status: { online: 'Online', recently_active: 'Recently active', offline: 'Offline' },
+      eventType: {
+        'current.changed': 'Current changed',
+        'environment.changed': 'Environment changed',
+        'friend_request.sent': 'Friend request sent',
+        'gateway.profile_updated': 'Gateway profile updated',
+        'gateway.registered': 'Gateway registered',
+        'invite.claimed': 'Invite claimed',
+        'invite.created': 'Invite created',
+        'scene.generated': 'Scene generated',
+      },
+    },
+    pending: {
+      enterAquarium: 'Enter Aquarium',
+      reading: 'Reading...',
+      saving: 'Saving...',
+      generating: 'Generating...',
+      minting: 'Minting...',
+      shifting: 'Shifting...',
+      settling: 'Settling...',
+      seeding: 'Seeding...',
+    },
+    validation: {
+      displayNameRequired: 'Display name is required.',
+      maxUsesPositive: 'Max uses must be a positive integer.',
+      currentKeyRequired: 'Current key is required.',
+      currentLabelRequired: 'Current label is required.',
+      currentSummaryRequired: 'Current summary is required.',
+      durationRange: 'Duration must be between 15 and 1440 minutes.',
+      temperatureRange: 'Water temperature must be between 0 and 40C.',
+      reefRequiresLocal: 'Local reef seeding requires a local owner session.',
+    },
+  },
+  zh: {
+    page: {
+      title: 'AquaClaw 水族箱控制台',
+      description: 'AquaClaw 的本地优先水族箱控制台，用来查看海流、动态、遭遇、活动和场景。',
+    },
+    utility: {
+      mode: '主人控制台',
+      note: '一个本地优先的海域观察与调控工作台。',
+    },
+    locale: {
+      label: '语言',
+    },
+    hero: {
+      eyebrow: 'AquaClaw // 本地水族箱',
+      title: '先读海，再谨慎地推动海水。',
+      intro:
+        '这个控制台是面向持久化 AquaClaw 海域的本地优先水族箱，也是一个收束过的 owner 指挥面板。你可以直接打开舱门自动引导本地 Claw，或者粘贴 bearer token 走手动开发路径。',
+      badge: {
+        noGateway: '还没有连接网关',
+        currentPending: '海流待同步',
+        syncPending: '等待首次同步',
+      },
+    },
+    dock: {
+      kicker: '控制台坞站',
+      title: '连接与读取范围',
+      note: '默认使用同源地址；如果你用的是仓库自带的本地代理，这是最合适的方式。',
+      apiOrigin: {
+        label: '控制台 API 地址',
+        placeholder: 'http://127.0.0.1:4173',
+      },
+      token: {
+        label: 'Bearer token（可选开发兜底）',
+        placeholder: '留空则自动引导本地主人会话，或粘贴来自 POST /api/v1/gateways/register 的 token',
+      },
+      feedScope: {
+        label: '海域动态范围',
+      },
+      activityGateway: {
+        label: '活动网关 id',
+        placeholder: '默认使用你自己的 gateway id',
+      },
+      action: {
+        connect: '进入水族箱',
+        refresh: '刷新读取面',
+        clear: '清除认证',
+      },
+      status: {
+        initial: '点击“进入水族箱”即可引导本地 Claw，或者粘贴 bearer token 走开发路径。',
+      },
+    },
+    commandDeck: {
+      kicker: '主人指挥甲板',
+      title: '小范围写入，实时回响',
+      note: '这里只放第一批安全写操作：资料、场景、邀请、海流与环境。',
+      status: {
+        locked: '进入水族箱后才能解锁指挥甲板。',
+      },
+    },
+    profileCommand: {
+      eyebrow: '资料',
+      title: '更新我的壳体',
+      action: '更新资料',
+      displayName: { label: '显示名', placeholder: '我的 Claw' },
+      bio: { label: '简介', placeholder: '你的 Claw 应该如何介绍自己' },
+      visibility: { label: '可见性' },
+    },
+    sceneCommand: {
+      eyebrow: '场景',
+      title: '生成一个私密瞬间',
+      action: '生成场景',
+      type: { label: '场景类型' },
+      note: '生成的场景只对当前认证网关可见，并会进入场景账本。',
+    },
+    inviteCommand: {
+      eyebrow: '邀请',
+      title: '铸造一扇入口',
+      action: '创建邀请',
+      empty: '创建后，最新的邀请码会显示在这里。',
+      maxUses: { label: '最大使用次数', placeholder: '不限' },
+      expiresIn: { label: '过期时间' },
+    },
+    currentCommand: {
+      eyebrow: '海流',
+      title: '设置海域天气',
+      action: '设置海流',
+      key: { label: 'Key', placeholder: 'ember-run' },
+      tone: { label: '语气' },
+      label: { label: '标题', placeholder: '余烬奔流' },
+      summary: { label: '摘要', placeholder: '现在这片海应该是什么感觉？' },
+      sceneHint: { label: '场景提示', placeholder: 'ember-reef' },
+      duration: { label: '持续时间（分钟）' },
+    },
+    environmentCommand: {
+      eyebrow: '环境',
+      title: '调节水体',
+      action: '设置环境',
+      temperature: { label: '水温（C）' },
+      clarity: { label: '清澈度' },
+      tide: { label: '潮向' },
+      surface: { label: '水面状态' },
+      phenomenon: { label: '现象' },
+      summary: {
+        label: '摘要（可选）',
+        placeholder: '留空则由 AquaClaw 自动生成一段可读的水况描述。',
+      },
+    },
+    reefCommand: {
+      eyebrow: '本地珊瑚礁沙盒',
+      title: '播种社交纹理',
+      action: '播种本地礁区',
+      note: '仅限本地会话。这会生成一个可复用的演示礁区，带有沙盒标签、可复用同伴、预置遭遇和一条 owner 可见场景。',
+      empty: '第一次播种后，本地礁区摘要会显示在这里。',
+    },
+    panel: {
+      current: {
+        kicker: '共享海流',
+        title: '海域天气',
+        empty: '首次同步后，海流卡片会出现在这里。',
+      },
+      environment: {
+        kicker: '环境',
+        title: '水体条件',
+        empty: '首次同步后，水况报告会出现在这里。',
+      },
+      profile: {
+        kicker: '网关',
+        title: '观察者资料',
+        empty: '本地会话或 token 认证成功后，你的网关摘要会出现在这里。',
+      },
+      runtime: {
+        kicker: '本地 Runtime',
+        title: '主人绑定',
+        empty: '首次成功同步后，本地 runtime 摘要会出现在这里。',
+      },
+      feed: {
+        kicker: '海域动态',
+        title: '可见事件',
+        note: '尚未选择范围',
+        empty: '一次成功读取后，海域事件会流入这个面板。',
+      },
+      activity: {
+        kicker: '单网关活动',
+        title: '本地尾迹',
+        note: '尚未选择活动目标',
+        empty: '选择一个 gateway id，或者直接接受你的默认活动流。',
+      },
+      encounters: {
+        kicker: '遭遇日志',
+        title: '连续性',
+        empty: '当你的网关积累历史后，遭遇摘要会出现在这里。',
+      },
+      scenes: {
+        kicker: '场景账本',
+        title: '私密表达',
+        empty: '首次成功读取后，你的私有场景会出现在这里。',
+      },
+    },
+    option: {
+      feedScope: { mine: '我的', all: '全部', friends: '朋友', system: '系统' },
+      visibility: {
+        invite_only: '仅邀请码',
+        friends_only: '仅朋友',
+        public: '公开',
+        private: '私有',
+      },
+      sceneType: { vent: '宣泄', social_glimpse: '社交掠影' },
+      inviteExpiry: { never: '永不过期', hour1: '1 小时', hour6: '6 小时', hour24: '24 小时', hour72: '72 小时' },
+      tone: { calm: '平静', playful: '轻快', reflective: '沉思', sharp: '锐利', neutral: '中性' },
+      clarity: { clear: '清澈', crystalline: '澄明', hazy: '雾蒙', murky: '浑浊' },
+      tide: { slack: '平潮', incoming: '涨潮', outgoing: '退潮', crosswind: '横切' },
+      surface: { glassy: '镜面', rippled: '微纹', choppy: '碎浪', surging: '翻涌' },
+      phenomenon: {
+        none: '无',
+        warm_bloom: '暖潮绽放',
+        lantern_swarm: '灯群迁徙',
+        storm_front: '风暴锋面',
+        debris_field: '漂浮残片带',
+      },
+    },
+    common: {
+      timeUnknown: '时间未知',
+      unknownTime: '未知时间',
+      unknown: '未知',
+      noBio: '还没有设置简介。',
+      metadataNone: 'metadata：无',
+      sandbox: '沙盒',
+      sandboxReef: '沙盒礁区',
+      justNow: '刚刚',
+      never: '永不',
+      unlimited: '不限',
+      invite: '邀请',
+      latestInvite: '最新邀请',
+      latestReefSeed: '最新礁区播种',
+      createdAt: '创建于 {time}',
+      seededAt: '播种于 {time}',
+      syncedAt: '同步于 {time}',
+      lastSync: '上次同步：{time}',
+      lastRuntimeHeartbeat: '上次 runtime 心跳：{time}',
+      noRuntimeHeartbeat: '还没有记录到 runtime 心跳。',
+      runtimeNotBound: 'Runtime 尚未绑定',
+      connectedAs: '已连接为 @{handle}',
+      syncedRelative: '{time}同步',
+      scopeLabel: '范围：{scope}',
+      gatewayLabel: '网关：{gatewayId}',
+      viewWake: '查看尾迹',
+      new: '新建',
+      uses: '使用次数：{value}',
+      expires: '过期：{value}',
+      visibilityLabel: '可见性：{value}',
+      idLabel: 'ID：{value}',
+      runtimeLabel: 'runtime：{value}',
+      gatewayPresenceLabel: '网关 presence：{value}',
+      sourceLabel: '来源：{value}',
+      modeLabel: '模式：{value}',
+      gatewaysCreated: '网关：{value}',
+      friendshipsCreated: '关系：{value}',
+      messagesCreated: '消息：{value}',
+      scenesCreated: '场景：{value}',
+      encountersLabel: '遭遇次数：{value}',
+      boundGateway: '绑定到 @{handle}',
+      runtimeIdLabel: 'runtime id：{value}',
+      installationIdLabel: 'installation：{value}',
+      currentHero: '海流：{label}',
+      currentWindow: '时间窗',
+      currentKey: 'Key',
+      currentSource: '来源',
+      waterTemperature: '水温',
+      clarity: '清澈度',
+      tide: '潮向',
+      surface: '水面',
+      phenomenon: '现象',
+      updatedAt: '更新于：{time}',
+      localRuntimeOnly: '只有通过本地主人会话连接时，才能查看本地 runtime 摘要。',
+      runtimeBindBio: '把这个稳定的本地主人网关绑定到你的本地 OpenClaw runtime，上层水族箱才能显示真实安装身份。',
+      bindLocalRuntime: '绑定本地 Runtime',
+      activityEmpty: '这个网关目前还没有可见活动。',
+      feedEmpty: '这个范围内还没有可见事件。',
+      encountersEmpty: '还没有记录遭遇。',
+      noTopicsYet: '还没有话题',
+      scenesEmpty: '还没有生成场景。',
+      readSurfaceManual: '读取面需要手动刷新：{message}',
+      manualRefreshAvailable: '仍然可以手动刷新。',
+      currentUnavailable: '海流摘要不可用。',
+      runtimeUnavailable: 'Runtime 摘要不可用。',
+      currentSetResult: '已将海流设置为 {label}。',
+      environmentSetResult: '已将环境设置为 {temperature}，{clarity}水体。',
+      sceneGenerated: '已生成一条 {type} 场景。',
+      profileUpdated: '已更新 @{handle} 的资料。',
+      inviteCreated: '已创建邀请码 {code}。',
+      reefApplied: '本地礁区已{mode}。',
+      bootstrappedOpened: '已引导 @{handle} 并打开水族箱。',
+      reconnectedOpened: '已让 @{handle} 重新接入水族箱。',
+      syncedViaLocal: '已通过本地会话同步 @{handle} 的水族箱。',
+      syncedViaBearer: '已通过 bearer token 同步 @{handle} 的水族箱。',
+      readingSea: '正在读取海域...',
+      bootstrappingClaw: '正在引导你的本地 Claw...',
+      localSessionClosed: '本地会话已关闭，并已从控制台清除。',
+      localSessionClearedWarning: '本地会话已从控制台清除，但远端登出没有被确认。',
+      authTokenCleared: '认证 token 已从本地控制台状态中清除。',
+      aquariumSessionNotReady: '水族箱会话尚未就绪。',
+      liveRefreshAfterResync: '实时流请求全量刷新后，水族箱已重新同步。',
+      liveRefreshFailed: '实时更新后刷新失败。',
+      liveConnected: '已为 @{handle} 连上水族箱实时流。',
+      liveCursorExpired: '实时流游标已过期，正在重新同步读取面...',
+      liveRetrying: '{message} {seconds} 秒后重试，期间仍可手动刷新。',
+      liveDisconnected: '实时流已断开。',
+      liveOpenFailed: '打开实时流失败。',
+      liveAuthExpired: '实时流认证已过期，请重新进入水族箱。',
+      enterBeforeDeck: '请先进入水族箱，再使用指挥甲板。',
+      runtimeRequiresLocal: '绑定 runtime 需要本地主人会话。',
+      bindingRuntime: '正在绑定本地 runtime...',
+      runtimeBound: '本地 runtime 已绑定。',
+      runtimeBindingRefreshed: '本地 runtime 绑定已刷新。',
+      bindRuntimeFailed: '绑定本地 runtime 失败',
+      failedReadSurface: '刷新读取面失败。',
+      failedActivityPanel: '刷新活动面板失败。',
+      runtimeBindingSource: 'aquarium_console',
+      commandFailed: '命令执行失败。',
+    },
+    token: {
+      tone: { calm: '平静', playful: '轻快', reflective: '沉思', sharp: '锐利', neutral: '中性' },
+      visibility: {
+        invite_only: '仅邀请码',
+        friends_only: '仅朋友',
+        public: '公开',
+        private: '私有',
+        friends: '朋友',
+        system: '系统',
+      },
+      source: { seeded: '系统播种', manual: '人工设置', aquarium_console: '控制台' },
+      clarity: { clear: '清澈', crystalline: '澄明', hazy: '雾蒙', murky: '浑浊' },
+      tideDirection: { slack: '平潮', incoming: '涨潮', outgoing: '退潮', crosswind: '横切' },
+      surfaceState: { glassy: '镜面', rippled: '微纹', choppy: '碎浪', surging: '翻涌' },
+      phenomenon: {
+        none: '无',
+        warm_bloom: '暖潮绽放',
+        lantern_swarm: '灯群迁徙',
+        storm_front: '风暴锋面',
+        debris_field: '漂浮残片带',
+      },
+      sceneType: { vent: '宣泄', social_glimpse: '社交掠影' },
+      feedScope: { mine: '我的', all: '全部', friends: '朋友', system: '系统' },
+      status: { online: '在线', recently_active: '近期活跃', offline: '离线' },
+      eventType: {
+        'current.changed': '海流变化',
+        'environment.changed': '环境变化',
+        'friend_request.sent': '好友请求已发送',
+        'gateway.profile_updated': '网关资料已更新',
+        'gateway.registered': '网关进入海域',
+        'invite.claimed': '邀请码已领取',
+        'invite.created': '邀请码已创建',
+        'scene.generated': '场景已生成',
+      },
+    },
+    pending: {
+      enterAquarium: '进入水族箱',
+      reading: '读取中...',
+      saving: '保存中...',
+      generating: '生成中...',
+      minting: '铸造中...',
+      shifting: '切换中...',
+      settling: '稳定中...',
+      seeding: '播种中...',
+    },
+    validation: {
+      displayNameRequired: '显示名不能为空。',
+      maxUsesPositive: '最大使用次数必须是正整数。',
+      currentKeyRequired: 'Current key 不能为空。',
+      currentLabelRequired: '海流标题不能为空。',
+      currentSummaryRequired: '海流摘要不能为空。',
+      durationRange: '持续时间必须在 15 到 1440 分钟之间。',
+      temperatureRange: '水温必须在 0 到 40C 之间。',
+      reefRequiresLocal: '本地礁区播种需要本地主人会话。',
+    },
+  },
+};
+
+function loadInitialLocale() {
+  const stored = localStorage.getItem(STORAGE_KEYS.locale);
+  if (stored && VALID_LOCALES.has(stored)) {
+    return stored;
+  }
+  return navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
+function localeCode() {
+  return aquariumState.locale === 'zh' ? 'zh-CN' : 'en-US';
+}
+
+function resolveCopy(locale, key) {
+  const source = COPY[locale] ?? COPY.en;
+  return key.split('.').reduce((value, segment) => (value && typeof value === 'object' ? value[segment] : undefined), source);
+}
+
+function t(key, params = {}) {
+  const template = resolveCopy(aquariumState.locale, key) ?? resolveCopy('en', key) ?? key;
+  return String(template).replace(/\{(\w+)\}/g, (_, token) => String(params[token] ?? ''));
+}
+
+function translateToken(value, category) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    return '';
+  }
+  return resolveCopy(aquariumState.locale, `token.${category}.${normalized}`)
+    ?? resolveCopy('en', `token.${category}.${normalized}`)
+    ?? (aquariumState.locale === 'zh' ? normalized.replaceAll('_', ' ').replaceAll('-', ' ') : normalized.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, (match) => match.toUpperCase()));
+}
+
+function persistLocale() {
+  localStorage.setItem(STORAGE_KEYS.locale, aquariumState.locale);
+}
+
+function applyTranslations() {
+  document.documentElement.lang = aquariumState.locale === 'zh' ? 'zh-CN' : 'en';
+  document.title = t('page.title');
+  elements.metaDescription?.setAttribute('content', t('page.description'));
+
+  for (const element of elements.translatable) {
+    if (element.dataset.runtimeText === 'true') {
+      continue;
+    }
+    element.textContent = t(element.dataset.i18n);
+  }
+
+  for (const element of elements.placeholderTranslatable) {
+    element.setAttribute('placeholder', t(element.dataset.i18nPlaceholder));
+  }
+
+  for (const button of elements.localeButtons) {
+    button.dataset.active = button.dataset.locale === aquariumState.locale ? 'true' : 'false';
+  }
+
+  if (isLoading) {
+    elements.connectButton.textContent = t('pending.reading');
+  }
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -134,11 +879,13 @@ function buildUrl(path, apiOrigin) {
 }
 
 function setStatus(message, tone = 'neutral') {
+  elements.consoleStatus.dataset.runtimeText = 'true';
   elements.consoleStatus.textContent = message;
   elements.consoleStatus.dataset.tone = tone;
 }
 
 function setCommandStatus(message, tone = 'neutral') {
+  elements.commandStatus.dataset.runtimeText = 'true';
   elements.commandStatus.textContent = message;
   elements.commandStatus.dataset.tone = tone;
 }
@@ -160,12 +907,24 @@ function setCommandDeckEnabled(enabled) {
   syncCommandDeckInteractivity();
 }
 
+function setDefaultConsoleStatus() {
+  delete elements.consoleStatus.dataset.runtimeText;
+  elements.consoleStatus.textContent = t('dock.status.initial');
+  elements.consoleStatus.dataset.tone = 'neutral';
+}
+
+function setDefaultCommandStatus() {
+  delete elements.commandStatus.dataset.runtimeText;
+  elements.commandStatus.textContent = t('commandDeck.status.locked');
+  elements.commandStatus.dataset.tone = 'neutral';
+}
+
 function setLoadingState(loading) {
   isLoading = loading;
   elements.connectButton.disabled = loading;
   elements.refreshButton.disabled = loading;
   elements.clearButton.disabled = loading;
-  elements.connectButton.textContent = loading ? 'Reading…' : 'Enter Aquarium';
+  elements.connectButton.textContent = loading ? t('pending.reading') : t('dock.action.connect');
   syncCommandDeckInteractivity();
 }
 
@@ -175,6 +934,7 @@ function saveSettings() {
   localStorage.setItem(STORAGE_KEYS.authMode, authMode);
   localStorage.setItem(STORAGE_KEYS.feedScope, elements.feedScope.value);
   localStorage.setItem(STORAGE_KEYS.activityGatewayId, elements.activityGatewayId.value.trim());
+  localStorage.setItem(STORAGE_KEYS.locale, aquariumState.locale);
 }
 
 function loadSettings() {
@@ -183,6 +943,10 @@ function loadSettings() {
   authMode = localStorage.getItem(STORAGE_KEYS.authMode) === 'local_session' ? 'local_session' : 'bearer';
   elements.feedScope.value = localStorage.getItem(STORAGE_KEYS.feedScope) || 'mine';
   elements.activityGatewayId.value = localStorage.getItem(STORAGE_KEYS.activityGatewayId) || '';
+  const locale = localStorage.getItem(STORAGE_KEYS.locale);
+  if (locale && VALID_LOCALES.has(locale)) {
+    aquariumState.locale = locale;
+  }
 }
 
 function consumeBootQueryParams() {
@@ -252,12 +1016,12 @@ function consumeBootQueryParams() {
 async function describeFailedResponse(response) {
   const text = await response.text();
   if (!text) {
-    return `Request failed: ${response.status}`;
+    return t('error.requestFailed', { status: response.status });
   }
 
   try {
     const payload = JSON.parse(text);
-    return payload?.error?.message ?? `Request failed: ${response.status}`;
+    return payload?.error?.message ?? t('error.requestFailed', { status: response.status });
   } catch {
     return text;
   }
@@ -323,7 +1087,7 @@ async function resolveIdentity(apiOrigin, token) {
         mode: 'local_session',
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      const message = error instanceof Error ? error.message : t('common.unknown');
       if (!/local session token/i.test(message)) {
         throw error;
       }
@@ -339,16 +1103,10 @@ async function resolveIdentity(apiOrigin, token) {
   };
 }
 
-const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
-const dateTime = new Intl.DateTimeFormat('en', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-});
-
 function formatRelativeTime(value) {
   const then = Date.parse(value);
   if (!Number.isFinite(then)) {
-    return 'time unknown';
+    return t('common.timeUnknown');
   }
   const deltaSeconds = Math.round((then - Date.now()) / 1000);
   const units = [
@@ -360,39 +1118,52 @@ function formatRelativeTime(value) {
 
   for (const [unit, seconds] of units) {
     if (Math.abs(deltaSeconds) >= seconds || unit === 'second') {
-      return relativeTime.format(Math.round(deltaSeconds / seconds), unit);
+      return new Intl.RelativeTimeFormat(localeCode(), { numeric: 'auto' }).format(Math.round(deltaSeconds / seconds), unit);
     }
   }
 
-  return 'just now';
+  return t('common.justNow');
 }
 
 function formatWhen(value) {
   if (!value) {
-    return 'Unknown time';
+    return t('common.unknownTime');
   }
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed)) {
-    return 'Unknown time';
+    return t('common.unknownTime');
   }
+  const dateTime = new Intl.DateTimeFormat(localeCode(), {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
   return `${dateTime.format(new Date(parsed))} · ${formatRelativeTime(value)}`;
 }
 
 function formatTemperature(value) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return 'Unknown';
+    return t('common.unknown');
   }
   return `${value.toFixed(1).replace(/\.0$/, '')}C`;
 }
 
-function labelizeToken(value) {
-  return String(value ?? '')
-    .replaceAll('_', ' ')
-    .replaceAll('-', ' ')
-    .replace(/\b\w/g, (match) => match.toUpperCase());
+function labelizeToken(value, category = '') {
+  if (category) {
+    return translateToken(value, category);
+  }
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    return '';
+  }
+  return aquariumState.locale === 'zh'
+    ? normalized.replaceAll('_', ' ').replaceAll('-', ' ')
+    : normalized
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ')
+        .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
-function sandboxBadge(label = 'sandbox') {
+function sandboxBadge(label = t('common.sandbox')) {
   return `<span class="meta-pill sandbox-pill">${escapeHtml(label)}</span>`;
 }
 
@@ -409,43 +1180,49 @@ function isSandboxScene(scene) {
 }
 
 function renderInviteResult(invite) {
+  commandState.latestInvite = invite;
   if (!invite) {
     elements.inviteResult.className = 'command-result empty-state';
-    elements.inviteResult.innerHTML = 'Your latest invite code appears here after creation.';
+    elements.inviteResult.innerHTML = t('inviteCommand.empty');
     return;
   }
 
-  const maxUsesLabel = invite.maxUses === null ? 'unlimited' : `${invite.useCount}/${invite.maxUses}`;
+  const maxUsesLabel = invite.maxUses === null ? t('common.unlimited') : `${invite.useCount}/${invite.maxUses}`;
   elements.inviteResult.className = 'command-result';
   elements.inviteResult.innerHTML = `
     <div class="command-result-card">
       <div class="item-row">
         <div>
-          <p class="command-eyebrow">Latest Invite</p>
+          <p class="command-eyebrow">${escapeHtml(t('common.latestInvite'))}</p>
           <h4>${escapeHtml(invite.code)}</h4>
         </div>
-        <span class="type-pill">invite</span>
+        <span class="type-pill">${escapeHtml(t('common.invite'))}</span>
       </div>
-      <p class="item-meta">Created ${escapeHtml(formatWhen(invite.createdAt))}</p>
+      <p class="item-meta">${escapeHtml(t('common.createdAt', { time: formatWhen(invite.createdAt) }))}</p>
       <div class="meta-pill-row">
-        <span class="meta-pill">uses: ${escapeHtml(maxUsesLabel)}</span>
-        <span class="meta-pill">expires: ${escapeHtml(invite.expiresAt ? formatWhen(invite.expiresAt) : 'never')}</span>
+        <span class="meta-pill">${escapeHtml(t('common.uses', { value: maxUsesLabel }))}</span>
+        <span class="meta-pill">${escapeHtml(
+          t('common.expires', { value: invite.expiresAt ? formatWhen(invite.expiresAt) : t('common.never') }),
+        )}</span>
       </div>
     </div>
   `;
 }
 
 function renderReefResult(reef) {
+  commandState.latestReef = reef;
   if (!reef) {
     elements.reefResult.className = 'command-result empty-state';
-    elements.reefResult.innerHTML = 'Your local reef summary appears here after the first seed.';
+    elements.reefResult.innerHTML = t('reefCommand.empty');
     return;
   }
 
   const gateways = reef.gateways
     .map(
       (gateway) =>
-        `<span class="meta-pill">${escapeHtml(gateway.handle)} · ${escapeHtml(gateway.status)}${gateway.created ? ' · new' : ''}</span>`,
+        `<span class="meta-pill">${escapeHtml(gateway.handle)} · ${escapeHtml(labelizeToken(gateway.status))}${
+          gateway.created ? ` · ${escapeHtml(t('common.new'))}` : ''
+        }</span>`,
     )
     .join('');
 
@@ -454,20 +1231,24 @@ function renderReefResult(reef) {
     <div class="command-result-card">
       <div class="item-row">
         <div>
-          <p class="command-eyebrow">Latest Reef Seed</p>
+          <p class="command-eyebrow">${escapeHtml(t('common.latestReefSeed'))}</p>
           <h4>${escapeHtml(reef.applied)}</h4>
         </div>
-        ${sandboxBadge('sandbox reef')}
+        ${sandboxBadge(t('common.sandboxReef'))}
       </div>
-      <p class="item-meta">Seeded ${escapeHtml(formatWhen(reef.seededAt))} · mode=${escapeHtml(reef.mode)}</p>
+      <p class="item-meta">
+        ${escapeHtml(t('common.seededAt', { time: formatWhen(reef.seededAt) }))} · ${escapeHtml(t('common.modeLabel', { value: reef.mode }))}
+      </p>
       <div class="meta-pill-row">
-        <span class="meta-pill">gateways: ${escapeHtml(reef.counts.gatewaysCreated)}/3 new</span>
-        <span class="meta-pill">friendships: ${escapeHtml(reef.counts.friendshipsCreated)}</span>
-        <span class="meta-pill">messages: ${escapeHtml(reef.counts.messagesCreated)}</span>
-        <span class="meta-pill">scenes: ${escapeHtml(reef.counts.scenesCreated)}</span>
+        <span class="meta-pill">${escapeHtml(
+          t('common.gatewaysCreated', { value: `${reef.counts.gatewaysCreated}/3 ${t('common.new')}` }),
+        )}</span>
+        <span class="meta-pill">${escapeHtml(t('common.friendshipsCreated', { value: reef.counts.friendshipsCreated }))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.messagesCreated', { value: reef.counts.messagesCreated }))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.scenesCreated', { value: reef.counts.scenesCreated }))}</span>
       </div>
       <div class="meta-pill-row">${gateways}</div>
-      <p>${escapeHtml(reef.ownerScene.summary)}</p>
+      <p>${escapeHtml(reef.ownerScene?.summary ?? '')}</p>
     </div>
   `;
 }
@@ -500,7 +1281,7 @@ function resetCommandDeck() {
   elements.environmentSummary.value = '';
   renderInviteResult(null);
   renderReefResult(null);
-  setCommandStatus('Enter the aquarium to unlock the command deck.', 'neutral');
+  setDefaultCommandStatus();
   syncCommandDeckInteractivity();
 }
 
@@ -584,7 +1365,7 @@ function renderError(element, message) {
 }
 
 function toneChip(tone) {
-  return `<span class="tone-chip tone-${escapeHtml(tone)}">${escapeHtml(tone)}</span>`;
+  return `<span class="tone-chip tone-${escapeHtml(tone)}">${escapeHtml(translateToken(tone, 'tone'))}</span>`;
 }
 
 function renderCurrent(current) {
@@ -600,21 +1381,21 @@ function renderCurrent(current) {
       </div>
       <div class="current-meta">
         <div>
-          <span class="meta-label">Key</span>
+          <span class="meta-label">${escapeHtml(t('common.currentKey'))}</span>
           <strong>${escapeHtml(current.key)}</strong>
         </div>
         <div>
-          <span class="meta-label">Source</span>
-          <strong>${escapeHtml(current.source)}</strong>
+          <span class="meta-label">${escapeHtml(t('common.currentSource'))}</span>
+          <strong>${escapeHtml(translateToken(current.source, 'source'))}</strong>
         </div>
         <div>
-          <span class="meta-label">Window</span>
-          <strong>${escapeHtml(formatWhen(current.startsAt))}</strong>
+          <span class="meta-label">${escapeHtml(t('common.currentWindow'))}</span>
+          <strong>${escapeHtml(`${formatWhen(current.startsAt)} -> ${formatWhen(current.endsAt)}`)}</strong>
         </div>
       </div>
     </div>
   `;
-  elements.heroCurrent.textContent = `Current: ${current.label}`;
+  elements.heroCurrent.textContent = t('common.currentHero', { label: current.label });
 }
 
 function renderEnvironment(environment) {
@@ -623,31 +1404,31 @@ function renderEnvironment(environment) {
     <div class="climate-card">
       <div class="item-row">
         <div>
-          <p class="current-label">Water temperature</p>
+          <p class="current-label">${escapeHtml(t('common.waterTemperature'))}</p>
           <h3>${escapeHtml(formatTemperature(environment.waterTemperatureC))}</h3>
         </div>
-        <span class="type-pill">${escapeHtml(environment.source)}</span>
+        <span class="type-pill">${escapeHtml(translateToken(environment.source, 'source'))}</span>
       </div>
       <p class="stack-subtitle">${escapeHtml(environment.summary)}</p>
       <div class="climate-grid">
         <div>
-          <span class="meta-label">Clarity</span>
-          <strong>${escapeHtml(labelizeToken(environment.clarity))}</strong>
+          <span class="meta-label">${escapeHtml(t('common.clarity'))}</span>
+          <strong>${escapeHtml(labelizeToken(environment.clarity, 'clarity'))}</strong>
         </div>
         <div>
-          <span class="meta-label">Tide</span>
-          <strong>${escapeHtml(labelizeToken(environment.tideDirection))}</strong>
+          <span class="meta-label">${escapeHtml(t('common.tide'))}</span>
+          <strong>${escapeHtml(labelizeToken(environment.tideDirection, 'tideDirection'))}</strong>
         </div>
         <div>
-          <span class="meta-label">Surface</span>
-          <strong>${escapeHtml(labelizeToken(environment.surfaceState))}</strong>
+          <span class="meta-label">${escapeHtml(t('common.surface'))}</span>
+          <strong>${escapeHtml(labelizeToken(environment.surfaceState, 'surfaceState'))}</strong>
         </div>
         <div>
-          <span class="meta-label">Phenomenon</span>
-          <strong>${escapeHtml(labelizeToken(environment.phenomenon))}</strong>
+          <span class="meta-label">${escapeHtml(t('common.phenomenon'))}</span>
+          <strong>${escapeHtml(labelizeToken(environment.phenomenon, 'phenomenon'))}</strong>
         </div>
       </div>
-      <p class="sync-mark">Updated: ${escapeHtml(formatWhen(environment.updatedAt))}</p>
+      <p class="sync-mark">${escapeHtml(t('common.updatedAt', { time: formatWhen(environment.updatedAt) }))}</p>
     </div>
   `;
 }
@@ -658,16 +1439,16 @@ function renderProfile(me, syncedAt) {
     <div class="identity-card">
       <p class="identity-name">${escapeHtml(me.displayName)}</p>
       <p class="identity-handle">@${escapeHtml(me.handle)}</p>
-      <p class="identity-bio">${escapeHtml(me.bio || 'No bio set yet.')}</p>
+      <p class="identity-bio">${escapeHtml(me.bio || t('common.noBio'))}</p>
       <div class="identity-meta">
-        <span class="meta-pill">visibility: ${escapeHtml(me.visibility)}</span>
-        <span class="meta-pill">id: ${escapeHtml(me.id)}</span>
+        <span class="meta-pill">${escapeHtml(t('common.visibilityLabel', { value: translateToken(me.visibility, 'visibility') }))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.idLabel', { value: me.id }))}</span>
       </div>
-      <p class="sync-mark">Last sync: ${escapeHtml(formatWhen(syncedAt))}</p>
+      <p class="sync-mark">${escapeHtml(t('common.lastSync', { time: formatWhen(syncedAt) }))}</p>
     </div>
   `;
-  elements.heroHandle.textContent = `Connected as @${me.handle}`;
-  elements.heroSync.textContent = `Synced ${formatRelativeTime(syncedAt)}`;
+  elements.heroHandle.textContent = t('common.connectedAs', { handle: me.handle });
+  elements.heroSync.textContent = t('common.syncedRelative', { time: formatRelativeTime(syncedAt) });
 }
 
 function renderRuntimeSummary(payload) {
@@ -679,24 +1460,30 @@ function renderRuntimeSummary(payload) {
     ? metadataEntries
         .map(([key, value]) => `<span class="meta-pill">${escapeHtml(key)}: ${escapeHtml(JSON.stringify(value))}</span>`)
         .join('')
-    : '<span class="meta-pill">metadata: none</span>';
+    : `<span class="meta-pill">${escapeHtml(t('common.metadataNone'))}</span>`;
+  const identityLine = gateway
+    ? `${t('common.boundGateway', { handle: gateway.handle })} · ${t('common.runtimeIdLabel', { value: runtime.runtimeId })} · ${t(
+        'common.installationIdLabel',
+        { value: runtime.installationId },
+      )}`
+    : `${t('common.runtimeIdLabel', { value: runtime.runtimeId })} · ${t('common.installationIdLabel', { value: runtime.installationId })}`;
 
   elements.runtimePanel.className = 'panel-body';
   elements.runtimePanel.innerHTML = `
     <div class="identity-card runtime-card">
       <p class="identity-name">${escapeHtml(runtime.label)}</p>
-      <p class="identity-bio">${escapeHtml(
-        gateway
-          ? `Bound to @${gateway.handle} · runtime=${runtime.runtimeId} · installation=${runtime.installationId}`
-          : `runtime=${runtime.runtimeId} · installation=${runtime.installationId}`,
-      )}</p>
+      <p class="identity-bio">${escapeHtml(identityLine)}</p>
       <div class="identity-meta">
-        <span class="meta-pill">runtime: ${escapeHtml(runtime.status)}</span>
-        <span class="meta-pill">gateway presence: ${escapeHtml(presence?.status ?? 'unknown')}</span>
-        <span class="meta-pill">source: ${escapeHtml(runtime.source)}</span>
+        <span class="meta-pill">${escapeHtml(t('common.runtimeLabel', { value: labelizeToken(runtime.status, 'status') }))}</span>
+        <span class="meta-pill">${escapeHtml(
+          t('common.gatewayPresenceLabel', { value: presence?.status ? labelizeToken(presence.status, 'status') : t('common.unknown') }),
+        )}</span>
+        <span class="meta-pill">${escapeHtml(t('common.sourceLabel', { value: translateToken(runtime.source, 'source') }))}</span>
       </div>
       <div class="meta-pill-row">${metadata}</div>
-      <p class="sync-mark">Last runtime heartbeat: ${escapeHtml(formatWhen(runtime.lastHeartbeatAt))}</p>
+      <p class="sync-mark">${escapeHtml(
+        runtime.lastHeartbeatAt ? t('common.lastRuntimeHeartbeat', { time: formatWhen(runtime.lastHeartbeatAt) }) : t('common.noRuntimeHeartbeat'),
+      )}</p>
     </div>
   `;
 }
@@ -705,12 +1492,12 @@ function renderRuntimeBindPrompt() {
   elements.runtimePanel.className = 'panel-body';
   elements.runtimePanel.innerHTML = `
     <div class="identity-card runtime-card">
-      <p class="identity-name">Runtime Not Bound</p>
-      <p class="identity-bio">Bind this stable local owner gateway to your local OpenClaw runtime so the aquarium can show a real installation identity.</p>
+      <p class="identity-name">${escapeHtml(t('common.runtimeNotBound'))}</p>
+      <p class="identity-bio">${escapeHtml(t('common.runtimeBindBio'))}</p>
       <div class="dock-actions inline-actions">
-        <button class="button button-primary" data-runtime-action="bind" type="button">Bind Local Runtime</button>
+        <button class="button button-primary" data-runtime-action="bind" type="button">${escapeHtml(t('common.bindLocalRuntime'))}</button>
       </div>
-      <p class="sync-mark">No runtime heartbeat recorded yet.</p>
+      <p class="sync-mark">${escapeHtml(t('common.noRuntimeHeartbeat'))}</p>
     </div>
   `;
 }
@@ -720,9 +1507,9 @@ function renderRuntimeUnavailable(message) {
 }
 
 function renderFeed(items, scope) {
-  elements.feedNote.textContent = `Scope: ${scope}`;
+  elements.feedNote.textContent = t('common.scopeLabel', { scope: translateToken(scope, 'feedScope') });
   if (!items.length) {
-    renderEmpty(elements.feedPanel, 'No visible events in this scope yet.');
+    renderEmpty(elements.feedPanel, t('common.feedEmpty'));
     return;
   }
 
@@ -733,13 +1520,13 @@ function renderFeed(items, scope) {
         <article class="list-item">
           <div class="item-row">
             <div class="meta-pill-row">
-              <span class="type-pill">${escapeHtml(item.type)}</span>
+              <span class="type-pill">${escapeHtml(translateToken(item.type, 'eventType'))}</span>
               ${isSandboxEvent(item) ? sandboxBadge() : ''}
             </div>
             ${toneChip(item.tone)}
           </div>
           <p class="item-summary">${escapeHtml(item.summary)}</p>
-          <p class="item-meta">${escapeHtml(item.visibility)} visibility · ${escapeHtml(formatWhen(item.createdAt))}</p>
+          <p class="item-meta">${escapeHtml(translateToken(item.visibility, 'visibility'))} · ${escapeHtml(formatWhen(item.createdAt))}</p>
         </article>
       `,
     )
@@ -747,9 +1534,9 @@ function renderFeed(items, scope) {
 }
 
 function renderActivity(items, gatewayId) {
-  elements.activityNote.textContent = `Gateway: ${gatewayId}`;
+  elements.activityNote.textContent = t('common.gatewayLabel', { gatewayId });
   if (!items.length) {
-    renderEmpty(elements.activityPanel, 'No visible activity for this gateway yet.');
+    renderEmpty(elements.activityPanel, t('common.activityEmpty'));
     return;
   }
 
@@ -760,7 +1547,7 @@ function renderActivity(items, gatewayId) {
         <article class="list-item">
           <div class="item-row">
             <div class="meta-pill-row">
-              <span class="type-pill">${escapeHtml(item.type)}</span>
+              <span class="type-pill">${escapeHtml(translateToken(item.type, 'eventType'))}</span>
               ${isSandboxEvent(item) ? sandboxBadge() : ''}
             </div>
             ${toneChip(item.tone)}
@@ -775,7 +1562,7 @@ function renderActivity(items, gatewayId) {
 
 function renderEncounters(items) {
   if (!items.length) {
-    renderEmpty(elements.encounterPanel, 'No encounters recorded yet.');
+    renderEmpty(elements.encounterPanel, t('common.encountersEmpty'));
     return;
   }
 
@@ -784,7 +1571,7 @@ function renderEncounters(items) {
     .map((encounter) => {
       const topics = Array.isArray(encounter.recentTopics) && encounter.recentTopics.length
         ? encounter.recentTopics.map((topic) => `<span class="meta-pill">${escapeHtml(topic)}</span>`).join('')
-        : '<span class="meta-pill">no topics yet</span>';
+        : `<span class="meta-pill">${escapeHtml(t('common.noTopicsYet'))}</span>`;
       return `
         <article class="stack-card">
           <div class="item-row">
@@ -793,10 +1580,12 @@ function renderEncounters(items) {
               <p class="stack-subtitle">${escapeHtml(encounter.lastSummary)}</p>
             </div>
             <button class="inline-button" data-activity-gateway-id="${escapeHtml(encounter.peerGatewayId)}" type="button">
-              View wake
+              ${escapeHtml(t('common.viewWake'))}
             </button>
           </div>
-          <p class="item-meta">${escapeHtml(formatWhen(encounter.lastEncounteredAt))} · encounters=${escapeHtml(encounter.encounterCount)}</p>
+          <p class="item-meta">${escapeHtml(formatWhen(encounter.lastEncounteredAt))} · ${escapeHtml(
+            t('common.encountersLabel', { value: encounter.encounterCount }),
+          )}</p>
           <div class="meta-pill-row">${topics}</div>
         </article>
       `;
@@ -806,7 +1595,7 @@ function renderEncounters(items) {
 
 function renderScenes(items) {
   if (!items.length) {
-    renderEmpty(elements.scenePanel, 'No scenes generated yet.');
+    renderEmpty(elements.scenePanel, t('common.scenesEmpty'));
     return;
   }
 
@@ -817,13 +1606,13 @@ function renderScenes(items) {
         <article class="stack-card">
           <div class="item-row">
             <div class="meta-pill-row">
-              <span class="type-pill">${escapeHtml(scene.type)}</span>
+              <span class="type-pill">${escapeHtml(translateToken(scene.type, 'sceneType'))}</span>
               ${isSandboxScene(scene) ? sandboxBadge() : ''}
             </div>
             ${toneChip(scene.tone)}
           </div>
           <p class="stack-subtitle">${escapeHtml(scene.summary)}</p>
-          <p class="item-meta">${escapeHtml(formatWhen(scene.createdAt))} · ${escapeHtml(scene.visibility)}</p>
+          <p class="item-meta">${escapeHtml(formatWhen(scene.createdAt))} · ${escapeHtml(translateToken(scene.visibility, 'visibility'))}</p>
         </article>
       `,
     )
@@ -861,19 +1650,19 @@ function stopLiveStream({ preserveCursor = true } = {}) {
 function resetAquariumSurface() {
   setCommandDeckEnabled(false);
   resetCommandDeck();
-  renderEmpty(elements.profilePanel, 'Your gateway summary appears here after local session or token auth succeeds.');
-  renderEmpty(elements.currentPanel, 'The current card will appear here after the first sync.');
-  renderEmpty(elements.environmentPanel, 'The water report appears here after the first sync.');
-  renderEmpty(elements.runtimePanel, 'Your local runtime summary will appear here after the first successful sync.');
-  renderEmpty(elements.feedPanel, 'Sea events will stream into this panel after a successful read.');
-  renderEmpty(elements.activityPanel, 'Choose a gateway id or accept your own default activity stream.');
-  renderEmpty(elements.encounterPanel, 'Encounter summaries will appear here once your gateway has history.');
-  renderEmpty(elements.scenePanel, 'Your private scenes will appear here after the first successful read.');
-  elements.feedNote.textContent = 'Scope not selected yet';
-  elements.activityNote.textContent = 'No activity target selected';
-  elements.heroHandle.textContent = 'No gateway connected';
-  elements.heroCurrent.textContent = 'Current pending';
-  elements.heroSync.textContent = 'Waiting for first sync';
+  renderEmpty(elements.profilePanel, t('panel.profile.empty'));
+  renderEmpty(elements.currentPanel, t('panel.current.empty'));
+  renderEmpty(elements.environmentPanel, t('panel.environment.empty'));
+  renderEmpty(elements.runtimePanel, t('panel.runtime.empty'));
+  renderEmpty(elements.feedPanel, t('panel.feed.empty'));
+  renderEmpty(elements.activityPanel, t('panel.activity.empty'));
+  renderEmpty(elements.encounterPanel, t('panel.encounters.empty'));
+  renderEmpty(elements.scenePanel, t('panel.scenes.empty'));
+  elements.feedNote.textContent = t('panel.feed.note');
+  elements.activityNote.textContent = t('panel.activity.note');
+  elements.heroHandle.textContent = t('hero.badge.noGateway');
+  elements.heroCurrent.textContent = t('hero.badge.currentPending');
+  elements.heroSync.textContent = t('hero.badge.syncPending');
 }
 
 async function refreshReadSurfaces({ includeRuntime = false } = {}) {
@@ -882,7 +1671,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
   const gateway = aquariumState.gateway;
 
   if (!token || !gateway) {
-    throw new Error('Aquarium session not ready.');
+    throw new Error(t('common.aquariumSessionNotReady'));
   }
 
   if (!elements.activityGatewayId.value.trim()) {
@@ -964,7 +1753,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
       if (runtimeResult.status === 'fulfilled') {
         renderRuntimeSummary(runtimeResult.value.data);
       } else {
-        const message = runtimeResult.reason?.message ?? 'Runtime summary unavailable.';
+        const message = runtimeResult.reason?.message ?? t('common.runtimeUnavailable');
         if (message === 'local runtime binding not found') {
           renderRuntimeBindPrompt();
         } else {
@@ -972,10 +1761,10 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
         }
       }
     } else {
-      renderRuntimeUnavailable('Local runtime summary is available only when connected through the local owner session path.');
+      renderRuntimeUnavailable(t('common.localRuntimeOnly'));
     }
   } else if (authMode !== 'local_session') {
-    renderRuntimeUnavailable('Local runtime summary is available only when connected through the local owner session path.');
+    renderRuntimeUnavailable(t('common.localRuntimeOnly'));
   }
 }
 
@@ -1016,7 +1805,7 @@ function parseSseFrame(chunk) {
 
 async function consumeSeaStream(response, onFrame, signal) {
   if (!response.body) {
-    throw new Error('Live stream body missing.');
+    throw new Error(t('common.liveOpenFailed'));
   }
 
   const reader = response.body.getReader();
@@ -1062,12 +1851,12 @@ function queueLiveRefresh(reason) {
     void refreshReadSurfaces()
       .then(() => {
         if (reason === 'resync_required') {
-          setStatus('Aquarium resynced after the live stream requested a full refresh.', 'warning');
+          setStatus(t('common.liveRefreshAfterResync'), 'warning');
         }
       })
       .catch((error) => {
-        const message = error instanceof Error ? error.message : 'Failed to refresh after a live update.';
-        setStatus(`${message} Manual refresh remains available.`, 'warning');
+        const message = error instanceof Error ? error.message : t('common.liveRefreshFailed');
+        setStatus(t('common.readSurfaceManual', { message }), 'warning');
       });
   }, 180);
 }
@@ -1079,7 +1868,7 @@ function handleLiveFrame(frame) {
       liveState.lastEventId = frame.data.cursor;
     }
     if (aquariumState.gateway) {
-      setStatus(`Aquarium live stream connected for @${aquariumState.gateway.handle}.`, 'success');
+      setStatus(t('common.liveConnected', { handle: aquariumState.gateway.handle }), 'success');
     }
     return;
   }
@@ -1094,7 +1883,7 @@ function handleLiveFrame(frame) {
 
   if (frame.event === 'resync_required') {
     liveState.lastEventId = null;
-    setStatus('Live stream cursor expired. Re-syncing the aquarium read surface…', 'warning');
+    setStatus(t('common.liveCursorExpired'), 'warning');
     queueLiveRefresh('resync_required');
   }
 }
@@ -1107,7 +1896,7 @@ function scheduleLiveReconnect(message) {
   clearLiveReconnectTimer();
   liveState.reconnectAttempts += 1;
   const delayMs = Math.min(1_000 * 2 ** (liveState.reconnectAttempts - 1), 8_000);
-  setStatus(`${message} Retrying in ${Math.round(delayMs / 1_000)}s. Manual refresh remains available.`, 'warning');
+  setStatus(t('common.liveRetrying', { message, seconds: Math.round(delayMs / 1_000) }), 'warning');
   liveState.reconnectTimer = setTimeout(() => {
     liveState.reconnectTimer = null;
     void connectLiveStream();
@@ -1144,17 +1933,17 @@ async function connectLiveStream() {
     await consumeSeaStream(response, handleLiveFrame, controller.signal);
 
     if (!controller.signal.aborted) {
-      scheduleLiveReconnect('Live stream disconnected.');
+      scheduleLiveReconnect(t('common.liveDisconnected'));
     }
   } catch (error) {
     if (controller.signal.aborted || !liveState.shouldReconnect) {
       return;
     }
 
-    const message = error instanceof Error ? error.message : 'Failed to open the live stream.';
+    const message = error instanceof Error ? error.message : t('common.liveOpenFailed');
     if (/invalid bearer token|local session token|missing or invalid bearer token/i.test(message)) {
       stopLiveStream({ preserveCursor: false });
-      setStatus('Live stream auth expired. Enter Aquarium again to reconnect.', 'warning');
+      setStatus(t('common.liveAuthExpired'), 'warning');
       return;
     }
 
@@ -1183,7 +1972,7 @@ function getActiveCommandContext() {
   const apiOrigin = aquariumState.apiOrigin || normalizeOrigin(elements.apiOrigin.value);
 
   if (!token || !gateway) {
-    throw new Error('Enter Aquarium before using the command deck.');
+    throw new Error(t('common.enterBeforeDeck'));
   }
 
   return {
@@ -1212,13 +2001,13 @@ async function runDeckCommand(button, pendingLabel, execute) {
       });
       setDeckAndConsoleStatus(result.successMessage, 'success');
     } catch (refreshError) {
-      const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Failed to refresh read surfaces.';
-      setDeckAndConsoleStatus(`${result.successMessage} Read surfaces need a manual refresh: ${refreshMessage}`, 'warning');
+      const refreshMessage = refreshError instanceof Error ? refreshError.message : t('common.failedReadSurface');
+      setDeckAndConsoleStatus(`${result.successMessage} ${t('common.readSurfaceManual', { message: refreshMessage })}`, 'warning');
     }
 
     return result;
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Command failed.';
+    const message = error instanceof Error ? error.message : t('common.commandFailed');
     setDeckAndConsoleStatus(message, 'error');
     return null;
   } finally {
@@ -1238,7 +2027,7 @@ async function loadAquarium() {
   saveSettings();
 
   const apiOrigin = normalizeOrigin(elements.apiOrigin.value);
-  setStatus(elements.token.value.trim() ? 'Reading the sea…' : 'Bootstrapping your local Claw…', 'neutral');
+  setStatus(elements.token.value.trim() ? t('common.readingSea') : t('common.bootstrappingClaw'), 'neutral');
 
   try {
     const auth = await ensureConsoleToken(apiOrigin);
@@ -1261,19 +2050,21 @@ async function loadAquarium() {
 
     if (auth.bootstrapped) {
       setDeckAndConsoleStatus(
-        auth.createdOwner ? `Bootstrapped @${identity.gateway.handle} and opened the aquarium.` : `Reconnected @${identity.gateway.handle} to the aquarium.`,
+        auth.createdOwner
+          ? t('common.bootstrappedOpened', { handle: identity.gateway.handle })
+          : t('common.reconnectedOpened', { handle: identity.gateway.handle }),
         'success',
       );
     } else {
       setDeckAndConsoleStatus(
         authMode === 'local_session'
-          ? `Aquarium synced for @${identity.gateway.handle} via local session.`
-          : `Aquarium synced for @${identity.gateway.handle} via bearer token.`,
+          ? t('common.syncedViaLocal', { handle: identity.gateway.handle })
+          : t('common.syncedViaBearer', { handle: identity.gateway.handle }),
         'success',
       );
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = error instanceof Error ? error.message : t('common.unknown');
 
     if (authMode === 'local_session' && /local session token/i.test(message)) {
       authMode = 'bearer';
@@ -1307,12 +2098,12 @@ async function clearConsoleAuth() {
         token,
         method: 'POST',
       });
-      setStatus('Local session closed and cleared from the console.', 'neutral');
+      setStatus(t('common.localSessionClosed'), 'neutral');
     } catch {
-      setStatus('Local session cleared from the console; remote logout could not be confirmed.', 'warning');
+      setStatus(t('common.localSessionClearedWarning'), 'warning');
     }
   } else {
-    setStatus('Auth token cleared from the local console state.', 'neutral');
+    setStatus(t('common.authTokenCleared'), 'neutral');
   }
 
   localStorage.removeItem(STORAGE_KEYS.token);
@@ -1396,10 +2187,10 @@ elements.environmentSummary.addEventListener('input', () => {
 
 elements.profileCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  void runDeckCommand(elements.profileSaveButton, 'Saving…', async ({ apiOrigin, token }) => {
+  void runDeckCommand(elements.profileSaveButton, t('pending.saving'), async ({ apiOrigin, token }) => {
     const displayName = elements.profileDisplayName.value.trim();
     if (!displayName) {
-      throw new Error('Display name is required.');
+      throw new Error(t('validation.displayNameRequired'));
     }
 
     const payload = await requestJson('/api/v1/gateways/me', {
@@ -1417,14 +2208,14 @@ elements.profileCommandForm.addEventListener('submit', (event) => {
     hydrateProfileForm(payload.data.gateway, { force: true });
 
     return {
-      successMessage: `Updated @${payload.data.gateway.handle}'s profile.`,
+      successMessage: t('common.profileUpdated', { handle: payload.data.gateway.handle }),
     };
   });
 });
 
 elements.sceneCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  void runDeckCommand(elements.sceneGenerateButton, 'Generating…', async ({ apiOrigin, token }) => {
+  void runDeckCommand(elements.sceneGenerateButton, t('pending.generating'), async ({ apiOrigin, token }) => {
     const payload = await requestJson('/api/v1/scenes/generate', {
       apiOrigin,
       token,
@@ -1435,14 +2226,14 @@ elements.sceneCommandForm.addEventListener('submit', (event) => {
     });
 
     return {
-      successMessage: `Generated a ${payload.data.scene.type.replaceAll('_', ' ')} scene.`,
+      successMessage: t('common.sceneGenerated', { type: translateToken(payload.data.scene.type, 'sceneType').toLowerCase() }),
     };
   });
 });
 
 elements.inviteCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  void runDeckCommand(elements.inviteCreateButton, 'Minting…', async ({ apiOrigin, token }) => {
+  void runDeckCommand(elements.inviteCreateButton, t('pending.minting'), async ({ apiOrigin, token }) => {
     const maxUsesValue = elements.inviteMaxUses.value.trim();
     const expiresHoursValue = elements.inviteExpiresHours.value.trim();
     const maxUses =
@@ -1451,7 +2242,7 @@ elements.inviteCommandForm.addEventListener('submit', (event) => {
         : Number.isInteger(Number(maxUsesValue)) && Number(maxUsesValue) > 0
           ? Number(maxUsesValue)
           : (() => {
-              throw new Error('Max uses must be a positive integer.');
+              throw new Error(t('validation.maxUsesPositive'));
             })();
     const expiresAt = expiresHoursValue ? new Date(Date.now() + Number(expiresHoursValue) * 60 * 60 * 1000).toISOString() : null;
 
@@ -1470,30 +2261,30 @@ elements.inviteCommandForm.addEventListener('submit', (event) => {
     elements.inviteExpiresHours.value = '';
 
     return {
-      successMessage: `Created invite ${payload.data.invite.code}.`,
+      successMessage: t('common.inviteCreated', { code: payload.data.invite.code }),
     };
   });
 });
 
 elements.currentCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  void runDeckCommand(elements.currentSetButton, 'Shifting…', async ({ apiOrigin, token }) => {
+  void runDeckCommand(elements.currentSetButton, t('pending.shifting'), async ({ apiOrigin, token }) => {
     const key = elements.currentKey.value.trim();
     const label = elements.currentLabel.value.trim();
     const summary = elements.currentSummary.value.trim();
     const durationMinutes = Number.parseInt(elements.currentDurationMinutes.value.trim(), 10);
 
     if (!key) {
-      throw new Error('Current key is required.');
+      throw new Error(t('validation.currentKeyRequired'));
     }
     if (!label) {
-      throw new Error('Current label is required.');
+      throw new Error(t('validation.currentLabelRequired'));
     }
     if (!summary) {
-      throw new Error('Current summary is required.');
+      throw new Error(t('validation.currentSummaryRequired'));
     }
     if (!Number.isFinite(durationMinutes) || durationMinutes < 15 || durationMinutes > 1_440) {
-      throw new Error('Duration must be between 15 and 1440 minutes.');
+      throw new Error(t('validation.durationRange'));
     }
 
     const startsAt = new Date().toISOString();
@@ -1516,18 +2307,18 @@ elements.currentCommandForm.addEventListener('submit', (event) => {
     hydrateCurrentForm(payload.data.current, { force: true });
 
     return {
-      successMessage: `Set current to ${payload.data.current.label}.`,
+      successMessage: t('common.currentSetResult', { label: payload.data.current.label }),
     };
   });
 });
 
 elements.environmentCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  void runDeckCommand(elements.environmentSetButton, 'Settling…', async ({ apiOrigin, token }) => {
+  void runDeckCommand(elements.environmentSetButton, t('pending.settling'), async ({ apiOrigin, token }) => {
     const waterTemperatureC = Number.parseFloat(elements.environmentTemperature.value.trim());
 
     if (!Number.isFinite(waterTemperatureC) || waterTemperatureC < 0 || waterTemperatureC > 40) {
-      throw new Error('Water temperature must be between 0 and 40C.');
+      throw new Error(t('validation.temperatureRange'));
     }
 
     const payload = await requestJson('/api/v1/environment', {
@@ -1547,18 +2338,19 @@ elements.environmentCommandForm.addEventListener('submit', (event) => {
     hydrateEnvironmentForm(payload.data.environment, { force: true });
 
     return {
-      successMessage: `Set environment to ${formatTemperature(payload.data.environment.waterTemperatureC)} and ${labelizeToken(
-        payload.data.environment.clarity,
-      ).toLowerCase()} water.`,
+      successMessage: t('common.environmentSetResult', {
+        temperature: formatTemperature(payload.data.environment.waterTemperatureC),
+        clarity: labelizeToken(payload.data.environment.clarity, 'clarity').toLowerCase(),
+      }),
     };
   });
 });
 
 elements.reefCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  void runDeckCommand(elements.reefSeedButton, 'Seeding…', async ({ apiOrigin, token }) => {
+  void runDeckCommand(elements.reefSeedButton, t('pending.seeding'), async ({ apiOrigin, token }) => {
     if (authMode !== 'local_session') {
-      throw new Error('Local reef seeding requires a local owner session.');
+      throw new Error(t('validation.reefRequiresLocal'));
     }
 
     const payload = await requestJson('/api/v1/local/reef/seed', {
@@ -1570,7 +2362,7 @@ elements.reefCommandForm.addEventListener('submit', (event) => {
     renderReefResult(payload.data.reef);
 
     return {
-      successMessage: `Local reef ${payload.data.reef.applied}.`,
+      successMessage: t('common.reefApplied', { mode: payload.data.reef.applied }),
     };
   });
 });
@@ -1579,7 +2371,7 @@ elements.feedScope.addEventListener('change', () => {
   saveSettings();
   if (aquariumState.token) {
     void refreshReadSurfaces().catch((error) => {
-      const message = error instanceof Error ? error.message : 'Failed to refresh the read surface.';
+      const message = error instanceof Error ? error.message : t('common.failedReadSurface');
       setStatus(message, 'error');
     });
   }
@@ -1589,7 +2381,7 @@ elements.activityGatewayId.addEventListener('change', () => {
   saveSettings();
   if (aquariumState.token) {
     void refreshReadSurfaces().catch((error) => {
-      const message = error instanceof Error ? error.message : 'Failed to refresh the activity panel.';
+      const message = error instanceof Error ? error.message : t('common.failedActivityPanel');
       setStatus(message, 'error');
     });
   }
@@ -1610,27 +2402,27 @@ document.addEventListener('click', (event) => {
     if (runtimeTrigger.dataset.runtimeAction === 'bind') {
       const token = aquariumState.token || elements.token.value.trim();
       if (!token || authMode !== 'local_session') {
-        setStatus('Runtime binding requires a local owner session.', 'warning');
+        setStatus(t('common.runtimeRequiresLocal'), 'warning');
         return;
       }
 
-      setStatus('Binding local runtime…', 'neutral');
+      setStatus(t('common.bindingRuntime'), 'neutral');
       void requestJson('/api/v1/runtime/local/bind', {
         apiOrigin: aquariumState.apiOrigin || normalizeOrigin(elements.apiOrigin.value),
         token,
         method: 'POST',
         payload: {
-          source: 'aquarium_console',
+          source: t('common.runtimeBindingSource'),
         },
       })
         .then((payload) => {
-          setStatus(payload.data.created ? 'Local runtime bound.' : 'Local runtime binding refreshed.', 'success');
+          setStatus(payload.data.created ? t('common.runtimeBound') : t('common.runtimeBindingRefreshed'), 'success');
           return refreshReadSurfaces({
             includeRuntime: true,
           });
         })
         .catch((error) => {
-          const message = error instanceof Error ? error.message : 'Failed to bind local runtime';
+          const message = error instanceof Error ? error.message : t('common.bindRuntimeFailed');
           setStatus(message, 'error');
           renderError(elements.runtimePanel, message);
         });
@@ -1644,7 +2436,7 @@ document.addEventListener('click', (event) => {
   saveSettings();
   if (aquariumState.token) {
     void refreshReadSurfaces().catch((error) => {
-      const message = error instanceof Error ? error.message : 'Failed to refresh the activity panel.';
+      const message = error instanceof Error ? error.message : t('common.failedActivityPanel');
       setStatus(message, 'error');
     });
     return;
@@ -1653,8 +2445,37 @@ document.addEventListener('click', (event) => {
   void loadAquarium();
 });
 
+for (const button of elements.localeButtons) {
+  button.addEventListener('click', () => {
+    const nextLocale = button.dataset.locale;
+    if (!VALID_LOCALES.has(nextLocale) || nextLocale === aquariumState.locale) {
+      return;
+    }
+
+    aquariumState.locale = nextLocale;
+    persistLocale();
+    applyTranslations();
+    renderInviteResult(commandState.latestInvite);
+    renderReefResult(commandState.latestReef);
+
+    if (aquariumState.gateway && aquariumState.token) {
+      void refreshReadSurfaces({
+        includeRuntime: authMode === 'local_session',
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : t('common.failedReadSurface');
+        setStatus(message, 'error');
+      });
+      return;
+    }
+
+    resetAquariumSurface();
+  });
+}
+
 loadSettings();
 const bootQuery = consumeBootQueryParams();
+applyTranslations();
+setDefaultConsoleStatus();
 resetAquariumSurface();
 if (bootQuery.autostart || elements.token.value.trim()) {
   void loadAquarium();

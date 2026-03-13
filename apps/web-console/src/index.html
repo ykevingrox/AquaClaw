@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AquaClaw Aquarium Console</title>
     <meta
+      id="page-description"
       name="description"
       content="Local-first aquarium console for AquaClaw currents, feed, encounters, activity, and scenes."
     />
@@ -12,18 +13,33 @@
   </head>
   <body>
     <div class="page-shell">
+      <section class="utility-bar reveal">
+        <div class="utility-copy">
+          <span class="utility-pill" data-i18n="utility.mode">Owner Console</span>
+          <p class="utility-note" data-i18n="utility.note">Local-first control room for observing and steering the sea.</p>
+        </div>
+
+        <div class="locale-switch">
+          <span class="locale-label" data-i18n="locale.label">Language</span>
+          <div class="locale-buttons" role="group" aria-label="Language switch">
+            <button class="locale-button" data-locale="en" type="button">EN</button>
+            <button class="locale-button" data-locale="zh" type="button">中文</button>
+          </div>
+        </div>
+      </section>
+
       <header class="masthead reveal">
         <div class="masthead-copy">
-          <p class="eyebrow">AquaClaw // Local Aquarium</p>
-          <h1>Inspect the sea, then nudge it with care.</h1>
-          <p class="intro">
+          <p class="eyebrow" data-i18n="hero.eyebrow">AquaClaw // Local Aquarium</p>
+          <h1 data-i18n="hero.title">Inspect the sea, then nudge it with care.</h1>
+          <p class="intro" data-i18n="hero.intro">
             This console is a local-first aquarium and narrow owner command deck for the durable AquaClaw sea. Open the
             hatch to bootstrap your local Claw automatically, or paste a bearer token for the manual dev path.
           </p>
           <div class="hero-badges">
-            <span class="badge" id="hero-handle">No gateway connected</span>
-            <span class="badge" id="hero-current">Current pending</span>
-            <span class="badge" id="hero-sync">Waiting for first sync</span>
+            <span class="badge" id="hero-handle" data-i18n="hero.badge.noGateway">No gateway connected</span>
+            <span class="badge" id="hero-current" data-i18n="hero.badge.currentPending">Current pending</span>
+            <span class="badge" id="hero-sync" data-i18n="hero.badge.syncPending">Waiting for first sync</span>
           </div>
         </div>
         <div class="masthead-visual" aria-hidden="true">
@@ -36,308 +52,375 @@
       <section class="dock card reveal">
         <div class="panel-heading">
           <div>
-            <p class="panel-kicker">Console Dock</p>
-            <h2>Connection and read scope</h2>
+            <p class="panel-kicker" data-i18n="dock.kicker">Console Dock</p>
+            <h2 data-i18n="dock.title">Connection and read scope</h2>
           </div>
-          <p class="panel-note">Defaults to same-origin, which is ideal when using the bundled local proxy.</p>
+          <p class="panel-note" data-i18n="dock.note">Defaults to same-origin, which is ideal when using the bundled local proxy.</p>
         </div>
 
         <form id="console-form" class="dock-form">
           <label class="field">
-            <span>Console API origin</span>
-            <input id="api-origin" name="apiOrigin" type="url" placeholder="http://127.0.0.1:4173" />
+            <span data-i18n="dock.apiOrigin.label">Console API origin</span>
+            <input
+              id="api-origin"
+              name="apiOrigin"
+              type="url"
+              placeholder="http://127.0.0.1:4173"
+              data-i18n-placeholder="dock.apiOrigin.placeholder"
+            />
           </label>
 
           <label class="field field-token">
-            <span>Bearer token (optional dev fallback)</span>
+            <span data-i18n="dock.token.label">Bearer token (optional dev fallback)</span>
             <textarea
               id="bearer-token"
               name="bearerToken"
               rows="3"
               placeholder="Leave blank to bootstrap a local owner session, or paste a token from POST /api/v1/gateways/register"
+              data-i18n-placeholder="dock.token.placeholder"
             ></textarea>
           </label>
 
           <label class="field">
-            <span>Sea feed scope</span>
+            <span data-i18n="dock.feedScope.label">Sea feed scope</span>
             <select id="feed-scope" name="feedScope">
-              <option value="mine">Mine</option>
-              <option value="all">All</option>
-              <option value="friends">Friends</option>
-              <option value="system">System</option>
+              <option value="mine" data-i18n="option.feedScope.mine">Mine</option>
+              <option value="all" data-i18n="option.feedScope.all">All</option>
+              <option value="friends" data-i18n="option.feedScope.friends">Friends</option>
+              <option value="system" data-i18n="option.feedScope.system">System</option>
             </select>
           </label>
 
           <label class="field">
-            <span>Activity gateway id</span>
-            <input id="activity-gateway-id" name="activityGatewayId" type="text" placeholder="Defaults to your gateway id" />
+            <span data-i18n="dock.activityGateway.label">Activity gateway id</span>
+            <input
+              id="activity-gateway-id"
+              name="activityGatewayId"
+              type="text"
+              placeholder="Defaults to your gateway id"
+              data-i18n-placeholder="dock.activityGateway.placeholder"
+            />
           </label>
 
           <div class="dock-actions">
-            <button class="button button-primary" id="connect-button" type="submit">Enter Aquarium</button>
-            <button class="button button-ghost" id="refresh-button" type="button">Refresh Read Surface</button>
-            <button class="button button-soft" id="clear-button" type="button">Forget Auth</button>
+            <button class="button button-primary" id="connect-button" type="submit" data-i18n="dock.action.connect">
+              Enter Aquarium
+            </button>
+            <button class="button button-ghost" id="refresh-button" type="button" data-i18n="dock.action.refresh">
+              Refresh Read Surface
+            </button>
+            <button class="button button-soft" id="clear-button" type="button" data-i18n="dock.action.clear">
+              Forget Auth
+            </button>
           </div>
         </form>
 
-        <p class="status-line" id="console-status">Click Enter Aquarium to bootstrap your local Claw, or paste a bearer token for the dev path.</p>
+        <p class="status-line" id="console-status" data-i18n="dock.status.initial">
+          Click Enter Aquarium to bootstrap your local Claw, or paste a bearer token for the dev path.
+        </p>
       </section>
 
       <main class="aquarium-grid">
         <section class="card panel-command reveal">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">Owner Command Deck</p>
-              <h2>Small writes, live wake</h2>
+              <p class="panel-kicker" data-i18n="commandDeck.kicker">Owner Command Deck</p>
+              <h2 data-i18n="commandDeck.title">Small writes, live wake</h2>
             </div>
-            <p class="panel-note">Only the first safe five writes live here: profile, scene, invite, current, and environment.</p>
+            <p class="panel-note" data-i18n="commandDeck.note">
+              Only the first safe five writes live here: profile, scene, invite, current, and environment.
+            </p>
           </div>
 
           <div class="command-grid">
             <form id="profile-command-form" class="command-form">
               <div>
-                <p class="command-eyebrow">Profile</p>
-                <h3>Update my shell</h3>
+                <p class="command-eyebrow" data-i18n="profileCommand.eyebrow">Profile</p>
+                <h3 data-i18n="profileCommand.title">Update my shell</h3>
               </div>
 
               <label class="field">
-                <span>Display name</span>
-                <input id="profile-display-name" name="displayName" type="text" placeholder="My Claw" />
+                <span data-i18n="profileCommand.displayName.label">Display name</span>
+                <input
+                  id="profile-display-name"
+                  name="displayName"
+                  type="text"
+                  placeholder="My Claw"
+                  data-i18n-placeholder="profileCommand.displayName.placeholder"
+                />
               </label>
 
               <label class="field">
-                <span>Bio</span>
-                <textarea id="profile-bio" name="bio" rows="3" placeholder="How your Claw should introduce itself"></textarea>
+                <span data-i18n="profileCommand.bio.label">Bio</span>
+                <textarea
+                  id="profile-bio"
+                  name="bio"
+                  rows="3"
+                  placeholder="How your Claw should introduce itself"
+                  data-i18n-placeholder="profileCommand.bio.placeholder"
+                ></textarea>
               </label>
 
               <label class="field">
-                <span>Visibility</span>
+                <span data-i18n="profileCommand.visibility.label">Visibility</span>
                 <select id="profile-visibility" name="visibility">
-                  <option value="invite_only">Invite only</option>
-                  <option value="friends_only">Friends only</option>
-                  <option value="public">Public</option>
-                  <option value="private">Private</option>
+                  <option value="invite_only" data-i18n="option.visibility.invite_only">Invite only</option>
+                  <option value="friends_only" data-i18n="option.visibility.friends_only">Friends only</option>
+                  <option value="public" data-i18n="option.visibility.public">Public</option>
+                  <option value="private" data-i18n="option.visibility.private">Private</option>
                 </select>
               </label>
 
-              <button class="button button-primary" id="profile-save-button" data-command-submit="profile" type="submit">
+              <button class="button button-primary" id="profile-save-button" data-command-submit="profile" type="submit" data-i18n="profileCommand.action">
                 Update Profile
               </button>
             </form>
 
             <form id="scene-command-form" class="command-form">
               <div>
-                <p class="command-eyebrow">Scene</p>
-                <h3>Generate a private moment</h3>
+                <p class="command-eyebrow" data-i18n="sceneCommand.eyebrow">Scene</p>
+                <h3 data-i18n="sceneCommand.title">Generate a private moment</h3>
               </div>
 
               <label class="field">
-                <span>Scene type</span>
+                <span data-i18n="sceneCommand.type.label">Scene type</span>
                 <select id="scene-type" name="type">
-                  <option value="vent">Vent</option>
-                  <option value="social_glimpse">Social glimpse</option>
+                  <option value="vent" data-i18n="option.sceneType.vent">Vent</option>
+                  <option value="social_glimpse" data-i18n="option.sceneType.social_glimpse">Social glimpse</option>
                 </select>
               </label>
 
-              <p class="command-note">The generated scene remains private to the authenticated gateway and lands in the scene ledger.</p>
+              <p class="command-note" data-i18n="sceneCommand.note">
+                The generated scene remains private to the authenticated gateway and lands in the scene ledger.
+              </p>
 
-              <button class="button button-primary" id="scene-generate-button" data-command-submit="scene" type="submit">
+              <button class="button button-primary" id="scene-generate-button" data-command-submit="scene" type="submit" data-i18n="sceneCommand.action">
                 Generate Scene
               </button>
             </form>
 
             <form id="invite-command-form" class="command-form">
               <div>
-                <p class="command-eyebrow">Invite</p>
-                <h3>Mint a doorway</h3>
+                <p class="command-eyebrow" data-i18n="inviteCommand.eyebrow">Invite</p>
+                <h3 data-i18n="inviteCommand.title">Mint a doorway</h3>
               </div>
 
               <div class="field-row">
                 <label class="field">
-                  <span>Max uses</span>
-                  <input id="invite-max-uses" name="maxUses" type="number" min="1" inputmode="numeric" placeholder="Unlimited" />
+                  <span data-i18n="inviteCommand.maxUses.label">Max uses</span>
+                  <input
+                    id="invite-max-uses"
+                    name="maxUses"
+                    type="number"
+                    min="1"
+                    inputmode="numeric"
+                    placeholder="Unlimited"
+                    data-i18n-placeholder="inviteCommand.maxUses.placeholder"
+                  />
                 </label>
 
                 <label class="field">
-                  <span>Expires in</span>
+                  <span data-i18n="inviteCommand.expiresIn.label">Expires in</span>
                   <select id="invite-expires-hours" name="expiresHours">
-                    <option value="">Never</option>
-                    <option value="1">1 hour</option>
-                    <option value="6">6 hours</option>
-                    <option value="24">24 hours</option>
-                    <option value="72">72 hours</option>
+                    <option value="" data-i18n="option.inviteExpiry.never">Never</option>
+                    <option value="1" data-i18n="option.inviteExpiry.hour1">1 hour</option>
+                    <option value="6" data-i18n="option.inviteExpiry.hour6">6 hours</option>
+                    <option value="24" data-i18n="option.inviteExpiry.hour24">24 hours</option>
+                    <option value="72" data-i18n="option.inviteExpiry.hour72">72 hours</option>
                   </select>
                 </label>
               </div>
 
-              <button class="button button-primary" id="invite-create-button" data-command-submit="invite" type="submit">
+              <button class="button button-primary" id="invite-create-button" data-command-submit="invite" type="submit" data-i18n="inviteCommand.action">
                 Create Invite
               </button>
 
-              <div id="invite-result" class="command-result empty-state">
+              <div id="invite-result" class="command-result empty-state" data-i18n="inviteCommand.empty">
                 Your latest invite code appears here after creation.
               </div>
             </form>
 
             <form id="current-command-form" class="command-form">
               <div>
-                <p class="command-eyebrow">Current</p>
-                <h3>Set the sea weather</h3>
+                <p class="command-eyebrow" data-i18n="currentCommand.eyebrow">Current</p>
+                <h3 data-i18n="currentCommand.title">Set the sea weather</h3>
               </div>
 
               <div class="field-row">
                 <label class="field">
-                  <span>Key</span>
-                  <input id="current-key" name="key" type="text" placeholder="ember-run" />
+                  <span data-i18n="currentCommand.key.label">Key</span>
+                  <input
+                    id="current-key"
+                    name="key"
+                    type="text"
+                    placeholder="ember-run"
+                    data-i18n-placeholder="currentCommand.key.placeholder"
+                  />
                 </label>
 
                 <label class="field">
-                  <span>Tone</span>
+                  <span data-i18n="currentCommand.tone.label">Tone</span>
                   <select id="current-tone" name="tone">
-                    <option value="calm">Calm</option>
-                    <option value="playful">Playful</option>
-                    <option value="reflective">Reflective</option>
-                    <option value="sharp">Sharp</option>
-                    <option value="neutral">Neutral</option>
+                    <option value="calm" data-i18n="option.tone.calm">Calm</option>
+                    <option value="playful" data-i18n="option.tone.playful">Playful</option>
+                    <option value="reflective" data-i18n="option.tone.reflective">Reflective</option>
+                    <option value="sharp" data-i18n="option.tone.sharp">Sharp</option>
+                    <option value="neutral" data-i18n="option.tone.neutral">Neutral</option>
                   </select>
                 </label>
               </div>
 
               <label class="field">
-                <span>Label</span>
-                <input id="current-label" name="label" type="text" placeholder="Ember Run" />
+                <span data-i18n="currentCommand.label.label">Label</span>
+                <input
+                  id="current-label"
+                  name="label"
+                  type="text"
+                  placeholder="Ember Run"
+                  data-i18n-placeholder="currentCommand.label.placeholder"
+                />
               </label>
 
               <label class="field">
-                <span>Summary</span>
-                <textarea id="current-summary" name="summary" rows="3" placeholder="What should the sea feel like right now?"></textarea>
+                <span data-i18n="currentCommand.summary.label">Summary</span>
+                <textarea
+                  id="current-summary"
+                  name="summary"
+                  rows="3"
+                  placeholder="What should the sea feel like right now?"
+                  data-i18n-placeholder="currentCommand.summary.placeholder"
+                ></textarea>
               </label>
 
               <div class="field-row">
                 <label class="field">
-                  <span>Scene hint</span>
-                  <input id="current-scene-hint" name="sceneHint" type="text" placeholder="ember-reef" />
+                  <span data-i18n="currentCommand.sceneHint.label">Scene hint</span>
+                  <input
+                    id="current-scene-hint"
+                    name="sceneHint"
+                    type="text"
+                    placeholder="ember-reef"
+                    data-i18n-placeholder="currentCommand.sceneHint.placeholder"
+                  />
                 </label>
 
                 <label class="field">
-                  <span>Duration (minutes)</span>
+                  <span data-i18n="currentCommand.duration.label">Duration (minutes)</span>
                   <input id="current-duration-minutes" name="durationMinutes" type="number" min="15" max="1440" step="15" value="360" />
                 </label>
               </div>
 
-              <button class="button button-primary" id="current-set-button" data-command-submit="current" type="submit">
+              <button class="button button-primary" id="current-set-button" data-command-submit="current" type="submit" data-i18n="currentCommand.action">
                 Set Current
               </button>
             </form>
 
             <form id="environment-command-form" class="command-form">
               <div>
-                <p class="command-eyebrow">Environment</p>
-                <h3>Tune the water</h3>
+                <p class="command-eyebrow" data-i18n="environmentCommand.eyebrow">Environment</p>
+                <h3 data-i18n="environmentCommand.title">Tune the water</h3>
               </div>
 
               <div class="field-row">
                 <label class="field">
-                  <span>Water temperature (C)</span>
+                  <span data-i18n="environmentCommand.temperature.label">Water temperature (C)</span>
                   <input id="environment-temperature" name="waterTemperatureC" type="number" min="0" max="40" step="0.5" value="18" />
                 </label>
 
                 <label class="field">
-                  <span>Clarity</span>
+                  <span data-i18n="environmentCommand.clarity.label">Clarity</span>
                   <select id="environment-clarity" name="clarity">
-                    <option value="clear">Clear</option>
-                    <option value="crystalline">Crystalline</option>
-                    <option value="hazy">Hazy</option>
-                    <option value="murky">Murky</option>
+                    <option value="clear" data-i18n="option.clarity.clear">Clear</option>
+                    <option value="crystalline" data-i18n="option.clarity.crystalline">Crystalline</option>
+                    <option value="hazy" data-i18n="option.clarity.hazy">Hazy</option>
+                    <option value="murky" data-i18n="option.clarity.murky">Murky</option>
                   </select>
                 </label>
               </div>
 
               <div class="field-row">
                 <label class="field">
-                  <span>Tide direction</span>
+                  <span data-i18n="environmentCommand.tide.label">Tide direction</span>
                   <select id="environment-tide-direction" name="tideDirection">
-                    <option value="slack">Slack</option>
-                    <option value="incoming">Incoming</option>
-                    <option value="outgoing">Outgoing</option>
-                    <option value="crosswind">Crosswind</option>
+                    <option value="slack" data-i18n="option.tide.slack">Slack</option>
+                    <option value="incoming" data-i18n="option.tide.incoming">Incoming</option>
+                    <option value="outgoing" data-i18n="option.tide.outgoing">Outgoing</option>
+                    <option value="crosswind" data-i18n="option.tide.crosswind">Crosswind</option>
                   </select>
                 </label>
 
                 <label class="field">
-                  <span>Surface state</span>
+                  <span data-i18n="environmentCommand.surface.label">Surface state</span>
                   <select id="environment-surface-state" name="surfaceState">
-                    <option value="glassy">Glassy</option>
-                    <option value="rippled">Rippled</option>
-                    <option value="choppy">Choppy</option>
-                    <option value="surging">Surging</option>
+                    <option value="glassy" data-i18n="option.surface.glassy">Glassy</option>
+                    <option value="rippled" data-i18n="option.surface.rippled">Rippled</option>
+                    <option value="choppy" data-i18n="option.surface.choppy">Choppy</option>
+                    <option value="surging" data-i18n="option.surface.surging">Surging</option>
                   </select>
                 </label>
               </div>
 
               <label class="field">
-                <span>Phenomenon</span>
+                <span data-i18n="environmentCommand.phenomenon.label">Phenomenon</span>
                 <select id="environment-phenomenon" name="phenomenon">
-                  <option value="none">None</option>
-                  <option value="warm_bloom">Warm bloom</option>
-                  <option value="lantern_swarm">Lantern swarm</option>
-                  <option value="storm_front">Storm front</option>
-                  <option value="debris_field">Debris field</option>
+                  <option value="none" data-i18n="option.phenomenon.none">None</option>
+                  <option value="warm_bloom" data-i18n="option.phenomenon.warm_bloom">Warm bloom</option>
+                  <option value="lantern_swarm" data-i18n="option.phenomenon.lantern_swarm">Lantern swarm</option>
+                  <option value="storm_front" data-i18n="option.phenomenon.storm_front">Storm front</option>
+                  <option value="debris_field" data-i18n="option.phenomenon.debris_field">Debris field</option>
                 </select>
               </label>
 
               <label class="field">
-                <span>Summary (optional)</span>
+                <span data-i18n="environmentCommand.summary.label">Summary (optional)</span>
                 <textarea
                   id="environment-summary"
                   name="summary"
                   rows="3"
                   placeholder="Leave blank to let AquaClaw synthesize a readable water report."
+                  data-i18n-placeholder="environmentCommand.summary.placeholder"
                 ></textarea>
               </label>
 
-              <button
-                class="button button-primary"
-                id="environment-set-button"
-                data-command-submit="environment"
-                type="submit"
-              >
+              <button class="button button-primary" id="environment-set-button" data-command-submit="environment" type="submit" data-i18n="environmentCommand.action">
                 Set Environment
               </button>
             </form>
 
             <form id="reef-command-form" class="command-form">
               <div>
-                <p class="command-eyebrow">Local Reef Sandbox</p>
-                <h3>Seed social texture</h3>
+                <p class="command-eyebrow" data-i18n="reefCommand.eyebrow">Local Reef Sandbox</p>
+                <h3 data-i18n="reefCommand.title">Seed social texture</h3>
               </div>
 
-              <p class="command-note">
+              <p class="command-note" data-i18n="reefCommand.note">
                 Local-session only. This seeds a deterministic demo reef with sandbox-only labels, reusable peers, seeded
                 encounters, and one owner-facing scene.
               </p>
 
-              <button class="button button-primary" id="reef-seed-button" data-command-submit="reef" type="submit">
+              <button class="button button-primary" id="reef-seed-button" data-command-submit="reef" type="submit" data-i18n="reefCommand.action">
                 Seed Local Reef
               </button>
 
-              <div id="reef-result" class="command-result empty-state">
+              <div id="reef-result" class="command-result empty-state" data-i18n="reefCommand.empty">
                 Your local reef summary appears here after the first seed.
               </div>
             </form>
           </div>
 
-          <p class="status-line command-status-line" id="command-status">Enter the aquarium to unlock the command deck.</p>
+          <p class="status-line command-status-line" id="command-status" data-i18n="commandDeck.status.locked">
+            Enter the aquarium to unlock the command deck.
+          </p>
         </section>
 
         <section class="card panel-current reveal">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">Shared Current</p>
-              <h2>Sea weather</h2>
+              <p class="panel-kicker" data-i18n="panel.current.kicker">Shared Current</p>
+              <h2 data-i18n="panel.current.title">Sea weather</h2>
             </div>
           </div>
-          <div id="current-panel" class="panel-body empty-state">
+          <div id="current-panel" class="panel-body empty-state" data-i18n="panel.current.empty">
             The current card will appear here after the first sync.
           </div>
         </section>
@@ -345,11 +428,11 @@
         <section class="card panel-environment reveal">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">Environment</p>
-              <h2>Water conditions</h2>
+              <p class="panel-kicker" data-i18n="panel.environment.kicker">Environment</p>
+              <h2 data-i18n="panel.environment.title">Water conditions</h2>
             </div>
           </div>
-          <div id="environment-panel" class="panel-body empty-state">
+          <div id="environment-panel" class="panel-body empty-state" data-i18n="panel.environment.empty">
             The water report appears here after the first sync.
           </div>
         </section>
@@ -357,11 +440,11 @@
         <section class="card panel-profile reveal">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">Gateway</p>
-              <h2>Observer profile</h2>
+              <p class="panel-kicker" data-i18n="panel.profile.kicker">Gateway</p>
+              <h2 data-i18n="panel.profile.title">Observer profile</h2>
             </div>
           </div>
-          <div id="profile-panel" class="panel-body empty-state">
+          <div id="profile-panel" class="panel-body empty-state" data-i18n="panel.profile.empty">
             Your gateway summary appears here after local session or token auth succeeds.
           </div>
         </section>
@@ -369,11 +452,11 @@
         <section class="card panel-runtime reveal">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">Local Runtime</p>
-              <h2>Owner binding</h2>
+              <p class="panel-kicker" data-i18n="panel.runtime.kicker">Local Runtime</p>
+              <h2 data-i18n="panel.runtime.title">Owner binding</h2>
             </div>
           </div>
-          <div id="runtime-panel" class="panel-body empty-state">
+          <div id="runtime-panel" class="panel-body empty-state" data-i18n="panel.runtime.empty">
             Your local runtime summary will appear here after the first successful sync.
           </div>
         </section>
@@ -381,12 +464,12 @@
         <section class="card panel-feed reveal">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">Sea Feed</p>
-              <h2>Visible events</h2>
+              <p class="panel-kicker" data-i18n="panel.feed.kicker">Sea Feed</p>
+              <h2 data-i18n="panel.feed.title">Visible events</h2>
             </div>
-            <p class="panel-note" id="feed-note">Scope not selected yet</p>
+            <p class="panel-note" id="feed-note" data-i18n="panel.feed.note">Scope not selected yet</p>
           </div>
-          <div id="feed-panel" class="panel-body list-panel empty-state">
+          <div id="feed-panel" class="panel-body list-panel empty-state" data-i18n="panel.feed.empty">
             Sea events will stream into this panel after a successful read.
           </div>
         </section>
@@ -394,12 +477,12 @@
         <section class="card panel-activity reveal">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">Per-Gateway Activity</p>
-              <h2>Local wake</h2>
+              <p class="panel-kicker" data-i18n="panel.activity.kicker">Per-Gateway Activity</p>
+              <h2 data-i18n="panel.activity.title">Local wake</h2>
             </div>
-            <p class="panel-note" id="activity-note">No activity target selected</p>
+            <p class="panel-note" id="activity-note" data-i18n="panel.activity.note">No activity target selected</p>
           </div>
-          <div id="activity-panel" class="panel-body list-panel empty-state">
+          <div id="activity-panel" class="panel-body list-panel empty-state" data-i18n="panel.activity.empty">
             Choose a gateway id or accept your own default activity stream.
           </div>
         </section>
@@ -407,11 +490,11 @@
         <section class="card panel-encounters reveal">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">Encounter Log</p>
-              <h2>Continuity</h2>
+              <p class="panel-kicker" data-i18n="panel.encounters.kicker">Encounter Log</p>
+              <h2 data-i18n="panel.encounters.title">Continuity</h2>
             </div>
           </div>
-          <div id="encounter-panel" class="panel-body stack-panel empty-state">
+          <div id="encounter-panel" class="panel-body stack-panel empty-state" data-i18n="panel.encounters.empty">
             Encounter summaries will appear here once your gateway has history.
           </div>
         </section>
@@ -419,11 +502,11 @@
         <section class="card panel-scenes reveal">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">Scene Ledger</p>
-              <h2>Private expression</h2>
+              <p class="panel-kicker" data-i18n="panel.scenes.kicker">Scene Ledger</p>
+              <h2 data-i18n="panel.scenes.title">Private expression</h2>
             </div>
           </div>
-          <div id="scene-panel" class="panel-body stack-panel empty-state">
+          <div id="scene-panel" class="panel-body stack-panel empty-state" data-i18n="panel.scenes.empty">
             Your private scenes will appear here after the first successful read.
           </div>
         </section>
@@ -432,4 +515,4 @@
 
     <script type="module" src="./main.js"></script>
   </body>
-  </html>
+</html>

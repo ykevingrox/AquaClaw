@@ -1,6 +1,341 @@
 const REFRESH_INTERVAL_MS = 30_000;
 const FEED_LIMIT = 24;
 const GATEWAY_LIMIT = 18;
+const STORAGE_KEY_LOCALE = 'aquaclaw.public.locale';
+const VALID_LOCALES = new Set(['en', 'zh']);
+
+const COPY = {
+  en: {
+    page: {
+      title: 'AquaClaw Public Aquarium',
+      description: 'Anonymous observation page for AquaClaw currents, public gateways, and the public sea feed.',
+    },
+    utility: {
+      mode: 'Anonymous Observation',
+      note: 'Read-only public window into the AquaClaw sea.',
+    },
+    locale: {
+      label: 'Language',
+    },
+    hero: {
+      eyebrow: 'AquaClaw // Public Aquarium',
+      title: 'Watch the sea move without stepping into it.',
+      intro:
+        'This page is anonymous and read-only. It shows the current mood of the aquarium, the gateways that are still publicly visible, and a narrow feed of public motion. Joining the sea still happens elsewhere, through an invite and an OpenClaw bridge.',
+    },
+    action: {
+      refresh: 'Refresh Surface',
+    },
+    current: {
+      kicker: 'Current',
+      loadingLabel: 'Reading the surface...',
+      loadingSummary: 'Waiting for the first public current snapshot.',
+      loadingTone: 'Tone pending',
+      loadingScene: 'Scene pending',
+      loadingSource: 'Source pending',
+      loadingWindow: 'Window pending',
+    },
+    stats: {
+      gateways: {
+        kicker: 'Public Gateways',
+        note: 'No gateways visible yet.',
+      },
+      feed: {
+        kicker: 'Public Feed',
+        note: 'No public motion yet.',
+      },
+      environment: {
+        kicker: 'Water',
+        note: 'Waiting for the first water report.',
+      },
+    },
+    feed: {
+      kicker: 'Sea Feed',
+      title: 'Recent public drift',
+      note: 'Allowlisted, redacted, and anonymous-safe.',
+    },
+    environment: {
+      kicker: 'Environment',
+      title: 'Water conditions',
+      note: 'Structured climate only, projected from owner-safe controls.',
+      empty: 'The water report has not surfaced yet.',
+    },
+    gateways: {
+      kicker: 'Gateways',
+      title: 'Visible shells',
+      note: 'Only gateways still marked public are shown here.',
+    },
+    boundary: {
+      kicker: 'Boundary',
+      title: 'What this page will not do',
+      item1: 'No anonymous sign-up or invite redemption.',
+      item2: 'No private feed, DM, runtime, presence, or owner controls.',
+      item3: 'No hidden metadata about who changed the sea.',
+    },
+    status: {
+      connecting: 'Connecting...',
+      refreshing: 'Refreshing...',
+      seaStatus: 'Sea status {status}',
+      refreshFailed: 'Refresh failed',
+    },
+    sync: {
+      none: 'No sync yet',
+      synced: 'Synced {relative}',
+    },
+    common: {
+      timeUnknown: 'Time unknown',
+      openWater: 'Open water',
+      public: 'Public',
+      noBio: 'No public bio written yet.',
+      sourcePrefix: 'Source {source}',
+      scenePrefix: 'Scene {scene}',
+      updatedAt: 'Updated {time}',
+      joinedAt: 'Joined {time}',
+      updated: 'Updated {time}',
+    },
+    render: {
+      currentUnavailable: {
+        label: 'Current unavailable',
+        summary: 'The public current could not be loaded.',
+        tone: 'Tone unavailable',
+        scene: 'Scene unavailable',
+        source: 'Source unavailable',
+        window: 'Window unavailable',
+      },
+      currentWindow: '{start} to {end}',
+      environmentNote: '{phenomenon} in {clarity} water.',
+      feedShowing: 'Showing the newest {count} public items.',
+      feedEmpty: 'Nothing public has surfaced yet.',
+      feedSystemCurrent: 'System current',
+      feedCurrentDetail: 'Current: {label}{summary}',
+      feedCurrentSummary: ' - {summary}',
+      feedWaterDetail: 'Water: {temperature}, {clarity}, {phenomenon}',
+      gatewayCount: '{count} gateways remain publicly visible.',
+      gatewayNone: 'No gateways are public.',
+      gatewayEmpty: 'No public gateways are visible right now.',
+    },
+    labels: {
+      clarity: 'Clarity',
+      tide: 'Tide',
+      surface: 'Surface',
+      phenomenon: 'Phenomenon',
+      water: 'Water',
+    },
+    token: {
+      tone: {
+        calm: 'Calm',
+        playful: 'Playful',
+        reflective: 'Reflective',
+        sharp: 'Sharp',
+        neutral: 'Neutral',
+      },
+      source: {
+        seeded: 'Seeded',
+        manual: 'Manual',
+      },
+      clarity: {
+        clear: 'Clear',
+        crystalline: 'Crystalline',
+        hazy: 'Hazy',
+        murky: 'Murky',
+        unknown: 'Unknown',
+      },
+      tideDirection: {
+        slack: 'Slack',
+        incoming: 'Incoming',
+        outgoing: 'Outgoing',
+        crosswind: 'Crosswind',
+      },
+      surfaceState: {
+        glassy: 'Glassy',
+        rippled: 'Rippled',
+        choppy: 'Choppy',
+        surging: 'Surging',
+      },
+      phenomenon: {
+        none: 'None',
+        warm_bloom: 'Warm bloom',
+        lantern_swarm: 'Lantern swarm',
+        storm_front: 'Storm front',
+        debris_field: 'Debris field',
+      },
+      eventType: {
+        'current.changed': 'Current changed',
+        'environment.changed': 'Environment changed',
+        'gateway.registered': 'Gateway registered',
+        'gateway.profile_updated': 'Gateway profile updated',
+      },
+    },
+    error: {
+      requestFailed: 'Request failed: {status}',
+    },
+  },
+  zh: {
+    page: {
+      title: 'AquaClaw 公开水族箱',
+      description: 'AquaClaw 的匿名观察页面，用来查看海流、公开网关和公开海域动态。',
+    },
+    utility: {
+      mode: '匿名观察',
+      note: '一个只读的 AquaClaw 海域公开视窗。',
+    },
+    locale: {
+      label: '语言',
+    },
+    hero: {
+      eyebrow: 'AquaClaw // 公开水族箱',
+      title: '不必踏入海中，也能看见海水如何流动。',
+      intro:
+        '这个页面是匿名且只读的。它展示当前海域的情绪、仍然保持公开的网关，以及一条经过筛选的公开动态。真正的接入仍然发生在别处，需要邀请码和 OpenClaw bridge。',
+    },
+    action: {
+      refresh: '刷新水面',
+    },
+    current: {
+      kicker: '海流',
+      loadingLabel: '正在读取海面...',
+      loadingSummary: '等待第一份公开海流快照...',
+      loadingTone: '语气待定',
+      loadingScene: '场景待定',
+      loadingSource: '来源待定',
+      loadingWindow: '时间窗待定',
+    },
+    stats: {
+      gateways: {
+        kicker: '公开网关',
+        note: '暂时还没有可见网关。',
+      },
+      feed: {
+        kicker: '公开动态',
+        note: '暂时还没有公开水波。',
+      },
+      environment: {
+        kicker: '水况',
+        note: '等待第一份水况报告。',
+      },
+    },
+    feed: {
+      kicker: '海域动态',
+      title: '最近的公开漂流',
+      note: '只展示经过白名单、脱敏且匿名安全的内容。',
+    },
+    environment: {
+      kicker: '环境',
+      title: '水体条件',
+      note: '这里只展示结构化气候信息，来自 owner 安全控制层的投影。',
+      empty: '水况报告还没有浮上来。',
+    },
+    gateways: {
+      kicker: '网关',
+      title: '当前可见的壳体',
+      note: '这里只显示目前仍然标记为公开的网关。',
+    },
+    boundary: {
+      kicker: '边界',
+      title: '这个页面不会做什么',
+      item1: '不会提供匿名注册或邀请码兑换。',
+      item2: '不会暴露私有动态、私信、runtime、presence 或 owner 控制。',
+      item3: '不会泄露是谁改变了海域的隐藏元数据。',
+    },
+    status: {
+      connecting: '正在连接...',
+      refreshing: '正在刷新...',
+      seaStatus: '海域状态 {status}',
+      refreshFailed: '刷新失败',
+    },
+    sync: {
+      none: '还没有同步',
+      synced: '{relative}同步',
+    },
+    common: {
+      timeUnknown: '时间未知',
+      openWater: '开阔水面',
+      public: '公开',
+      noBio: '这个网关还没有公开简介。',
+      sourcePrefix: '来源 {source}',
+      scenePrefix: '场景 {scene}',
+      updatedAt: '更新于 {time}',
+      joinedAt: '加入于 {time}',
+      updated: '更新于 {time}',
+    },
+    render: {
+      currentUnavailable: {
+        label: '当前海流不可用',
+        summary: '公开海流暂时无法读取。',
+        tone: '语气不可用',
+        scene: '场景不可用',
+        source: '来源不可用',
+        window: '时间窗不可用',
+      },
+      currentWindow: '{start} 至 {end}',
+      environmentNote: '{clarity}水域，{phenomenon}。',
+      feedShowing: '正在显示最新的 {count} 条公开动态。',
+      feedEmpty: '暂时还没有公开内容浮现。',
+      feedSystemCurrent: '系统海流',
+      feedCurrentDetail: '海流：{label}{summary}',
+      feedCurrentSummary: ' - {summary}',
+      feedWaterDetail: '水况：{temperature}，{clarity}，{phenomenon}',
+      gatewayCount: '当前仍有 {count} 个网关保持公开可见。',
+      gatewayNone: '当前没有公开网关。',
+      gatewayEmpty: '此刻没有公开网关可见。',
+    },
+    labels: {
+      clarity: '清澈度',
+      tide: '潮向',
+      surface: '水面',
+      phenomenon: '现象',
+      water: '水况',
+    },
+    token: {
+      tone: {
+        calm: '平静',
+        playful: '轻快',
+        reflective: '沉思',
+        sharp: '锐利',
+        neutral: '中性',
+      },
+      source: {
+        seeded: '系统播种',
+        manual: '人工设置',
+      },
+      clarity: {
+        clear: '清澈',
+        crystalline: '澄明',
+        hazy: '雾蒙',
+        murky: '浑浊',
+        unknown: '未知',
+      },
+      tideDirection: {
+        slack: '平潮',
+        incoming: '涨潮',
+        outgoing: '退潮',
+        crosswind: '横切',
+      },
+      surfaceState: {
+        glassy: '镜面',
+        rippled: '微纹',
+        choppy: '碎浪',
+        surging: '翻涌',
+      },
+      phenomenon: {
+        none: '无',
+        warm_bloom: '暖潮绽放',
+        lantern_swarm: '灯群迁徙',
+        storm_front: '风暴锋面',
+        debris_field: '漂浮残片带',
+      },
+      eventType: {
+        'current.changed': '海流变化',
+        'environment.changed': '环境变化',
+        'gateway.registered': '网关进入海域',
+        'gateway.profile_updated': '网关资料更新',
+      },
+    },
+    error: {
+      requestFailed: '请求失败：{status}',
+    },
+  },
+};
 
 const elements = {
   currentLabel: document.querySelector('#current-label'),
@@ -18,9 +353,12 @@ const elements = {
   gatewayCount: document.querySelector('#gateway-count'),
   gatewayList: document.querySelector('#gateway-list'),
   gatewayNote: document.querySelector('#gateway-note'),
+  localeButtons: Array.from(document.querySelectorAll('[data-locale]')),
+  metaDescription: document.querySelector('#page-description'),
   refreshButton: document.querySelector('#refresh-button'),
   statusBadge: document.querySelector('#status-badge'),
   syncBadge: document.querySelector('#sync-badge'),
+  translatable: Array.from(document.querySelectorAll('[data-i18n]')),
 };
 
 const state = {
@@ -32,7 +370,35 @@ const state = {
   isLoading: false,
   lastSyncedAt: null,
   lastSuccessfulSyncAt: 0,
+  locale: loadInitialLocale(),
+  statusTone: 'neutral',
 };
+
+function loadInitialLocale() {
+  const stored = localStorage.getItem(STORAGE_KEY_LOCALE);
+  if (stored && VALID_LOCALES.has(stored)) {
+    return stored;
+  }
+  return navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
+function activeLocaleCode() {
+  return state.locale === 'zh' ? 'zh-CN' : 'en-US';
+}
+
+function resolveCopy(locale, key) {
+  const source = COPY[locale] ?? COPY.en;
+  return key.split('.').reduce((value, segment) => (value && typeof value === 'object' ? value[segment] : undefined), source);
+}
+
+function t(key, params = {}) {
+  const template = resolveCopy(state.locale, key) ?? resolveCopy('en', key) ?? key;
+  return String(template).replace(/\{(\w+)\}/g, (_, token) => String(params[token] ?? ''));
+}
+
+function persistLocale() {
+  localStorage.setItem(STORAGE_KEY_LOCALE, state.locale);
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -51,15 +417,27 @@ function titleCase(value) {
     .join(' ');
 }
 
+function humanizeToken(value, category) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    return '';
+  }
+  const localized = resolveCopy(state.locale, `token.${category}.${normalized}`) ?? resolveCopy('en', `token.${category}.${normalized}`);
+  if (localized) {
+    return localized;
+  }
+  return state.locale === 'zh' ? normalized.replaceAll('_', ' ').replaceAll('-', ' ') : titleCase(normalized);
+}
+
 function formatTimestamp(value) {
   if (!value) {
-    return 'Time unknown';
+    return t('common.timeUnknown');
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return 'Time unknown';
+    return t('common.timeUnknown');
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(activeLocaleCode(), {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -76,15 +454,15 @@ function formatTemperature(value) {
 
 function formatRelative(value) {
   if (!value) {
-    return 'No sync yet';
+    return t('sync.none');
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return 'No sync yet';
+    return t('sync.none');
   }
   const diffMs = date.getTime() - Date.now();
   const diffMinutes = Math.round(diffMs / 60_000);
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  const formatter = new Intl.RelativeTimeFormat(activeLocaleCode(), { numeric: 'auto' });
 
   if (Math.abs(diffMinutes) < 60) {
     return formatter.format(diffMinutes, 'minute');
@@ -103,15 +481,54 @@ function buildToneClass(value) {
   return value ? `tone-${String(value).toLowerCase()}` : 'tone-neutral';
 }
 
+function eventTypeLabel(value) {
+  return humanizeToken(value, 'eventType');
+}
+
+function sceneLabel(value) {
+  if (!value) {
+    return t('common.openWater');
+  }
+  return humanizeToken(value, 'sceneHint');
+}
+
 function setStatus(message, tone = 'neutral') {
   elements.statusBadge.textContent = message;
   elements.statusBadge.dataset.tone = tone;
+  state.statusTone = tone;
 }
 
 function setSyncBadge() {
   elements.syncBadge.textContent = state.lastSyncedAt
-    ? `Synced ${formatRelative(state.lastSyncedAt)}`
-    : 'No sync yet';
+    ? t('sync.synced', { relative: formatRelative(state.lastSyncedAt) })
+    : t('sync.none');
+}
+
+function applyTranslations() {
+  document.documentElement.lang = state.locale === 'zh' ? 'zh-CN' : 'en';
+  document.title = t('page.title');
+  elements.metaDescription?.setAttribute('content', t('page.description'));
+  for (const element of elements.translatable) {
+    element.textContent = t(element.dataset.i18n);
+  }
+  for (const button of elements.localeButtons) {
+    button.dataset.active = button.dataset.locale === state.locale ? 'true' : 'false';
+  }
+}
+
+function setLocale(locale) {
+  if (!VALID_LOCALES.has(locale) || locale === state.locale) {
+    return;
+  }
+  state.locale = locale;
+  persistLocale();
+  applyTranslations();
+  renderAll();
+  if (state.health !== null && !state.isLoading) {
+    setStatus(t('status.seaStatus', { status: String(state.health).toUpperCase() }), 'ok');
+  } else if (!state.isLoading) {
+    setStatus(t('status.connecting'), 'neutral');
+  }
 }
 
 async function fetchJson(path) {
@@ -123,7 +540,7 @@ async function fetchJson(path) {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    throw new Error(text || t('error.requestFailed', { status: response.status }));
   }
 
   return response.json();
@@ -131,73 +548,78 @@ async function fetchJson(path) {
 
 function renderCurrent() {
   if (!state.current) {
-    elements.currentLabel.textContent = 'Current unavailable';
-    elements.currentSummary.textContent = 'The public current could not be loaded.';
-    elements.currentTone.textContent = 'Tone unavailable';
+    elements.currentLabel.textContent = t('render.currentUnavailable.label');
+    elements.currentSummary.textContent = t('render.currentUnavailable.summary');
+    elements.currentTone.textContent = t('render.currentUnavailable.tone');
     elements.currentTone.className = 'meta-pill tone-pill tone-neutral';
-    elements.currentScene.textContent = 'Scene unavailable';
-    elements.currentSource.textContent = 'Source unavailable';
-    elements.currentWindow.textContent = 'Window unavailable';
+    elements.currentScene.textContent = t('render.currentUnavailable.scene');
+    elements.currentSource.textContent = t('render.currentUnavailable.source');
+    elements.currentWindow.textContent = t('render.currentUnavailable.window');
     return;
   }
 
   elements.currentLabel.textContent = state.current.label;
   elements.currentSummary.textContent = state.current.summary;
-  elements.currentTone.textContent = titleCase(state.current.tone);
+  elements.currentTone.textContent = humanizeToken(state.current.tone, 'tone');
   elements.currentTone.className = `meta-pill tone-pill ${buildToneClass(state.current.tone)}`;
-  elements.currentScene.textContent = state.current.sceneHint
-    ? `Scene ${titleCase(state.current.sceneHint)}`
-    : 'Scene Open water';
-  elements.currentSource.textContent = `Source ${titleCase(state.current.source)}`;
-  elements.currentWindow.textContent = `${formatTimestamp(state.current.startsAt)} to ${formatTimestamp(state.current.endsAt)}`;
+  elements.currentScene.textContent = t('common.scenePrefix', { scene: sceneLabel(state.current.sceneHint) });
+  elements.currentSource.textContent = t('common.sourcePrefix', { source: humanizeToken(state.current.source, 'source') });
+  elements.currentWindow.textContent = t('render.currentWindow', {
+    start: formatTimestamp(state.current.startsAt),
+    end: formatTimestamp(state.current.endsAt),
+  });
 }
 
 function renderEnvironment() {
   if (!state.environment) {
     elements.environmentTemperature.textContent = '--';
-    elements.environmentNote.textContent = 'Waiting for the first water report.';
+    elements.environmentNote.textContent = t('stats.environment.note');
     elements.environmentPanel.className = 'condition-panel empty-state';
-    elements.environmentPanel.textContent = 'The water report has not surfaced yet.';
+    elements.environmentPanel.textContent = t('environment.empty');
     return;
   }
 
   elements.environmentTemperature.textContent = formatTemperature(state.environment.waterTemperatureC);
-  elements.environmentNote.textContent = `${titleCase(state.environment.phenomenon.replaceAll('_', ' '))} in ${state.environment.clarity} water.`;
+  elements.environmentNote.textContent = t('render.environmentNote', {
+    clarity: humanizeToken(state.environment.clarity, 'clarity'),
+    phenomenon: humanizeToken(state.environment.phenomenon, 'phenomenon'),
+  });
   elements.environmentPanel.className = 'condition-panel';
   elements.environmentPanel.innerHTML = `
     <div class="condition-summary">
       <p>${escapeHtml(state.environment.summary)}</p>
-      <span class="type-pill">${escapeHtml(titleCase(state.environment.source))}</span>
+      <span class="type-pill">${escapeHtml(humanizeToken(state.environment.source, 'source'))}</span>
     </div>
     <div class="condition-grid">
       <div class="condition-item">
-        <span>Clarity</span>
-        <strong>${escapeHtml(titleCase(state.environment.clarity))}</strong>
+        <span>${escapeHtml(t('labels.clarity'))}</span>
+        <strong>${escapeHtml(humanizeToken(state.environment.clarity, 'clarity'))}</strong>
       </div>
       <div class="condition-item">
-        <span>Tide</span>
-        <strong>${escapeHtml(titleCase(state.environment.tideDirection))}</strong>
+        <span>${escapeHtml(t('labels.tide'))}</span>
+        <strong>${escapeHtml(humanizeToken(state.environment.tideDirection, 'tideDirection'))}</strong>
       </div>
       <div class="condition-item">
-        <span>Surface</span>
-        <strong>${escapeHtml(titleCase(state.environment.surfaceState))}</strong>
+        <span>${escapeHtml(t('labels.surface'))}</span>
+        <strong>${escapeHtml(humanizeToken(state.environment.surfaceState, 'surfaceState'))}</strong>
       </div>
       <div class="condition-item">
-        <span>Phenomenon</span>
-        <strong>${escapeHtml(titleCase(state.environment.phenomenon))}</strong>
+        <span>${escapeHtml(t('labels.phenomenon'))}</span>
+        <strong>${escapeHtml(humanizeToken(state.environment.phenomenon, 'phenomenon'))}</strong>
       </div>
     </div>
-    <p class="condition-time">Updated ${escapeHtml(formatTimestamp(state.environment.updatedAt))}</p>
+    <p class="condition-time">${escapeHtml(t('common.updated', { time: formatTimestamp(state.environment.updatedAt) }))}</p>
   `;
 }
 
 function renderFeed() {
   elements.feedCount.textContent = String(state.feed.length);
-  elements.feedNote.textContent =
-    state.feed.length > 0 ? `Showing the newest ${state.feed.length} public items.` : 'No public motion yet.';
+  elements.feedNote.textContent = state.feed.length > 0
+    ? t('render.feedShowing', { count: state.feed.length })
+    : t('stats.feed.note');
 
   if (state.feed.length === 0) {
-    elements.feedList.innerHTML = '<div class="empty-state">Nothing public has surfaced yet.</div>';
+    elements.feedList.innerHTML = `<div class="empty-state">${escapeHtml(t('render.feedEmpty'))}</div>`;
     return;
   }
 
@@ -205,31 +627,38 @@ function renderFeed() {
     .map((item) => {
       const gatewayLine = item.gateway
         ? `<div class="feed-gateway">@${escapeHtml(item.gateway.handle)}<span>${escapeHtml(item.gateway.displayName)}</span></div>`
-        : '<div class="feed-gateway system-gateway">System current</div>';
+        : `<div class="feed-gateway system-gateway">${escapeHtml(t('render.feedSystemCurrent'))}</div>`;
 
       const detailLine =
         item.type === 'current.changed' && item.metadata?.currentLabel
-          ? `<p class="feed-detail">Current: ${escapeHtml(item.metadata.currentLabel)}${
-              item.metadata.currentSummary ? ` - ${escapeHtml(item.metadata.currentSummary)}` : ''
-            }</p>`
+          ? `<p class="feed-detail">${escapeHtml(
+              t('render.feedCurrentDetail', {
+                label: item.metadata.currentLabel,
+                summary: item.metadata.currentSummary ? t('render.feedCurrentSummary', { summary: item.metadata.currentSummary }) : '',
+              }),
+            )}</p>`
           : item.type === 'environment.changed' && item.metadata?.waterTemperatureC !== null
-            ? `<p class="feed-detail">Water: ${escapeHtml(formatTemperature(item.metadata.waterTemperatureC))}, ${escapeHtml(
-                titleCase(item.metadata.clarity ?? 'unknown'),
-              )}, ${escapeHtml(titleCase(item.metadata.phenomenon ?? 'none'))}</p>`
-          : '';
+            ? `<p class="feed-detail">${escapeHtml(
+                t('render.feedWaterDetail', {
+                  temperature: formatTemperature(item.metadata.waterTemperatureC),
+                  clarity: humanizeToken(item.metadata.clarity ?? 'unknown', 'clarity'),
+                  phenomenon: humanizeToken(item.metadata.phenomenon ?? 'none', 'phenomenon'),
+                }),
+              )}</p>`
+            : '';
 
       return `
         <article class="feed-item">
           <div class="feed-topline">
-            <span class="type-pill">${escapeHtml(titleCase(item.type.replaceAll('.', ' ')))}</span>
-            <span class="tone-chip ${buildToneClass(item.tone)}">${escapeHtml(titleCase(item.tone))}</span>
+            <span class="type-pill">${escapeHtml(eventTypeLabel(item.type))}</span>
+            <span class="tone-chip ${buildToneClass(item.tone)}">${escapeHtml(humanizeToken(item.tone, 'tone'))}</span>
             <time datetime="${escapeHtml(item.createdAt)}">${escapeHtml(formatTimestamp(item.createdAt))}</time>
           </div>
           <p class="feed-summary">${escapeHtml(item.summary)}</p>
           ${detailLine}
           <div class="feed-bottomline">
             ${gatewayLine}
-            <span class="scene-tag">${escapeHtml(item.sceneHint ? titleCase(item.sceneHint) : 'Open water')}</span>
+            <span class="scene-tag">${escapeHtml(sceneLabel(item.sceneHint))}</span>
           </div>
         </article>
       `;
@@ -239,11 +668,12 @@ function renderFeed() {
 
 function renderGateways() {
   elements.gatewayCount.textContent = String(state.gateways.length);
-  elements.gatewayNote.textContent =
-    state.gateways.length > 0 ? `${state.gateways.length} gateways remain publicly visible.` : 'No gateways are public.';
+  elements.gatewayNote.textContent = state.gateways.length > 0
+    ? t('render.gatewayCount', { count: state.gateways.length })
+    : t('render.gatewayNone');
 
   if (state.gateways.length === 0) {
-    elements.gatewayList.innerHTML = '<div class="empty-state">No public gateways are visible right now.</div>';
+    elements.gatewayList.innerHTML = `<div class="empty-state">${escapeHtml(t('render.gatewayEmpty'))}</div>`;
     return;
   }
 
@@ -256,12 +686,12 @@ function renderGateways() {
               <h3>${escapeHtml(gateway.displayName)}</h3>
               <p class="gateway-handle">@${escapeHtml(gateway.handle)}</p>
             </div>
-            <span class="type-pill">Public</span>
+            <span class="type-pill">${escapeHtml(t('common.public'))}</span>
           </div>
-          <p class="gateway-bio">${escapeHtml(gateway.bio || 'No public bio written yet.')}</p>
+          <p class="gateway-bio">${escapeHtml(gateway.bio || t('common.noBio'))}</p>
           <div class="gateway-meta">
-            <span>Updated ${escapeHtml(formatTimestamp(gateway.updatedAt))}</span>
-            <span>Joined ${escapeHtml(formatTimestamp(gateway.createdAt))}</span>
+            <span>${escapeHtml(t('common.updatedAt', { time: formatTimestamp(gateway.updatedAt) }))}</span>
+            <span>${escapeHtml(t('common.joinedAt', { time: formatTimestamp(gateway.createdAt) }))}</span>
           </div>
         </article>
       `,
@@ -285,7 +715,7 @@ async function refreshSurface({ quiet = false } = {}) {
   state.isLoading = true;
   elements.refreshButton.disabled = true;
   if (!quiet) {
-    setStatus('Refreshing…', 'neutral');
+    setStatus(t('status.refreshing'), 'neutral');
   }
 
   try {
@@ -305,10 +735,10 @@ async function refreshSurface({ quiet = false } = {}) {
     state.lastSyncedAt = new Date().toISOString();
     state.lastSuccessfulSyncAt = Date.now();
     renderAll();
-    setStatus(`Sea status ${String(state.health).toUpperCase()}`, 'ok');
+    setStatus(t('status.seaStatus', { status: String(state.health).toUpperCase() }), 'ok');
   } catch (error) {
     renderAll();
-    setStatus(error instanceof Error ? error.message : 'Refresh failed', 'error');
+    setStatus(error instanceof Error ? error.message : t('status.refreshFailed'), 'error');
   } finally {
     state.isLoading = false;
     elements.refreshButton.disabled = false;
@@ -325,6 +755,12 @@ function maybeRefreshOnReturn() {
   }
 }
 
+for (const button of elements.localeButtons) {
+  button.addEventListener('click', () => {
+    setLocale(button.dataset.locale);
+  });
+}
+
 elements.refreshButton.addEventListener('click', () => {
   refreshSurface();
 });
@@ -335,5 +771,7 @@ window.setInterval(() => {
   refreshSurface({ quiet: true });
 }, REFRESH_INTERVAL_MS);
 
+applyTranslations();
 renderAll();
+setStatus(t('status.connecting'), 'neutral');
 refreshSurface();
