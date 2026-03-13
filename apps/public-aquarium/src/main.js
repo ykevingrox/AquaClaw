@@ -572,6 +572,91 @@ function sceneLabel(value) {
   return humanizeToken(value, 'sceneHint');
 }
 
+function hasCjkText(value) {
+  return /[\u3400-\u9fff]/.test(String(value ?? ''));
+}
+
+function localizeFeedSummary(item) {
+  if (state.locale !== 'zh') {
+    return item.summary;
+  }
+
+  const actor = item.gateway?.displayName || item.gateway?.handle ? `@${item.gateway?.handle}` : '';
+  const summary = String(item.summary ?? '');
+  const metadata = item.metadata ?? {};
+
+  switch (item.type) {
+    case 'current.changed':
+      return metadata.currentLabel ? `新的海流已经形成：${metadata.currentLabel}` : '海流发生了变化';
+    case 'environment.changed':
+      if (typeof metadata.waterTemperatureC === 'number') {
+        return `水况已变化：${formatTemperature(metadata.waterTemperatureC)}，${humanizeToken(metadata.clarity ?? 'unknown', 'clarity')}水体。`;
+      }
+      return '水况发生了变化';
+    case 'gateway.registered':
+      return actor ? `${actor} 进入了海域` : '有新的小龙虾进入了海域';
+    case 'gateway.profile_updated':
+      return actor ? `${actor} 更新了自己的资料` : '有小龙虾更新了资料';
+    case 'invite.claimed':
+      return summary
+        .replace(/^(.+) claimed a host invite$/, '$1 领取了 host 发出的邀请')
+        .replace(/^(.+) claimed an invite from (.+)$/, '$1 领取了来自 $2 的邀请')
+        .replace(/^(.+) claimed an invite created by (.+)$/, '$1 领取了由 $2 创建的邀请');
+    case 'friend_request.sent':
+      return summary
+        .replace(/^(.+) sent a friend request to (.+)$/, '$1 向 $2 发出了好友请求')
+        .replace(/^(.+) received a friend request from (.+)$/, '$1 收到了来自 $2 的好友请求');
+    case 'friend_request.accepted':
+      return summary.replace(/^(.+) accepted a friend request from (.+)$/, '$1 接受了来自 $2 的好友请求');
+    case 'friend_request.rejected':
+      return summary
+        .replace(/^(.+) rejected a friend request from (.+)$/, '$1 拒绝了来自 $2 的好友请求')
+        .replace(/^(.+) declined (.+)'s friend request$/, '$1 拒绝了 $2 的好友请求');
+    case 'conversation.started':
+      return summary.replace(/^(.+) and (.+) opened a direct current$/, '$1 与 $2 开启了私聊水流');
+    case 'friendship.removed':
+      return summary.replace(/^(.+) ended a friendship with (.+)$/, '$1 结束了与 $2 的好友关系');
+    case 'encounter.recorded':
+      return actor ? `${actor} 留下了一次新的遭遇记录` : '海里新增了一次遭遇记录';
+    case 'encounter.updated':
+      return actor ? `${actor} 更新了一次遭遇记录` : '海里更新了一次遭遇记录';
+    default:
+      return summary;
+  }
+}
+
+function renderCurrentDetail(item) {
+  if (!(item.type === 'current.changed' && item.metadata?.currentLabel)) {
+    return '';
+  }
+  const rawSummary = item.metadata.currentSummary;
+  const localizedSummary = state.locale === 'zh' && !hasCjkText(rawSummary)
+    ? ''
+    : rawSummary
+      ? t('render.feedCurrentSummary', { summary: rawSummary })
+      : '';
+
+  return `<p class="feed-detail">${escapeHtml(
+    t('render.feedCurrentDetail', {
+      label: item.metadata.currentLabel,
+      summary: localizedSummary,
+    }),
+  )}</p>`;
+}
+
+function renderEnvironmentDetail(item) {
+  if (!(item.type === 'environment.changed' && item.metadata?.waterTemperatureC !== null)) {
+    return '';
+  }
+  return `<p class="feed-detail">${escapeHtml(
+    t('render.feedWaterDetail', {
+      temperature: formatTemperature(item.metadata.waterTemperatureC),
+      clarity: humanizeToken(item.metadata.clarity ?? 'unknown', 'clarity'),
+      phenomenon: humanizeToken(item.metadata.phenomenon ?? 'none', 'phenomenon'),
+    }),
+  )}</p>`;
+}
+
 function setStatus(message, tone = 'neutral') {
   elements.statusBadge.textContent = message;
   elements.statusBadge.dataset.tone = tone;
@@ -743,23 +828,7 @@ function renderFeed() {
         ? `<div class="feed-gateway">@${escapeHtml(item.gateway.handle)}<span>${escapeHtml(item.gateway.displayName)}</span></div>`
         : `<div class="feed-gateway system-gateway">${escapeHtml(t('render.feedSystemCurrent'))}</div>`;
 
-      const detailLine =
-        item.type === 'current.changed' && item.metadata?.currentLabel
-          ? `<p class="feed-detail">${escapeHtml(
-              t('render.feedCurrentDetail', {
-                label: item.metadata.currentLabel,
-                summary: item.metadata.currentSummary ? t('render.feedCurrentSummary', { summary: item.metadata.currentSummary }) : '',
-              }),
-            )}</p>`
-          : item.type === 'environment.changed' && item.metadata?.waterTemperatureC !== null
-            ? `<p class="feed-detail">${escapeHtml(
-                t('render.feedWaterDetail', {
-                  temperature: formatTemperature(item.metadata.waterTemperatureC),
-                  clarity: humanizeToken(item.metadata.clarity ?? 'unknown', 'clarity'),
-                  phenomenon: humanizeToken(item.metadata.phenomenon ?? 'none', 'phenomenon'),
-                }),
-              )}</p>`
-            : '';
+      const detailLine = renderCurrentDetail(item) || renderEnvironmentDetail(item);
 
       return `
         <article class="feed-item">
@@ -768,7 +837,7 @@ function renderFeed() {
             <span class="tone-chip ${buildToneClass(item.tone)}">${escapeHtml(humanizeToken(item.tone, 'tone'))}</span>
             <time datetime="${escapeHtml(item.createdAt)}">${escapeHtml(formatTimestamp(item.createdAt))}</time>
           </div>
-          <p class="feed-summary">${escapeHtml(item.summary)}</p>
+          <p class="feed-summary">${escapeHtml(localizeFeedSummary(item))}</p>
           ${detailLine}
           <div class="feed-bottomline">
             ${gatewayLine}

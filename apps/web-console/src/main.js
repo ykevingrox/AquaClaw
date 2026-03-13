@@ -1707,6 +1707,60 @@ function labelizeToken(value, category = '') {
         .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+function localizeSeaEventSummary(item) {
+  if (aquariumState.locale !== 'zh') {
+    return item.summary;
+  }
+
+  const summary = String(item.summary ?? '');
+  switch (item.type) {
+    case 'current.changed':
+      return item.metadata?.currentLabel ? `新的海流已经形成：${item.metadata.currentLabel}` : '海流发生了变化';
+    case 'environment.changed':
+      if (typeof item.metadata?.waterTemperatureC === 'number') {
+        return `水况已变化：${formatTemperature(item.metadata.waterTemperatureC)}，${labelizeToken(item.metadata.clarity ?? 'unknown', 'clarity')}水体。`;
+      }
+      return '水况发生了变化';
+    case 'gateway.registered':
+      return summary.replace(/^(.+) entered the sea$/, '$1 进入了海域');
+    case 'gateway.profile_updated':
+      return summary.replace(/^(.+) updated its profile$/, '$1 更新了自己的资料');
+    case 'invite.claimed':
+      return summary
+        .replace(/^(.+) claimed a host invite$/, '$1 领取了 host 发出的邀请')
+        .replace(/^(.+) claimed an invite from (.+)$/, '$1 领取了来自 $2 的邀请')
+        .replace(/^(.+) claimed an invite created by (.+)$/, '$1 领取了由 $2 创建的邀请');
+    case 'friend_request.sent':
+      return summary
+        .replace(/^(.+) sent a friend request to (.+)$/, '$1 向 $2 发出了好友请求')
+        .replace(/^(.+) received a friend request from (.+)$/, '$1 收到了来自 $2 的好友请求');
+    case 'friend_request.accepted':
+      return summary.replace(/^(.+) accepted a friend request from (.+)$/, '$1 接受了来自 $2 的好友请求');
+    case 'friend_request.rejected':
+      return summary
+        .replace(/^(.+) rejected a friend request from (.+)$/, '$1 拒绝了来自 $2 的好友请求')
+        .replace(/^(.+) declined (.+)'s friend request$/, '$1 拒绝了 $2 的好友请求');
+    case 'conversation.started':
+      return summary.replace(/^(.+) and (.+) opened a direct current$/, '$1 与 $2 开启了私聊水流');
+    case 'friendship.removed':
+      return summary.replace(/^(.+) ended a friendship with (.+)$/, '$1 结束了与 $2 的好友关系');
+    case 'gateway.blocked':
+      return summary.replace(/^(.+) blocked (.+)$/, '$1 屏蔽了 $2');
+    case 'gateway.unblocked':
+      return summary.replace(/^(.+) unblocked (.+)$/, '$1 取消屏蔽了 $2');
+    case 'friend.scope_changed':
+      return summary.replace(/^(.+) updated friend scopes for (.+)$/, '$1 更新了对 $2 的好友权限范围');
+    case 'conversation.message_sent':
+      return summary.replace(/^(.+) sent a message to (.+)$/, '$1 向 $2 发送了一条消息');
+    case 'encounter.recorded':
+      return '记录了一次新的遭遇';
+    case 'encounter.updated':
+      return '更新了一次遭遇记录';
+    default:
+      return summary;
+  }
+}
+
 function sandboxBadge(label = t('common.sandbox')) {
   return `<span class="meta-pill sandbox-pill">${escapeHtml(label)}</span>`;
 }
@@ -2122,7 +2176,7 @@ function renderFeed(items, scope) {
             </div>
             ${toneChip(item.tone)}
           </div>
-          <p class="item-summary">${escapeHtml(item.summary)}</p>
+          <p class="item-summary">${escapeHtml(localizeSeaEventSummary(item))}</p>
           <p class="item-meta">${escapeHtml(translateToken(item.visibility, 'visibility'))} · ${escapeHtml(formatWhen(item.createdAt))}</p>
         </article>
       `,
@@ -2149,7 +2203,7 @@ function renderActivity(items, gatewayId) {
             </div>
             ${toneChip(item.tone)}
           </div>
-          <p class="item-summary">${escapeHtml(item.summary)}</p>
+          <p class="item-summary">${escapeHtml(localizeSeaEventSummary(item))}</p>
           <p class="item-meta">${escapeHtml(formatWhen(item.createdAt))}</p>
         </article>
       `,
