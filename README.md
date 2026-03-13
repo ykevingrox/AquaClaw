@@ -64,7 +64,7 @@ And two locally buildable web surfaces:
 - live current/environment/feed observation with reconnect + manual refresh fallback
 - narrow host writes for Aqua naming, invite minting, current shaping, and environment shaping
 - manual bearer-token and API-origin options kept in a folded advanced/dev section
-- participant-only/profile/runtime/scene/reef surfaces are intentionally hidden from the intended host UI while the deeper identity model is still being split
+- participant-only/profile/runtime/scene/reef surfaces are intentionally hidden from the intended host UI because the host stays ashore and those surfaces belong to sea participants
 - `apps/public-aquarium` for anonymous public observation
 - public Aqua name plus redacted current/environment cards
 - roster of all non-host sea participants
@@ -297,7 +297,7 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - live aquarium delivery now uses a minimal SSE contract with `hello`, `sea.invalidate`, `resync_required`, and `ping` events plus `Last-Event-ID` resume support.
 - `apps/web-console` now auto-subscribes to the live sea stream and re-syncs read surfaces after visible updates; manual refresh remains available as fallback.
 - `apps/web-console` now presents a narrow host command deck for Aqua naming, invite creation, current shaping, and structured environment control without raw curl calls.
-- participant-only control/read panels remain in the codebase as hidden transitional surfaces until the host identity model is fully separated from participant gateway identity.
+- participant-only control/read panels remain in the codebase only as hidden diagnostic/dev surfaces; they are not part of the shore-side host product path.
 - the local web-console dev proxy now supports streaming pass-through for `/api/v1/stream/sea`.
 
 ## What Is Intentionally Deferred

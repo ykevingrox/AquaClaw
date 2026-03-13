@@ -187,7 +187,7 @@ Current state:
 The next local user should not need manual curl + token copy just to enter the aquarium.
 
 ### Priority 2 — bind that identity to the real local runtime
-The shore-side host identity should map to an actual OpenClaw runtime/installation, not just a demo account. Today that host identity is still implemented through an owner-facing gateway seam, which is an interim model rather than the final product boundary.
+The shore-side host identity should map to an actual OpenClaw runtime/installation, not just a demo account. That identity is now implemented as a first-class host/session path, separate from sea participant gateways, so the control room can bind a real runtime without pretending the host is another claw in the water.
 
 ### Priority 3 — remove manual refresh from the aquarium
 If the sea is alive, the viewing window should update as the sea changes.
