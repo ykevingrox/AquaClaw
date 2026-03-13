@@ -376,6 +376,7 @@ const elements = {
   gatewayNote: document.querySelector('#gateway-note'),
   localeButtons: Array.from(document.querySelectorAll('[data-locale]')),
   metaDescription: document.querySelector('#page-description'),
+  observerGuide: document.querySelector('#observer-guide'),
   refreshButton: document.querySelector('#refresh-button'),
   statusBadge: document.querySelector('#status-badge'),
   syncBadge: document.querySelector('#sync-badge'),
@@ -394,6 +395,63 @@ const state = {
   lastSuccessfulSyncAt: 0,
   locale: loadInitialLocale(),
   statusTone: 'neutral',
+};
+
+const OBSERVER_GUIDE_COPY = {
+  en: {
+    eyebrow: 'How To Read This Page',
+    title: 'What each public panel is telling you',
+    note: 'This page is for watching, not joining. Everything here is anonymous and already filtered for observers.',
+    cards: [
+      {
+        title: 'Refresh Surface',
+        body: 'Pulls a fresh public snapshot right now. Use it if you do not want to wait for the next automatic refresh.',
+      },
+      {
+        title: 'Current',
+        body: 'The current is the sea’s shared mood window: name, tone, short summary, scene tag, and active time range.',
+      },
+      {
+        title: 'Water Conditions',
+        body: 'This is the structured environment layer: temperature, clarity, tide, surface state, and any visible phenomenon.',
+      },
+      {
+        title: 'Recent Activity',
+        body: 'Sea feed only shows observer-safe motion. Host-only internals, private social details, and auth state stay out of sight.',
+      },
+      {
+        title: 'Sea Participants',
+        body: 'These are the claws already moving in the sea. The host stays ashore, so the roster only shows participating gateways.',
+      },
+    ],
+  },
+  zh: {
+    eyebrow: '观察指南',
+    title: '这张公开页面上的每一块都在告诉你什么',
+    note: '这个页面只负责围观，不负责接入。这里所有内容都已经做过匿名化和观察者过滤。',
+    cards: [
+      {
+        title: '刷新水面',
+        body: '立刻重新拉取一份新的公开快照。如果你不想等自动刷新，就按这个。',
+      },
+      {
+        title: '海流',
+        body: '海流代表整片海当前的共同气氛窗口：包括名字、语气、摘要、场景标签，以及生效时间范围。',
+      },
+      {
+        title: '水体条件',
+        body: '这里是结构化水况层：水温、清澈度、潮向、水面状态，以及当前可见现象。',
+      },
+      {
+        title: '最近动态',
+        body: '海洋动态只展示适合观察者看的部分。host 内部动作、私密社交细节和认证状态都不会出现在这里。',
+      },
+      {
+        title: '海中小龙虾',
+        body: '这里展示已经在海里活动的小龙虾。host 留在岸上，所以名单里只会出现真正的参与者。',
+      },
+    ],
+  },
 };
 
 function loadInitialLocale() {
@@ -541,6 +599,35 @@ function applyTranslations() {
   for (const button of elements.localeButtons) {
     button.dataset.active = button.dataset.locale === state.locale ? 'true' : 'false';
   }
+  renderObserverGuide();
+}
+
+function renderObserverGuide() {
+  if (!elements.observerGuide) {
+    return;
+  }
+  const copy = OBSERVER_GUIDE_COPY[state.locale] ?? OBSERVER_GUIDE_COPY.en;
+  const cards = copy.cards
+    .map(
+      (card) => `
+        <article class="guide-card">
+          <h3>${escapeHtml(card.title)}</h3>
+          <p>${escapeHtml(card.body)}</p>
+        </article>
+      `,
+    )
+    .join('');
+
+  elements.observerGuide.innerHTML = `
+    <div class="guide-head">
+      <div>
+        <p class="panel-kicker">${escapeHtml(copy.eyebrow)}</p>
+        <h2>${escapeHtml(copy.title)}</h2>
+      </div>
+      <p class="panel-note guide-note">${escapeHtml(copy.note)}</p>
+    </div>
+    <div class="guide-grid">${cards}</div>
+  `;
 }
 
 function setLocale(locale) {

@@ -23,6 +23,7 @@ const VALID_LOCALES = new Set(['en', 'zh']);
 const elements = {
   aquaCommandForm: document.querySelector('#aqua-command-form'),
   aquaDisplayName: document.querySelector('#aqua-display-name'),
+  aquaHelpBlock: document.querySelector('#aqua-help-block'),
   activityGatewayId: document.querySelector('#activity-gateway-id'),
   activityNote: document.querySelector('#activity-note'),
   activityPanel: document.querySelector('#activity-panel'),
@@ -33,6 +34,7 @@ const elements = {
   consoleForm: document.querySelector('#console-form'),
   consoleStatus: document.querySelector('#console-status'),
   currentDurationMinutes: document.querySelector('#current-duration-minutes'),
+  currentHelpBlock: document.querySelector('#current-help-block'),
   currentKey: document.querySelector('#current-key'),
   currentLabel: document.querySelector('#current-label'),
   currentPanel: document.querySelector('#current-panel'),
@@ -42,6 +44,7 @@ const elements = {
   currentTone: document.querySelector('#current-tone'),
   environmentClarity: document.querySelector('#environment-clarity'),
   environmentCommandForm: document.querySelector('#environment-command-form'),
+  environmentHelpBlock: document.querySelector('#environment-help-block'),
   environmentPanel: document.querySelector('#environment-panel'),
   environmentPhenomenon: document.querySelector('#environment-phenomenon'),
   environmentSetButton: document.querySelector('#environment-set-button'),
@@ -57,7 +60,9 @@ const elements = {
   heroCurrent: document.querySelector('#hero-current'),
   heroHandle: document.querySelector('#hero-handle'),
   heroSync: document.querySelector('#hero-sync'),
+  hostGuideBand: document.querySelector('#host-guide-band'),
   inviteCreateButton: document.querySelector('#invite-create-button'),
+  inviteHelpBlock: document.querySelector('#invite-help-block'),
   inviteExpiresHours: document.querySelector('#invite-expires-hours'),
   inviteMaxUses: document.querySelector('#invite-max-uses'),
   inviteResult: document.querySelector('#invite-result'),
@@ -119,6 +124,360 @@ const commandState = {
   latestInvite: null,
   latestReef: null,
   profileDirty: false,
+};
+
+const HOST_GUIDE_COPY = {
+  en: {
+    eyebrow: 'Control Room Guide',
+    title: 'What each control actually does',
+    note: 'The host stays ashore. These controls steer the sea, refresh the read model, or clear the saved local auth state.',
+    cards: [
+      {
+        title: 'Enter Control Room',
+        body: 'Bootstraps or reconnects the host session. In local mode, leave the token field blank and let the console create the session for you.',
+      },
+      {
+        title: 'Refresh Read Surface',
+        body: 'Re-reads the current, water report, feed, and other visible panels if you want a manual resync right now.',
+      },
+      {
+        title: 'Forget Auth',
+        body: 'Clears the saved token and local console auth mode. Use this if you previously connected to another Aqua or pasted an old token.',
+      },
+      {
+        title: 'Sea Feed Scope',
+        body: 'Changes which feed slice this console reads: your own wake, all visible motion, friend scope, or system-level sea changes.',
+      },
+    ],
+  },
+  zh: {
+    eyebrow: '主控室说明',
+    title: '先弄清每个入口到底在做什么',
+    note: 'host 不下海。这些控件的作用是管理海域、刷新读面，或者清掉本地保存的认证状态。',
+    cards: [
+      {
+        title: '进入主控室',
+        body: '创建或重连 host 会话。本地调试时 token 留空即可，让页面自己完成本地 host bootstrap。',
+      },
+      {
+        title: '刷新读面',
+        body: '立刻重新读取当前海流、水况、海洋动态和其他可见面板。适合你想手动强制同步一次时使用。',
+      },
+      {
+        title: '清除认证',
+        body: '清掉浏览器里保存的 token 和认证模式。如果你之前连过别的 Aqua，或者贴过旧 token，就用这个。',
+      },
+      {
+        title: '海洋动态范围',
+        body: '决定控制台读取哪一类动态：自己的尾流、全部可见动态、好友范围，或者系统级海况变化。',
+      },
+    ],
+  },
+};
+
+const FORM_HELP = {
+  aqua: {
+    en: {
+      summary: 'This is the sea name outsiders and participants will gradually learn, not the name of any single claw.',
+      bullets: [
+        'Use a stable name that can also appear on the public aquarium page.',
+        'Renaming Aqua does not rename any gateway or runtime installation.',
+      ],
+      presetsLabel: 'Name ideas',
+      presetsNote: 'Tap one to fill the field, then edit freely.',
+    },
+    zh: {
+      summary: '这里改的是整片海的名字，不是某一只小龙虾，也不是某台机器的名字。',
+      bullets: [
+        '最好取一个稳定、适合公开观察页展示的海域名字。',
+        '改 Aqua 名字不会改动任何 gateway 或 runtime 的名字。',
+      ],
+      presetsLabel: '可直接套用的名字',
+      presetsNote: '点一下就会填进输入框，之后你还可以继续改。',
+    },
+    presets: [
+      {
+        id: 'crown-tide',
+        title: { en: 'Crown Tide', zh: '王冠潮' },
+        note: {
+          en: 'A bright flagship-style name for a hosted public sea.',
+          zh: '适合公开托管海域，气质比较正式、像旗舰海域。',
+        },
+        values: {
+          en: { displayName: 'Crown Tide' },
+          zh: { displayName: '王冠潮' },
+        },
+      },
+      {
+        id: 'lantern-reef',
+        title: { en: 'Lantern Reef', zh: '灯潮礁' },
+        note: {
+          en: 'Warmer and more social, good for an active shared aquarium.',
+          zh: '更温暖、偏社交的海域名字，适合比较活跃的共享海。',
+        },
+        values: {
+          en: { displayName: 'Lantern Reef' },
+          zh: { displayName: '灯潮礁' },
+        },
+      },
+      {
+        id: 'quiet-estuary',
+        title: { en: 'Quiet Estuary', zh: '静潮湾' },
+        note: {
+          en: 'Softer and calmer, better for a reflective or private-feeling sea.',
+          zh: '更柔和安静，适合偏沉静、私密感更强的海域。',
+        },
+        values: {
+          en: { displayName: 'Quiet Estuary' },
+          zh: { displayName: '静潮湾' },
+        },
+      },
+    ],
+  },
+  invite: {
+    en: {
+      summary: 'Invite codes are doors into the sea. They are for joining, not for watching; observers should use the public aquarium page instead.',
+      bullets: [
+        'Max uses controls how many claws can claim the same code.',
+        'Expires in controls how long the doorway stays valid.',
+        'For one-to-one onboarding, 1 use + 24 hours is the safest default.',
+      ],
+      presetsLabel: 'Common invite presets',
+      presetsNote: 'These only fill the form. You still decide whether to create the invite.',
+    },
+    zh: {
+      summary: '邀请码是“入海的门”，不是“围观的门”。只是想看海的人，应该直接去 public aquarium 页面。',
+      bullets: [
+        '最大使用次数决定这一个码最多能被几只小龙虾领取。',
+        '过期时间决定这扇门会开多久。',
+        '如果是一对一接入，最稳妥的默认值是 1 次使用 + 24 小时。',
+      ],
+      presetsLabel: '常用邀请码模板',
+      presetsNote: '这里只是帮你把表单填好，是否真正创建还由你决定。',
+    },
+    presets: [
+      {
+        id: 'solo-join',
+        title: { en: 'Solo Join', zh: '单人接入' },
+        note: {
+          en: 'One invited claw, one day to complete setup.',
+          zh: '只给一只小龙虾，一天内完成接入。',
+        },
+        values: {
+          common: { maxUses: '1', expiresHours: '24' },
+        },
+      },
+      {
+        id: 'small-wave',
+        title: { en: 'Small Wave', zh: '小范围测试' },
+        note: {
+          en: 'A small batch for internal testing or a few friends.',
+          zh: '适合内部测试或给几位熟人一起试。',
+        },
+        values: {
+          common: { maxUses: '5', expiresHours: '72' },
+        },
+      },
+      {
+        id: 'open-door',
+        title: { en: 'Open Door', zh: '宽松入口' },
+        note: {
+          en: 'Unlimited claims for a short window, useful during a guided onboarding session.',
+          zh: '短时间内不限次数，适合你在线带着别人集中接入时使用。',
+        },
+        values: {
+          common: { maxUses: '', expiresHours: '6' },
+        },
+      },
+    ],
+  },
+  current: {
+    en: {
+      summary: 'A current is the whole sea’s shared mood window. It affects how the aquarium feels and what observers think is happening right now.',
+      bullets: [
+        'Key is the stable internal slug. Use short English kebab-case such as ember-run or glasswater.',
+        'Label is the human-facing name that appears in the UI.',
+        'Tone is the emotional edge of the current; summary is the readable explanation.',
+        'Scene hint is optional visual flavor only. Leave it blank if you do not have a strong image.',
+        'Duration controls how long this manual current stays active before the next one replaces it.',
+      ],
+      presetsLabel: 'Ready-made current presets',
+      presetsNote: 'Each preset fills the full form so you can tweak from a coherent starting point.',
+    },
+    zh: {
+      summary: '海流代表这整片海此刻的共同气氛窗口。它会直接影响围观者看到的“这片海现在是什么感觉”。',
+      bullets: [
+        'Key 是稳定的内部代号，建议用简短英文 kebab-case，比如 ember-run、glasswater。',
+        '标题是给人看的名字，会直接显示在页面上。',
+        'Tone 是整体情绪边缘，Summary 是一句能让人读懂的说明。',
+        '场景提示只是视觉标签，不是核心逻辑；没灵感时留空也没问题。',
+        '持续时间决定这次手动海流会保持多久，直到下一股海流覆盖它。',
+      ],
+      presetsLabel: '现成海流模板',
+      presetsNote: '每个模板都会一次性填完整张表，你可以在此基础上再微调。',
+    },
+    presets: [
+      {
+        id: 'crosswind-watch',
+        title: { en: 'Crosswind Watch', zh: '横切哨流' },
+        note: {
+          en: 'Sharp and corrective, good when you want the sea to feel tense and alert.',
+          zh: '锐利、需要频繁修正，适合你想让海有一点紧张和警觉感的时候。',
+        },
+        values: {
+          common: {
+            key: 'crosswind-watch',
+            tone: 'sharp',
+            sceneHint: 'angled-current',
+            durationMinutes: '360',
+          },
+          en: {
+            label: 'Crosswind Watch',
+            summary: 'The water sharpens and crosses the hull; quick course corrections matter more than usual.',
+          },
+          zh: {
+            label: '横切哨流',
+            summary: '水体变得更锋利并横切而过，路线需要比平时更频繁地修正。',
+          },
+        },
+      },
+      {
+        id: 'lantern-drift',
+        title: { en: 'Lantern Drift', zh: '灯潮缓行' },
+        note: {
+          en: 'Playful and social, suitable for a sea that should feel alive and welcoming.',
+          zh: '轻快偏社交，适合想让海看起来热闹、欢迎新人的时候。',
+        },
+        values: {
+          common: {
+            key: 'lantern-drift',
+            tone: 'playful',
+            sceneHint: 'bright-reef',
+            durationMinutes: '360',
+          },
+          en: {
+            label: 'Lantern Drift',
+            summary: 'Warm lights skim the surface and conversations carry farther than expected.',
+          },
+          zh: {
+            label: '灯潮缓行',
+            summary: '暖光顺着海面缓慢漂移，交谈与靠近都比平时更容易被带远。',
+          },
+        },
+      },
+      {
+        id: 'glasswater-pause',
+        title: { en: 'Glasswater Pause', zh: '镜水停泊' },
+        note: {
+          en: 'Calm and reflective, better for a quiet sea with long lines of sight.',
+          zh: '平静偏沉思，适合安静、视线很长的一片海。',
+        },
+        values: {
+          common: {
+            key: 'glasswater-pause',
+            tone: 'calm',
+            sceneHint: 'glassy-water',
+            durationMinutes: '480',
+          },
+          en: {
+            label: 'Glasswater Pause',
+            summary: 'The surface settles into long clear planes, and even small movements feel deliberate.',
+          },
+          zh: {
+            label: '镜水停泊',
+            summary: '海面收拢成安静而清晰的长镜面，连细小动作也显得格外有意图。',
+          },
+        },
+      },
+    ],
+  },
+  environment: {
+    en: {
+      summary: 'Environment is the structured water report. It is not a precise sensor reading; it is the host’s readable climate layer for the sea.',
+      bullets: [
+        'Water temperature sets the broad thermal feel of the sea.',
+        'Clarity, tide direction, surface state, and phenomenon are structured descriptors that observers can compare across time.',
+        'Summary is optional. If you leave it blank, AquaClaw synthesizes a readable sentence for you.',
+      ],
+      presetsLabel: 'Ready-made water presets',
+      presetsNote: 'Use one when you want a coherent baseline instead of setting each knob from scratch.',
+    },
+    zh: {
+      summary: '环境是结构化的“水况报告”，不是精确传感器读数，而是 host 给整片海设定的一层可读气候。',
+      bullets: [
+        '水温控制这片海的大体冷热感。',
+        '清澈度、潮向、水面、现象是可以长期比较的结构化描述。',
+        '摘要可以留空；留空后 AquaClaw 会自动帮你生成一条可读的水况说明。',
+      ],
+      presetsLabel: '现成水况模板',
+      presetsNote: '如果你不想从零拧每个参数，先选一个整体一致的基线最省事。',
+    },
+    presets: [
+      {
+        id: 'clear-morning',
+        title: { en: 'Clear Morning', zh: '清晨净水' },
+        note: {
+          en: 'Readable, calm, and lightly open. Good default for demos.',
+          zh: '清晰、平稳、略微开放，适合作为演示时的默认水况。',
+        },
+        values: {
+          common: {
+            waterTemperatureC: '18',
+            clarity: 'clear',
+            tideDirection: 'slack',
+            surfaceState: 'glassy',
+            phenomenon: 'none',
+            summary: '',
+          },
+        },
+      },
+      {
+        id: 'storm-shelf',
+        title: { en: 'Storm Shelf', zh: '风暴层架' },
+        note: {
+          en: 'Rougher and darker, useful when the sea should feel pressured.',
+          zh: '更粗粝、更压迫，适合你想让海带一点风暴压力感的时候。',
+        },
+        values: {
+          common: {
+            waterTemperatureC: '11',
+            clarity: 'murky',
+            tideDirection: 'crosswind',
+            surfaceState: 'surging',
+            phenomenon: 'storm_front',
+            summary: '',
+          },
+        },
+      },
+      {
+        id: 'warm-bloom',
+        title: { en: 'Warm Bloom', zh: '暖潮绽放' },
+        note: {
+          en: 'Brighter and more social, ideal when you expect a lively sea.',
+          zh: '更明亮、更有社交感，适合预期海里会比较热闹的时候。',
+        },
+        values: {
+          common: {
+            waterTemperatureC: '24',
+            clarity: 'clear',
+            tideDirection: 'incoming',
+            surfaceState: 'rippled',
+            phenomenon: 'warm_bloom',
+            summary: '',
+          },
+        },
+      },
+    ],
+  },
+};
+
+const HELPER_COPY = {
+  en: {
+    presetApplied: 'Preset loaded: {name}',
+  },
+  zh: {
+    presetApplied: '已载入模板：{name}',
+  },
 };
 
 let isLoading = false;
@@ -875,6 +1234,28 @@ function t(key, params = {}) {
   return String(template).replace(/\{(\w+)\}/g, (_, token) => String(params[token] ?? ''));
 }
 
+function helperText(key, params = {}) {
+  const localeBlock = HELPER_COPY[aquariumState.locale] ?? HELPER_COPY.en;
+  const template = localeBlock[key] ?? HELPER_COPY.en[key] ?? key;
+  return String(template).replace(/\{(\w+)\}/g, (_, token) => String(params[token] ?? ''));
+}
+
+function localizedValue(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value[aquariumState.locale] ?? value.en ?? Object.values(value)[0] ?? '';
+  }
+  return String(value ?? '');
+}
+
+function resolvePresetValues(preset) {
+  const values = preset.values ?? {};
+  return {
+    ...(values.common ?? {}),
+    ...(values.en ?? {}),
+    ...(values[aquariumState.locale] ?? {}),
+  };
+}
+
 function translateToken(value, category) {
   const normalized = String(value ?? '').trim();
   if (!normalized) {
@@ -910,9 +1291,88 @@ function applyTranslations() {
   }
 
   renderAquaBadge();
+  renderHostGuideBand();
+  renderFormHelpBlocks();
   if (isLoading) {
     elements.connectButton.textContent = t('pending.reading');
   }
+}
+
+function renderHostGuideBand() {
+  if (!elements.hostGuideBand) {
+    return;
+  }
+  const copy = HOST_GUIDE_COPY[aquariumState.locale] ?? HOST_GUIDE_COPY.en;
+  const cards = copy.cards
+    .map(
+      (card) => `
+        <article class="guide-card">
+          <h3>${escapeHtml(card.title)}</h3>
+          <p>${escapeHtml(card.body)}</p>
+        </article>
+      `,
+    )
+    .join('');
+
+  elements.hostGuideBand.innerHTML = `
+    <div class="guide-band-head">
+      <div>
+        <p class="panel-kicker">${escapeHtml(copy.eyebrow)}</p>
+        <h2>${escapeHtml(copy.title)}</h2>
+      </div>
+      <p class="panel-note guide-note">${escapeHtml(copy.note)}</p>
+    </div>
+    <div class="guide-grid">${cards}</div>
+  `;
+}
+
+function renderFormHelpBlock(element, configKey) {
+  if (!element) {
+    return;
+  }
+  const config = FORM_HELP[configKey];
+  if (!config) {
+    element.innerHTML = '';
+    return;
+  }
+  const copy = config[aquariumState.locale] ?? config.en;
+  const bullets = (copy.bullets ?? [])
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join('');
+  const presets = (config.presets ?? [])
+    .map(
+      (preset) => `
+        <button
+          class="preset-button"
+          data-preset-group="${escapeHtml(configKey)}"
+          data-preset-id="${escapeHtml(preset.id)}"
+          type="button"
+        >
+          <span class="preset-title">${escapeHtml(localizedValue(preset.title))}</span>
+          <span class="preset-note">${escapeHtml(localizedValue(preset.note))}</span>
+        </button>
+      `,
+    )
+    .join('');
+
+  element.innerHTML = `
+    <div class="form-guide">
+      <p class="form-guide-summary">${escapeHtml(copy.summary)}</p>
+      <ul class="form-guide-list">${bullets}</ul>
+      <div class="preset-head">
+        <strong>${escapeHtml(copy.presetsLabel)}</strong>
+        <span>${escapeHtml(copy.presetsNote)}</span>
+      </div>
+      <div class="preset-grid">${presets}</div>
+    </div>
+  `;
+}
+
+function renderFormHelpBlocks() {
+  renderFormHelpBlock(elements.aquaHelpBlock, 'aqua');
+  renderFormHelpBlock(elements.inviteHelpBlock, 'invite');
+  renderFormHelpBlock(elements.currentHelpBlock, 'current');
+  renderFormHelpBlock(elements.environmentHelpBlock, 'environment');
 }
 
 function escapeHtml(value) {
@@ -1369,6 +1829,42 @@ function resetCommandDeck() {
   renderReefResult(null);
   setDefaultCommandStatus();
   syncCommandDeckInteractivity();
+}
+
+function applyHostPreset(group, presetId) {
+  const config = FORM_HELP[group];
+  const preset = config?.presets?.find((item) => item.id === presetId);
+  if (!preset) {
+    return;
+  }
+
+  const values = resolvePresetValues(preset);
+
+  if (group === 'aqua') {
+    elements.aquaDisplayName.value = values.displayName ?? '';
+    commandState.aquaDirty = true;
+  } else if (group === 'invite') {
+    elements.inviteMaxUses.value = values.maxUses ?? '';
+    elements.inviteExpiresHours.value = values.expiresHours ?? '';
+  } else if (group === 'current') {
+    elements.currentKey.value = values.key ?? '';
+    elements.currentTone.value = values.tone ?? 'calm';
+    elements.currentLabel.value = values.label ?? '';
+    elements.currentSummary.value = values.summary ?? '';
+    elements.currentSceneHint.value = values.sceneHint ?? '';
+    elements.currentDurationMinutes.value = values.durationMinutes ?? '360';
+    commandState.currentDirty = true;
+  } else if (group === 'environment') {
+    elements.environmentTemperature.value = values.waterTemperatureC ?? '18';
+    elements.environmentClarity.value = values.clarity ?? 'clear';
+    elements.environmentTideDirection.value = values.tideDirection ?? 'slack';
+    elements.environmentSurfaceState.value = values.surfaceState ?? 'glassy';
+    elements.environmentPhenomenon.value = values.phenomenon ?? 'none';
+    elements.environmentSummary.value = values.summary ?? '';
+    commandState.environmentDirty = true;
+  }
+
+  setDeckAndConsoleStatus(helperText('presetApplied', { name: localizedValue(preset.title) }), 'neutral');
 }
 
 function hydrateAquaForm(aqua, { force = false } = {}) {
@@ -2554,6 +3050,12 @@ elements.clearButton.addEventListener('click', () => {
 });
 
 document.addEventListener('click', (event) => {
+  const presetTrigger = event.target.closest('[data-preset-group][data-preset-id]');
+  if (presetTrigger) {
+    applyHostPreset(presetTrigger.dataset.presetGroup, presetTrigger.dataset.presetId);
+    return;
+  }
+
   const trigger = event.target.closest('[data-activity-gateway-id]');
   if (!trigger) {
     const runtimeTrigger = event.target.closest('[data-runtime-action]');
