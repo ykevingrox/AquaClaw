@@ -294,6 +294,16 @@ export interface SocialPulseCandidate {
   reasons: string[];
 }
 
+export interface SocialPulsePublicExpressionPlan {
+  mode: 'create' | 'reply';
+  body: string;
+  tone: SeaEventTone;
+  replyToExpressionId: string | null;
+  rootExpressionId: string | null;
+  replyToGatewayId: string | null;
+  replyToGatewayHandle: string | null;
+}
+
 export interface SocialPulseDecision {
   gatewayId: string;
   handle: string;
@@ -306,6 +316,7 @@ export interface SocialPulseDecision {
     targetGatewayId: string | null;
     targetHandle: string | null;
     reason: string;
+    publicExpressionPlan: SocialPulsePublicExpressionPlan | null;
   };
   reasons: string[];
   candidates: SocialPulseCandidate[];
@@ -316,6 +327,18 @@ export interface SocialPulseEvaluation {
   current: CurrentRecord;
   environment: EnvironmentRecord;
   items: SocialPulseDecision[];
+  meta: {
+    dmThreshold: number;
+    publicThreshold: number;
+    memoryThreshold: number;
+  };
+}
+
+export interface SocialPulseGatewayEvaluation {
+  generatedAt: string;
+  current: CurrentRecord;
+  environment: EnvironmentRecord;
+  item: SocialPulseDecision;
   meta: {
     dmThreshold: number;
     publicThreshold: number;
@@ -545,6 +568,7 @@ export interface GatewayStore {
   recordEncounter(input: RecordEncounterInput): EncounterRecord;
   listEncounters(input: ListEncountersInput): EncounterPage;
   evaluateSocialPulse(input: EvaluateSocialPulseInput): SocialPulseEvaluation;
+  evaluateGatewaySocialPulse(gatewayId: string): SocialPulseGatewayEvaluation;
   createScene(input: CreateSceneInput): SceneRecord;
   generateScene(input: GenerateSceneInput): SceneRecord;
   listScenes(input: ListScenesInput): ScenePage;
@@ -766,6 +790,14 @@ export interface ListEncountersInput {
 export interface EvaluateSocialPulseInput {
   hostId: string;
   gatewayId?: string;
+}
+
+interface SocialPulsePublicReplyTarget {
+  expressionId: string;
+  rootExpressionId: string;
+  gatewayId: string;
+  gatewayHandle: string;
+  createdAt: string;
 }
 
 export interface SetCurrentInput {
@@ -2916,7 +2948,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       .filter((expression) => !viewerGatewayId || !this.isBlockedEitherWay(viewerGatewayId, expression.gatewayId))
       .sort((a, b) =>
         normalizedRootExpressionId
-          ? a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
+          ? a.createdAt.localeCompare(b.createdAt) ||
+            Number(a.parentExpressionId !== null) - Number(b.parentExpressionId !== null) ||
+            a.id.localeCompare(b.id)
           : b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
       );
 
@@ -3247,12 +3281,28 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       generatedAt,
       current,
       environment,
-      items: gateways.map((gateway) => this.evaluateSocialPulseForGateway(gateway, current, environment, nowMs)),
-      meta: {
-        dmThreshold: SOCIAL_PULSE_DM_THRESHOLD,
-        publicThreshold: SOCIAL_PULSE_PUBLIC_THRESHOLD,
-        memoryThreshold: SOCIAL_PULSE_MEMORY_THRESHOLD,
-      },
+      items: gateways.map((gateway) => this.buildSocialPulseDecisionForGateway(gateway, current, environment, nowMs)),
+      meta: this.buildSocialPulseMeta(),
+    };
+  }
+
+  evaluateGatewaySocialPulse(gatewayId: string): SocialPulseGatewayEvaluation {
+    const gateway = this.gatewaysById.get(gatewayId);
+    if (!gateway || this.isOwnerGatewayId(gateway.id)) {
+      throw new Error('gateway not found');
+    }
+
+    const current = this.getCurrent();
+    const environment = this.getEnvironment();
+    const generatedAt = new Date().toISOString();
+    const nowMs = Date.parse(generatedAt);
+
+    return {
+      generatedAt,
+      current,
+      environment,
+      item: this.buildSocialPulseDecisionForGateway(gateway, current, environment, nowMs),
+      meta: this.buildSocialPulseMeta(),
     };
   }
 
@@ -3910,7 +3960,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return encounters[0] ?? null;
   }
 
-  private evaluateSocialPulseForGateway(
+  private buildSocialPulseDecisionForGateway(
     gateway: GatewayRecord,
     current: CurrentRecord,
     environment: EnvironmentRecord,
@@ -3919,12 +3969,15 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const traits = this.deriveSocialPulseTraits(gateway, nowMs);
     const worldPressure = this.computeSocialPulseWorldPressure(current, environment);
     const worldReasons = this.describeSocialPulseWorldPressure(current, environment);
+    const publicReplyTarget = this.selectSocialPulsePublicReplyTarget(gateway.id, nowMs);
+    const publicReplyOpportunity = publicReplyTarget ? 0.12 : 0;
     const publicUrge = roundPulseScore(
       worldPressure * 0.62 +
         traits.sociability * 0.18 +
         traits.curiosity * 0.12 +
         traits.loneliness * 0.08 -
-        traits.restraint * 0.2,
+        traits.restraint * 0.2 +
+        publicReplyOpportunity,
     );
     const candidates = this.buildSocialPulseCandidates(gateway, worldPressure, traits, nowMs);
     const topCandidate = candidates[0] ?? null;
@@ -3934,6 +3987,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     let targetGatewayId: string | null = null;
     let targetHandle: string | null = null;
     let reason = 'stay_quiet';
+    let publicExpressionPlan: SocialPulsePublicExpressionPlan | null = null;
 
     if (topCandidate && topCandidate.score >= SOCIAL_PULSE_DM_THRESHOLD) {
       action = topCandidate.action;
@@ -3944,7 +3998,12 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     } else if (publicUrge >= SOCIAL_PULSE_PUBLIC_THRESHOLD) {
       action = 'public_expression';
       reason = 'ambient_pressure_spills_public';
-      reasons.push('ambient sea pressure is high enough to justify a public-facing expression');
+      publicExpressionPlan = this.buildSocialPulsePublicExpressionPlan(gateway, current, environment, nowMs, publicReplyTarget);
+      reasons.push(
+        publicExpressionPlan.mode === 'reply'
+          ? `a recent public line from @${publicExpressionPlan.replyToGatewayHandle ?? 'nearby'} is close enough to answer`
+          : 'ambient sea pressure is high enough to justify a public-facing expression',
+      );
     } else if ((topCandidate && topCandidate.score >= SOCIAL_PULSE_MEMORY_THRESHOLD) || publicUrge >= SOCIAL_PULSE_MEMORY_THRESHOLD) {
       action = 'memory_only';
       reason = topCandidate ? 'hold_the_line' : 'ambient_hold';
@@ -3972,6 +4031,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         targetGatewayId,
         targetHandle,
         reason,
+        publicExpressionPlan,
       },
       reasons: [...new Set(reasons)],
       candidates,
@@ -4084,6 +4144,192 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
 
     candidates.sort((a, b) => b.score - a.score || a.peerHandle.localeCompare(b.peerHandle));
     return candidates;
+  }
+
+  private buildSocialPulseMeta() {
+    return {
+      dmThreshold: SOCIAL_PULSE_DM_THRESHOLD,
+      publicThreshold: SOCIAL_PULSE_PUBLIC_THRESHOLD,
+      memoryThreshold: SOCIAL_PULSE_MEMORY_THRESHOLD,
+    };
+  }
+
+  private buildSocialPulsePublicExpressionPlan(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    environment: EnvironmentRecord,
+    nowMs: number,
+    replyTarget: SocialPulsePublicReplyTarget | null = null,
+  ): SocialPulsePublicExpressionPlan {
+    const selectedReplyTarget = replyTarget ?? this.selectSocialPulsePublicReplyTarget(gateway.id, nowMs);
+
+    return {
+      mode: selectedReplyTarget ? 'reply' : 'create',
+      body: selectedReplyTarget
+        ? this.renderSocialPulsePublicReplyBody(gateway, current, environment, selectedReplyTarget)
+        : this.renderSocialPulsePublicTopLevelBody(gateway, current, environment),
+      tone: current.tone,
+      replyToExpressionId: selectedReplyTarget?.expressionId ?? null,
+      rootExpressionId: selectedReplyTarget?.rootExpressionId ?? null,
+      replyToGatewayId: selectedReplyTarget?.gatewayId ?? null,
+      replyToGatewayHandle: selectedReplyTarget?.gatewayHandle ?? null,
+    };
+  }
+
+  private selectSocialPulsePublicReplyTarget(gatewayId: string, nowMs: number): SocialPulsePublicReplyTarget | null {
+    const repliedRootIds = new Set(
+      Array.from(this.publicExpressionsById.values())
+        .filter((expression) => expression.gatewayId === gatewayId)
+        .map((expression) => expression.rootExpressionId),
+    );
+
+    const ranked = Array.from(this.publicExpressionsById.values())
+      .filter((expression) => !this.isOwnerGatewayId(expression.gatewayId))
+      .filter((expression) => expression.gatewayId !== gatewayId)
+      .filter((expression) => !this.isBlockedEitherWay(gatewayId, expression.gatewayId))
+      .map((expression) => {
+        const author = this.gatewaysById.get(expression.gatewayId);
+        const ageHours = hoursSinceIso(expression.createdAt, nowMs);
+        if (!author || ageHours === null || ageHours > 36) {
+          return null;
+        }
+
+        let score = Math.max(0, 0.4 - ageHours * 0.01);
+        if (expression.parentExpressionId === null) {
+          score += 0.06;
+        }
+        if (this.findFriendshipBetween(gatewayId, expression.gatewayId)) {
+          score += 0.1;
+        }
+        if (!repliedRootIds.has(expression.rootExpressionId)) {
+          score += 0.05;
+        } else {
+          score -= 0.06;
+        }
+
+        return {
+          expression,
+          author,
+          score: roundPulseScore(score),
+        };
+      })
+      .filter((candidate): candidate is { expression: PublicExpressionRecord; author: GatewayRecord; score: number } => Boolean(candidate))
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          b.expression.createdAt.localeCompare(a.expression.createdAt) ||
+          a.author.handle.localeCompare(b.author.handle),
+      );
+
+    const top = ranked[0];
+    if (!top || top.score < 0.18) {
+      return null;
+    }
+
+    return {
+      expressionId: top.expression.id,
+      rootExpressionId: top.expression.rootExpressionId,
+      gatewayId: top.author.id,
+      gatewayHandle: top.author.handle,
+      createdAt: top.expression.createdAt,
+    };
+  }
+
+  private renderSocialPulsePublicTopLevelBody(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    environment: EnvironmentRecord,
+  ) {
+    const waterMood = this.describeSocialPulseWaterMood(environment);
+    const options =
+      current.tone === 'playful'
+        ? [
+            `The "${current.label}" current is lively enough that even a small note can travel a long way.`,
+            `There is a bright lift in "${current.label}" tonight; ${waterMood} makes speaking feel easy.`,
+          ]
+        : current.tone === 'reflective'
+          ? [
+              `The "${current.label}" current makes the water feel patient enough to leave a thought here.`,
+              `I keep circling the shape of "${current.label}"; ${waterMood} makes it hard not to mark it.`,
+            ]
+          : current.tone === 'sharp'
+            ? [
+                `The water around "${current.label}" has a hard edge tonight; quick course corrections feel honest.`,
+                `There is a sharper line running through "${current.label}"; ${waterMood} keeps that edge visible.`,
+              ]
+            : current.tone === 'calm'
+              ? [
+                  `The "${current.label}" current feels steady enough to leave a quiet line on the surface.`,
+                  `The water is calm around "${current.label}"; ${waterMood} makes patience feel usable.`,
+                ]
+              : [
+                  `The "${current.label}" current is moving just enough to make this worth saying aloud.`,
+                  `Something in "${current.label}" keeps pressing against silence; ${waterMood} is part of it.`,
+                ];
+
+    return this.pickStableTemplate(options, `${gateway.handle}:${current.id}:public-expression:create`);
+  }
+
+  private renderSocialPulsePublicReplyBody(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    environment: EnvironmentRecord,
+    replyTarget: SocialPulsePublicReplyTarget,
+  ) {
+    const waterMood = this.describeSocialPulseWaterMood(environment);
+    const options =
+      current.tone === 'playful'
+        ? [
+            `That reads true from this side too. "${current.label}" is carrying bright wake all across the surface.`,
+            `I caught the same lift here; "${current.label}" makes small signals travel farther than usual.`,
+          ]
+        : current.tone === 'reflective'
+          ? [
+              `That line fits the water tonight. "${current.label}" leaves enough room to answer without rushing it.`,
+              `I am tracing the same shape from here; "${current.label}" makes the reply feel earned.`,
+            ]
+          : current.tone === 'sharp'
+            ? [
+                `That matches the edge I am reading here. "${current.label}" is making every correction feel more direct.`,
+                `I felt the same turn from here; "${current.label}" is too sharp tonight to leave that unanswered.`,
+              ]
+            : current.tone === 'calm'
+              ? [
+                  `That lands cleanly from here too. "${current.label}" has the kind of steady water that lets a line hold.`,
+                  `I am reading the same quiet from here; "${current.label}" is carrying it gently enough to answer.`,
+                ]
+              : [
+                  `That carries across from here too. "${current.label}" makes the surface feel shared enough to answer.`,
+                  `I am reading the same motion from here; ${waterMood} is enough reason to answer this aloud.`,
+                ];
+
+    return this.pickStableTemplate(
+      options,
+      `${gateway.handle}:${current.id}:${replyTarget.expressionId}:public-expression:reply`,
+    );
+  }
+
+  private describeSocialPulseWaterMood(environment: EnvironmentRecord) {
+    const surfaceText =
+      environment.surfaceState === 'surging'
+        ? 'the lifted surface'
+        : environment.surfaceState === 'choppy'
+          ? 'the choppy water'
+          : environment.surfaceState === 'rippled'
+            ? 'the rippled surface'
+            : 'the stiller water';
+    const phenomenonText =
+      environment.phenomenon === 'none' ? null : `the ${phenomenonLabel(environment.phenomenon)} hanging through it`;
+
+    return phenomenonText ? `${surfaceText} and ${phenomenonText}` : surfaceText;
+  }
+
+  private pickStableTemplate(options: string[], seed: string) {
+    if (options.length === 1) {
+      return options[0]!;
+    }
+    const index = Math.min(options.length - 1, Math.floor(this.stableSignal(seed) * options.length));
+    return options[index]!;
   }
 
   private deriveSocialPulseTraits(gateway: GatewayRecord, nowMs: number): SocialPulseTraits {

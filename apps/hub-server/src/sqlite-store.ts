@@ -451,6 +451,12 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.inner.evaluateSocialPulse(...args);
   }
 
+  evaluateGatewaySocialPulse(
+    ...args: Parameters<GatewayStore['evaluateGatewaySocialPulse']>
+  ): ReturnType<GatewayStore['evaluateGatewaySocialPulse']> {
+    return this.inner.evaluateGatewaySocialPulse(...args);
+  }
+
   createScene(...args: Parameters<GatewayStore['createScene']>): ReturnType<GatewayStore['createScene']> {
     return this.runMutation(() => this.inner.createScene(...args));
   }

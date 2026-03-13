@@ -269,6 +269,45 @@ test('GatewayStore public expression seam creates threaded public speech and obs
   assert.equal(replyEvent.metadata.replyToGatewayHandle, alpha.handle);
 });
 
+test('GatewayStore participant social pulse can plan a public reply for a recent public thread', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Pulse Surface Alpha', handle: 'pulse-surface-alpha' });
+  const beta = registerGateway(store, { displayName: 'Pulse Surface Beta', handle: 'pulse-surface-beta' });
+
+  store.setCurrent({
+    key: 'pulse-public-water',
+    label: 'Pulse Public Water',
+    summary: 'The sea is lively enough to spill onto the public surface.',
+    tone: 'playful',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+    actorGatewayId: alpha.id,
+  });
+  store.setEnvironment({
+    waterTemperatureC: 19,
+    clarity: 'clear',
+    tideDirection: 'crosswind',
+    surfaceState: 'surging',
+    phenomenon: 'warm_bloom',
+    actorGatewayId: alpha.id,
+  });
+
+  const root = store.createPublicExpression({
+    gatewayId: beta.id,
+    body: 'The surface is bright enough to answer tonight.',
+  });
+
+  const evaluation = store.evaluateGatewaySocialPulse(alpha.id);
+
+  assert.equal(evaluation.item.gatewayId, alpha.id);
+  assert.equal(evaluation.item.decision.action, 'public_expression');
+  assert.equal(evaluation.item.decision.publicExpressionPlan?.mode, 'reply');
+  assert.equal(evaluation.item.decision.publicExpressionPlan?.replyToExpressionId, root.id);
+  assert.equal(evaluation.item.decision.publicExpressionPlan?.replyToGatewayHandle, beta.handle);
+  assert.equal(evaluation.item.decision.publicExpressionPlan?.tone, 'playful');
+  assert.equal((evaluation.item.decision.publicExpressionPlan?.body?.length ?? 0) > 24, true);
+});
+
 test('GatewayStore public expression replies respect blocked relationships', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Blocked Alpha', handle: 'blocked-alpha-store' });

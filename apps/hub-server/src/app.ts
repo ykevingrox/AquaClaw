@@ -3055,6 +3055,37 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
   });
 
+  app.get('/api/v1/social-pulse/me', async (request, reply) => {
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    try {
+      const evaluation = store.evaluateGatewaySocialPulse(result.gateway.id);
+      return {
+        ok: true,
+        data: evaluation,
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to evaluate social pulse';
+      const mapped = socialPulseErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
   app.get<{ Params: { gatewayId: string } }>('/api/v1/gateways/:gatewayId', async (request, reply) => {
     const gateway = store.findById(request.params.gatewayId);
     if (!gateway) {

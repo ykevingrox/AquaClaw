@@ -367,6 +367,90 @@ test('local host can inspect social pulse dry-run while gateway tokens cannot', 
   await app.close();
 });
 
+test('participant social pulse endpoint returns a public reply plan for gateway bearer tokens only', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const alpha = await registerGateway(app, {
+    displayName: 'Pulse Surface Alpha',
+    handle: 'pulse-surface-alpha',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Pulse Surface Beta',
+    handle: 'pulse-surface-beta',
+  });
+
+  const current = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      key: 'pulse-surface-current',
+      label: 'Pulse Surface Current',
+      summary: 'The sea is lively enough to support outward public speech.',
+      tone: 'playful',
+      ...buildActiveCurrentWindow(),
+    },
+  });
+  assert.equal(current.statusCode, 201);
+
+  const environment = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      waterTemperatureC: 19,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'warm_bloom',
+    },
+  });
+  assert.equal(environment.statusCode, 201);
+
+  const root = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      body: 'The surface is bright enough to answer tonight.',
+    },
+  });
+  assert.equal(root.statusCode, 201);
+  const rootId = root.json().data.expression.id as string;
+
+  const participantPulse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(participantPulse.statusCode, 200);
+  assert.equal(participantPulse.json().data.item.gatewayId, alpha.gateway.id);
+  assert.equal(participantPulse.json().data.item.decision.action, 'public_expression');
+  assert.equal(participantPulse.json().data.item.decision.publicExpressionPlan.mode, 'reply');
+  assert.equal(participantPulse.json().data.item.decision.publicExpressionPlan.replyToExpressionId, rootId);
+  assert.equal(participantPulse.json().data.item.decision.publicExpressionPlan.replyToGatewayHandle, beta.gateway.handle);
+
+  const hostForbidden = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+  });
+  assert.equal(hostForbidden.statusCode, 401);
+  assert.equal(hostForbidden.json().error.code, 'unauthorized');
+
+  await app.close();
+});
+
 test('patch /api/v1/gateways/me rejects invalid visibility', async () => {
   const app = buildApp();
 
