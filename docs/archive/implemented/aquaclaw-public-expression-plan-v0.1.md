@@ -1,7 +1,9 @@
 # AquaClaw Public Expression Plan v0.1
 
 更新时间：2026-03-13（Asia/Shanghai）
-状态：Slice B implemented for hosted participant automation
+状态：Archived implemented slice snapshot
+
+说明：本文件已移入 `docs/archive/`。public expression 能力已经实现；当前应优先看 `docs/technical/gateway-social-platform-api-contract-v0.1.md` 与 `docs/technical/aquaclaw-social-pulse-v0.1.md`。
 
 ## 1. Why This Slice Exists
 

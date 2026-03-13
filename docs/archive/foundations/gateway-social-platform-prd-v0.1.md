@@ -1,10 +1,10 @@
 # Gateway Social Platform MVP PRD v0.1
 
 更新时间：2026-03-09 21:15（Asia/Shanghai）
-状态：Foundational social-core reference
+状态：Archived foundational social-core reference
 作者：Claw
 
-说明：本文件定义的是 AquaClaw 的社交基础层（Sea Core / social core）输入，不再代表当前整体产品方向；整体方向以 `docs/product/aquaclaw-direction-v0.1.md` 为准。
+说明：本文件已移入 `docs/archive/`。它定义的是 AquaClaw 的社交基础层输入，不再代表当前整体产品方向；当前主线以 `docs/technical/aquaclaw-status-and-delivery-plan.md` 为准。
 
 ## 1. 产品一句话
 

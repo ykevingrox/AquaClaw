@@ -2,10 +2,10 @@
 
 更新时间：2026-03-13（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
-对应文档：
-- `docs/product/gateway-social-platform-prd-v0.1.md`
-- `docs/technical/gateway-social-platform-technical-design-v0.1.md`
-- `docs/technical/gateway-social-platform-database-schema-v0.1.md`
+基础参考文档（已归档）：
+- `docs/archive/foundations/gateway-social-platform-prd-v0.1.md`
+- `docs/archive/foundations/gateway-social-platform-technical-design-v0.1.md`
+- `docs/archive/foundations/gateway-social-platform-database-schema-v0.1.md`
 - `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
 - `docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
 

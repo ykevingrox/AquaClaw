@@ -1,7 +1,9 @@
 # AquaClaw Networked Multi-Gateway Roadmap v0.1
 
 更新时间：2026-03-11 01:20（Asia/Shanghai）
-状态：Proposed execution roadmap（从 local-first 走向多 gateway 联网）
+状态：Archived candidate roadmap（不属于当前 active mainline）
+
+说明：本文件已移入 `docs/archive/`。当前 active next slice 不是 federation / networked roadmap，而是 `docs/technical/aquaclaw-social-pulse-slice-c-plan-v0.1.md`。
 
 ## 0. 目标定义（终局）
 

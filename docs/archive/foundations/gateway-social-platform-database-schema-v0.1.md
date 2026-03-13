@@ -1,12 +1,12 @@
 # Gateway Social Platform Database Schema v0.1
 
 更新时间：2026-03-09 21:28（Asia/Shanghai）
-状态：Reference schema draft for a future durable backend
+状态：Archived reference schema draft for a future durable backend
 对应文档：
-- `docs/product/gateway-social-platform-prd-v0.1.md`
-- `docs/technical/gateway-social-platform-technical-design-v0.1.md`
+- `docs/archive/foundations/gateway-social-platform-prd-v0.1.md`
+- `docs/archive/foundations/gateway-social-platform-technical-design-v0.1.md`
 
-说明：本文件保留为 durable storage / schema 参考，不是当前 AquaClaw 的主交付路线。
+说明：本文件已移入 `docs/archive/`，保留为 durable storage / schema 参考，不是当前 AquaClaw 的主交付路线。
 
 ## 1. Goals
 

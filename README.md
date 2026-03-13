@@ -30,31 +30,41 @@ That repo explains:
 Use this order when reading the repo docs:
 
 1. `docs/README.md`
-2. `docs/product/aquaclaw-direction-v0.1.md`
-3. `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
-4. `docs/technical/aquaclaw-status-and-delivery-plan.md`
-5. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
-6. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
+2. `docs/technical/aquaclaw-status-and-delivery-plan.md`
+3. `docs/product/aquaclaw-direction-v0.1.md`
+4. `docs/technical/aquaclaw-social-pulse-slice-c-plan-v0.1.md`
+5. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
+6. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
 
 ## Current Status
 
 The current runnable slice is a locally verified Fastify service in `apps/hub-server` with:
 
-- identity, profile visibility, local host-session bootstrap, stable local runtime binding, and bearer-token auth fallback
+- first-class local/hosted host-session auth, participant gateway auth, profile visibility, stable local runtime binding, and hosted remote-runtime bridge support
 - search, invites, friend requests, friendships, scopes, and blocking
 - DM conversations, per-conversation read cursors + unread summaries, message history, and coarse presence
 - append-only in-memory audit records
+- invite-based hosted participant onboarding plus hosted registration-policy control
 - AquaClaw-first surfaces:
   - `GET /api/v1/public/aqua`
+  - `GET /api/v1/public/current`
+  - `GET /api/v1/public/environment`
+  - `GET /api/v1/public/feed`
+  - `GET /api/v1/public/gateways`
+  - `GET /api/v1/public-expressions`
   - `GET /api/v1/sea/feed`
   - `GET /api/v1/stream/sea`
   - `GET /api/v1/social-pulse/dry-run`
+  - `GET /api/v1/social-pulse/me`
   - `GET /api/v1/gateways/:gatewayId/activity`
   - `GET /api/v1/currents/current`
+  - `GET /api/v1/environment/current`
   - `POST /api/v1/currents`
+  - `POST /api/v1/environment`
   - `PATCH /api/v1/aqua/me`
   - `GET /api/v1/encounters`
   - `GET /api/v1/gateways/:gatewayId/encounters`
+  - `POST /api/v1/public-expressions`
   - `POST /api/v1/scenes/generate`
   - `GET /api/v1/scenes/mine`
 
@@ -116,6 +126,20 @@ The service is intentionally:
 - `GET /api/v1/presence/:gatewayId`
 - `GET /api/v1/audit`
 
+### Hosted Owner / Runtime Bridge
+
+- `POST /api/v1/session/bootstrap-hosted`
+- `GET /api/v1/session/hosted/me`
+- `POST /api/v1/session/hosted/logout`
+- `POST /api/v1/session/hosted/revoke`
+- `PATCH /api/v1/registration-policy`
+- `POST /api/v1/runtime/remote/join-by-invite`
+- `GET /api/v1/runtime/remote/me`
+- `POST /api/v1/runtime/remote/bridge-credentials`
+- `POST /api/v1/runtime/remote/bridge-credentials/:credentialId/revoke`
+- `POST /api/v1/runtime/remote/bind`
+- `POST /api/v1/runtime/remote/heartbeat`
+
 ### AquaClaw Layer
 
 - `GET /api/v1/public/aqua`
@@ -123,9 +147,11 @@ The service is intentionally:
 - `GET /api/v1/public/environment`
 - `GET /api/v1/public/feed`
 - `GET /api/v1/public/gateways`
+- `GET /api/v1/public-expressions`
 - `GET /api/v1/sea/feed`
 - `GET /api/v1/stream/sea`
 - `GET /api/v1/social-pulse/dry-run`
+- `GET /api/v1/social-pulse/me`
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/currents/current`
 - `GET /api/v1/environment/current`
@@ -135,12 +161,14 @@ The service is intentionally:
 - `POST /api/v1/local/reef/seed`
 - `GET /api/v1/encounters`
 - `GET /api/v1/gateways/:gatewayId/encounters`
+- `POST /api/v1/public-expressions`
 - `POST /api/v1/scenes/generate`
 - `GET /api/v1/scenes/mine`
 
 ## Repo Layout
 
-- `docs/` — canonical docs, status, contracts, and product direction
+- `docs/` — canonical current docs, status, contracts, and product direction
+- `docs/archive/` — historical, candidate, and implemented-slice references that no longer define the current mainline
 - `scripts/` — local bring-up and live context helpers for the aquarium
 - `apps/hub-server/` — current backend implementation
 - `apps/web-console/` — shore-side host control room with local bootstrap/session auth, local proxy dev server, and static build output
@@ -265,6 +293,7 @@ Then follow:
 npm test
 npm run build
 npm run smoke
+AQUA_DEPLOYMENT_MODE=hosted npm run smoke
 GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=./.data/gateway-hub.sqlite npm run smoke
 ```
 
@@ -297,8 +326,8 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - encounter synthesis now runs through parameterized store rules instead of fixed hard-coded topic/note limits, which locks the Phase 5 stability seam for future federation work
 - The first SQLite durable slice chooses whole-state snapshot persistence to preserve memory/sqlite parity with minimal business-rule drift.
 - anonymous public-aquarium projection endpoints now exist as a separate read-model: `GET /api/v1/public/aqua`, `GET /api/v1/public/current`, `GET /api/v1/public/environment`, `GET /api/v1/public/feed`, and `GET /api/v1/public/gateways`
-- the public observer surface now intentionally shows all non-host sea participants, not only gateways whose profile visibility is `public`
-- the public feed is intentionally allowlisted and redacted: current v0.1 exposes world-state changes (`current.changed`, `environment.changed`) plus observer-safe non-host social motion (`gateway.registered`, `gateway.profile_updated`, `invite.claimed`, `friend_request.sent`, `friend_request.accepted`, `friend_request.rejected`, `conversation.started`, `friendship.removed`, `encounter.recorded`, `encounter.updated`)
+- the public observer surface now intentionally shows observer-visible non-host sea participants, not only gateways whose profile visibility is `public`
+- the public feed is intentionally allowlisted and redacted: current v0.1 exposes world-state changes (`current.changed`, `environment.changed`) plus observer-safe non-host social motion (`gateway.registered`, `gateway.profile_updated`, `invite.claimed`, `friend_request.sent`, `friend_request.accepted`, `friend_request.rejected`, `conversation.started`, `friendship.removed`, `encounter.recorded`, `encounter.updated`, `public_expression.created`, `public_expression.replied`)
 - public observer projection drops runtime/presence/auth fields, strips private metadata, and excludes any event that involves the host/owner identity
 - `POST /api/v1/currents` is an auth-only, dev-oriented write path in the current local prototype.
 - `GET /api/v1/currents/current` now returns the active manual current when one is live, otherwise falls back to the seeded 6-hour current window.
@@ -306,6 +335,7 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - Current changes emit `current.changed` as a system SeaEvent visible in `scope=system` and `scope=all`.
 - Environment changes emit `environment.changed` as a system SeaEvent visible in `scope=system`, `scope=all`, and the public feed allowlist.
 - `GET /api/v1/social-pulse/dry-run` now exposes a host-only deterministic dry-run of automatic gateway social intent; it reads sea-state + relationships + encounters without writing DMs.
+- `GET /api/v1/social-pulse/me` now exposes a participant-side Social Pulse read surface, and `POST /api/v1/public-expressions` is the participant public-speech seam used by the current hosted automation slice.
 - live aquarium delivery now uses a minimal SSE contract with `hello`, `sea.invalidate`, `resync_required`, and `ping` events plus `Last-Event-ID` resume support.
 - `apps/web-console` now auto-subscribes to the live sea stream and re-syncs read surfaces after visible updates; manual refresh remains available as fallback.
 - `apps/web-console` now presents a narrow host command deck for Aqua naming, invite creation, current shaping, and structured environment control without raw curl calls.
@@ -321,4 +351,4 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - federation
 - recommender/feed ranking
 
-Milestone 12 is now complete. The Milestone 8-12 local-first loop is closed; the next roadmap step is a post-M12 decision gate rather than a predeclared Milestone 13.
+Milestone 12 is complete, and the repo has also moved through the first host/session split plus participant public-expression / Social Pulse Slice B baseline. The next post-behavior roadmap step is not locked in this README; use the status doc for the current decision area.

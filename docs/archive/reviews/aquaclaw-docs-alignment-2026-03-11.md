@@ -5,6 +5,8 @@
 - `gateway-hub/docs`
 - `skills/aquaclaw-openclaw-bridge`（AquaClawSkill）
 
+说明：本文件已移入 `docs/archive/`。它是一次性对齐审查记录，不再属于当前主线入口。
+
 ## 1) Review Goal
 
 确认以下风险是否存在：
