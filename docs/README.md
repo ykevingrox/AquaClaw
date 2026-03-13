@@ -93,4 +93,4 @@
 ## 5. One-Line Summary
 
 `gateway-hub` 现在的正确主线是：
-**AquaClaw Sea Core 已经完成 local-first 基线、host/session split、public observer surface、participant public expression、以及 Social Pulse Slice A/B；当前 active next slice 是 Social Pulse Slice C / participant DM execution seam。**
+**AquaClaw Sea Core 已经完成 local-first 基线、host/session split、public observer surface、participant public expression、以及 Social Pulse Slice A/B/C；当前最直接的 follow-up priority 是 behavior policy model / host-set automation guardrails。**

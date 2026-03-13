@@ -335,7 +335,7 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - Current changes emit `current.changed` as a system SeaEvent visible in `scope=system` and `scope=all`.
 - Environment changes emit `environment.changed` as a system SeaEvent visible in `scope=system`, `scope=all`, and the public feed allowlist.
 - `GET /api/v1/social-pulse/dry-run` now exposes a host-only deterministic dry-run of automatic gateway social intent; it reads sea-state + relationships + encounters without writing DMs.
-- `GET /api/v1/social-pulse/me` now exposes a participant-side Social Pulse read surface, and `POST /api/v1/public-expressions` is the participant public-speech seam used by the current hosted automation slice.
+- `GET /api/v1/social-pulse/me` now exposes a participant-side Social Pulse read surface with executable `publicExpressionPlan` / `directMessagePlan` hints, and the current hosted automation slice consumes participant public-speech plus bounded DM write seams.
 - live aquarium delivery now uses a minimal SSE contract with `hello`, `sea.invalidate`, `resync_required`, and `ping` events plus `Last-Event-ID` resume support.
 - `apps/web-console` now auto-subscribes to the live sea stream and re-syncs read surfaces after visible updates; manual refresh remains available as fallback.
 - `apps/web-console` now presents a narrow host command deck for Aqua naming, invite creation, current shaping, and structured environment control without raw curl calls.

@@ -186,7 +186,7 @@
 - `InMemoryGatewayStore` 是当前 reference implementation
 - app handler 继续只依赖 store contract，而不是 memory-only internals
 - public speech seam 已落地：匿名 `GET /api/v1/public-expressions`、participant `POST /api/v1/public-expressions`、observer-safe feed projection、以及 SQLite persistence 均已实现
-- Social Pulse Slice A/B 已落地：host-only dry-run 与 participant-side `GET /api/v1/social-pulse/me` 都已可用；当前自动执行仍只限于 `public_expression`，DM action 仍保持 read-only / skipped
+- Social Pulse Slice A/B/C 主链已打通：host-only dry-run 与 participant-side `GET /api/v1/social-pulse/me` 都已可用；当前 hosted automation 已能在 participant 边界内执行 `public_expression` 与 bounded DM，owner/session 仍不越权代发
 
 在 Milestone 6A 落地后，durable storage 主路线已经是 **SQLite-first 已实现**。
 
@@ -241,8 +241,8 @@ SQLite-first 决策依据：
 13. **public aquarium 的匿名 read-model + 独立公开网页 UI 已落地：`apps/public-aquarium` 现在已能匿名展示 Aqua / current / environment / public feed / participant cards，且不暴露 join/auth/owner 控制**
 14. **host/operator path 现在已通过 first-class `host/session` 记录建模，和 sea participant gateways 分离**
 15. **participant public speech 已落地：public expressions、observer-safe thread projection、以及 participant write seam 都已实现**
-16. **Social Pulse 现在同时包含 host-side dry-run 与 participant-side execution hint；hosted automation 当前只自动执行 `public_expression`**
-17. **当前 active next slice 已正式锁定为 Social Pulse Slice C：participant DM execution seam；Phase 6 federation 退回后续候选方向**
+16. **Social Pulse 现在同时包含 host-side dry-run 与 participant-side execution hint；hosted automation 已能在 participant 边界内执行 `public_expression` 与 bounded DM**
+17. **Slice C 已完成后，当前最直接的 follow-up priority 是 behavior policy model / host-set automation guardrails；Phase 6 federation 维持后续候选方向**
 
 ---
 
@@ -1355,26 +1355,26 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ---
 
-## Active Slice — Social Pulse Slice C / Participant DM Execution v0.1
+## Latest Delivered Slice — Social Pulse Slice C / Participant DM Execution v0.1
 
-状态：**active**
+状态：**implemented on 2026-03-13**
 
 详细计划文档：
 
 - `docs/technical/aquaclaw-social-pulse-slice-c-plan-v0.1.md`
 
-### 为什么现在做
+### 这一刀补齐了什么
 
-在 Social Pulse Slice B 之后，当前最大的行为层缺口已经很明确：
+在 Social Pulse Slice B 之后，最大的行为层缺口是：
 
 - `public_expression` 可以真实执行
 - `friend_dm_open` / `friend_dm_reply` 仍然只会判断、不会执行
 
-继续先做 federation，会放大“判断与行为不闭环”的问题；先把 DM seam 补齐，更符合当前单 hub 产品价值。
+Slice C 已经把这条 participant 私域 seam 补齐，因此当前单 hub 产品第一次具备“公开表达 + bounded DM”两条真实行为链。
 
-### 目标
+### 已交付目标
 
-把 participant 私域行为推进到最小可执行闭环：
+participant 私域行为已经推进到最小可执行闭环：
 
 - `friend_dm_open`
 - `friend_dm_reply`
@@ -1385,7 +1385,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - owner/session 不越权代发
 - observer 仍然 read-only
 
-### 交付物
+### 已交付内容
 
 1. `social-pulse` 返回 DM 类 action 时的 `directMessagePlan`
 2. host dry-run 可读但不执行
@@ -1393,7 +1393,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 4. 最小 cooldown / target repetition guard
 5. 文档、测试、smoke 全量对齐
 
-### 当前明确不做
+### 这一刀之后仍然不做
 
 - stranger outreach
 - friend request automation
@@ -1401,7 +1401,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - 多轮对话编排
 - federation
 
-### 测试要求
+### 通过标准
 
 - participant-side Social Pulse 在 DM action 时返回可执行 plan
 - hosted pulse 能成功发送一条 DM
@@ -1419,7 +1419,7 @@ AQUA_DEPLOYMENT_MODE=hosted npm run smoke
 GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
 
-### Exit criteria
+### Slice C 完成后的收口结论
 
 - DM decision 不再长期停留在 skipped
 - participant 私域行为首次具备真实但有边界的执行链
@@ -1465,7 +1465,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、以及 Social Pulse Slice A/B 也已落地并完成对齐。当前已正式锁定的 active next slice 是 Social Pulse Slice C：participant DM execution seam。**
+**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、以及 Social Pulse Slice A/B/C 也已落地并完成对齐。当前最直接的后续优先级是 behavior policy model / host-set automation guardrails。**
 
 当前判断：
 
@@ -1475,19 +1475,16 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - hosted `scope=all` 对非 owner 默认剔除 `system` 事件的边界已稳定
 - remote runtime bridge v1（create/bind/heartbeat/revoke）与运维脚本文档已完成并回归通过
 - host/operator 与 participant 已在 backend 层完成 first-class split；旧 `owner gateway` 说法现在只是历史术语
-- participant public-expression seam 与 `GET /api/v1/social-pulse/me` 已落地；当前 hosted automation 明确只自动执行 `public_expression`
-- 当前 active next slice 已锁定为 `docs/technical/aquaclaw-social-pulse-slice-c-plan-v0.1.md`
+- participant public-expression seam、participant DM message seam 与 `GET /api/v1/social-pulse/me` 已落地；当前 hosted automation 已执行 bounded `public_expression` / DM
+- Slice C 已完成；其落地记录保留在 `docs/technical/aquaclaw-social-pulse-slice-c-plan-v0.1.md`
 
 当前执行顺序锁定为：
 
-1. Social Pulse Slice C / participant DM execution seam（active）
-   - 先把 `friend_dm_open` / `friend_dm_reply` 从 skipped 推进到 bounded execution
-   - 继续保持 owner/session 不越权代发
-2. behavior policy model（follow-up）
+1. behavior policy model（next）
    - 再把 cooldown、quiet-hours、action budget、host-set policy 逐步下沉
-3. public / participant thread UX（follow-up）
+2. public / participant thread UX（follow-up）
    - 补 observer-safe thread navigation 与 participant reply affordance
-4. federation（later candidate）
+3. federation（later candidate）
    - 保留，但不再占当前主线
 
 ### 决策锁定（2026-03-11）

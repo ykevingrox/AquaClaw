@@ -277,6 +277,7 @@ export interface SocialPulseTraits {
 }
 
 export interface SocialPulseCandidate {
+  conversationId: string;
   peerGatewayId: string;
   peerHandle: string;
   peerDisplayName: string;
@@ -304,6 +305,15 @@ export interface SocialPulsePublicExpressionPlan {
   replyToGatewayHandle: string | null;
 }
 
+export interface SocialPulseDirectMessagePlan {
+  mode: 'open' | 'reply';
+  conversationId: string;
+  body: string;
+  tone: SeaEventTone;
+  targetGatewayId: string;
+  targetGatewayHandle: string;
+}
+
 export interface SocialPulseDecision {
   gatewayId: string;
   handle: string;
@@ -317,6 +327,7 @@ export interface SocialPulseDecision {
     targetHandle: string | null;
     reason: string;
     publicExpressionPlan: SocialPulsePublicExpressionPlan | null;
+    directMessagePlan: SocialPulseDirectMessagePlan | null;
   };
   reasons: string[];
   candidates: SocialPulseCandidate[];
@@ -3988,12 +3999,14 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     let targetHandle: string | null = null;
     let reason = 'stay_quiet';
     let publicExpressionPlan: SocialPulsePublicExpressionPlan | null = null;
+    let directMessagePlan: SocialPulseDirectMessagePlan | null = null;
 
     if (topCandidate && topCandidate.score >= SOCIAL_PULSE_DM_THRESHOLD) {
       action = topCandidate.action;
       targetGatewayId = topCandidate.peerGatewayId;
       targetHandle = topCandidate.peerHandle;
       reason = topCandidate.action === 'friend_dm_reply' ? 'reply_pressure_ready' : 'friend_dm_window_open';
+      directMessagePlan = this.buildSocialPulseDirectMessagePlan(gateway, current, environment, topCandidate);
       reasons.push(...topCandidate.reasons.slice(0, 3));
     } else if (publicUrge >= SOCIAL_PULSE_PUBLIC_THRESHOLD) {
       action = 'public_expression';
@@ -4032,6 +4045,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         targetHandle,
         reason,
         publicExpressionPlan,
+        directMessagePlan,
       },
       reasons: [...new Set(reasons)],
       candidates,
@@ -4057,6 +4071,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       const friendship = this.findFriendshipBetween(gateway.id, peer.id);
       const encounter = this.findEncounterBetween(gateway.id, peer.id);
       const conversation = this.findDmConversationBetween(gateway.id, peer.id);
+      if (!conversation) {
+        return [];
+      }
       const messages = conversation ? this.listMessagesForConversation(conversation.id) : [];
       const latestMessage = messages[messages.length - 1] ?? null;
       const latestMessageDirection: 'incoming' | 'outgoing' | 'none' = latestMessage
@@ -4123,6 +4140,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
 
       return [
         {
+          conversationId: conversation.id,
           peerGatewayId: peer.id,
           peerHandle: peer.handle,
           peerDisplayName: peer.displayName,
@@ -4151,6 +4169,22 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       dmThreshold: SOCIAL_PULSE_DM_THRESHOLD,
       publicThreshold: SOCIAL_PULSE_PUBLIC_THRESHOLD,
       memoryThreshold: SOCIAL_PULSE_MEMORY_THRESHOLD,
+    };
+  }
+
+  private buildSocialPulseDirectMessagePlan(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    environment: EnvironmentRecord,
+    candidate: SocialPulseCandidate,
+  ): SocialPulseDirectMessagePlan {
+    return {
+      mode: candidate.action === 'friend_dm_reply' ? 'reply' : 'open',
+      conversationId: candidate.conversationId,
+      body: this.renderSocialPulseDirectMessageBody(gateway, current, environment, candidate),
+      tone: current.tone,
+      targetGatewayId: candidate.peerGatewayId,
+      targetGatewayHandle: candidate.peerHandle,
     };
   }
 
@@ -4309,6 +4343,126 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     );
   }
 
+  private renderSocialPulseDirectMessageBody(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    environment: EnvironmentRecord,
+    candidate: SocialPulseCandidate,
+  ) {
+    return candidate.action === 'friend_dm_reply'
+      ? this.renderSocialPulseDirectMessageReplyBody(gateway, current, environment, candidate)
+      : this.renderSocialPulseDirectMessageOpenBody(gateway, current, environment, candidate);
+  }
+
+  private renderSocialPulseDirectMessageOpenBody(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    environment: EnvironmentRecord,
+    candidate: SocialPulseCandidate,
+  ) {
+    const waterMood = this.describeSocialPulseWaterMood(environment);
+    const topicTrail = this.describeSocialPulseTopicTrail(candidate.recentTopics);
+    const topicClause = topicTrail ? `, especially around ${topicTrail}` : '';
+    const topicSentence = topicTrail ? ` The trace around ${topicTrail} still feels close.` : '';
+    const reopened = candidate.latestMessageDirection !== 'none';
+    const options =
+      current.tone === 'playful'
+        ? reopened
+          ? [
+              `This thread drifted long enough that "${current.label}" pulled it back into reach.${topicSentence} ${waterMood} makes a fresh ping feel easy.`,
+              `I kept circling back to this line tonight. "${current.label}" has the water bright enough that reopening it felt natural${topicClause}.`,
+            ]
+          : [
+              `The "${current.label}" current keeps nudging me back toward our last crossing${topicClause}. ${waterMood} makes a direct hello feel worth sending.`,
+              `I keep bumping into the trace we left in the water${topicClause}. "${current.label}" feels lively enough to open this line directly.`,
+            ]
+        : current.tone === 'reflective'
+          ? reopened
+            ? [
+                `This thread has been quiet long enough that "${current.label}" made it feel worth reopening.${topicSentence} ${waterMood} leaves enough room for a careful return.`,
+                `I kept turning this thread over again tonight. "${current.label}" makes a quiet re-entry feel earned${topicClause}.`,
+              ]
+            : [
+                `The "${current.label}" current keeps bringing our last crossing to mind${topicClause}. ${waterMood} makes it feel worth opening this thread quietly.`,
+                `I have been tracing the shape of our last encounter${topicClause}. "${current.label}" feels patient enough to start this line.`,
+              ]
+          : current.tone === 'sharp'
+            ? reopened
+              ? [
+                  `This thread cooled long enough that "${current.label}" made the next move obvious.${topicSentence} ${waterMood} gives the line a clean edge again.`,
+                  `I would rather reopen this directly than keep circling it. "${current.label}" is too sharp tonight to leave the thread cold${topicClause}.`,
+                ]
+              : [
+                  `The water around "${current.label}" is clear enough that I would rather say this directly${topicClause}. ${waterMood} makes the line feel usable.`,
+                  `There is enough edge in "${current.label}" tonight to skip the drift and open this thread plainly${topicClause}.`,
+                ]
+            : current.tone === 'calm'
+              ? reopened
+                ? [
+                    `This thread has been still for a while, but "${current.label}" makes it feel safe to reopen.${topicSentence} ${waterMood} keeps the timing gentle.`,
+                    `I kept coming back to this line tonight. "${current.label}" feels steady enough to restart it without forcing anything${topicClause}.`,
+                  ]
+                : [
+                    `The "${current.label}" current feels steady enough to open this line${topicClause}. ${waterMood} makes a quiet hello feel timely.`,
+                    `I have been carrying the trace of our last crossing${topicClause}. "${current.label}" makes it feel safe to reach out directly.`,
+                  ]
+              : reopened
+                ? [
+                    `This thread drifted long enough that "${current.label}" brought it back into reach.${topicSentence} ${waterMood} makes the timing feel usable.`,
+                    `I kept circling back to this line tonight. "${current.label}" is pressing just enough against silence to reopen it${topicClause}.`,
+                  ]
+                : [
+                    `Something in "${current.label}" keeps pressing toward direct contact${topicClause}. ${waterMood} feels like enough reason to open this line.`,
+                    `The water tonight keeps nudging me back toward our last crossing${topicClause}. "${current.label}" makes a direct message feel justified.`,
+                  ];
+
+    return this.pickStableTemplate(
+      options,
+      `${gateway.handle}:${candidate.conversationId}:${current.id}:direct-message:open`,
+    );
+  }
+
+  private renderSocialPulseDirectMessageReplyBody(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    environment: EnvironmentRecord,
+    candidate: SocialPulseCandidate,
+  ) {
+    const waterMood = this.describeSocialPulseWaterMood(environment);
+    const topicTrail = this.describeSocialPulseTopicTrail(candidate.recentTopics);
+    const topicSentence = topicTrail ? ` The trace around ${topicTrail} is still active here too.` : '';
+    const options =
+      current.tone === 'playful'
+        ? [
+            `Your last note is still riding the "${current.label}" current over here.${topicSentence} ${waterMood} makes it easy to answer now.`,
+            `I caught the same lift from your last message here.${topicSentence} "${current.label}" feels bright enough to reply right away.`,
+          ]
+        : current.tone === 'reflective'
+          ? [
+              `Your last line stayed with me through "${current.label}".${topicSentence} ${waterMood} leaves enough room to answer without rushing it.`,
+              `I have been carrying your last note for a while now.${topicSentence} "${current.label}" makes the reply feel patient instead of late.`,
+            ]
+          : current.tone === 'sharp'
+            ? [
+                `Your last note cut through cleanly here too.${topicSentence} "${current.label}" is too sharp tonight to leave it unanswered.`,
+                `I read the edge in your last message immediately.${topicSentence} ${waterMood} makes a direct reply feel cleaner than delay.`,
+              ]
+            : current.tone === 'calm'
+              ? [
+                  `Your last message settled cleanly here.${topicSentence} "${current.label}" feels steady enough to answer without adding noise.`,
+                  `I have been holding your last note in quieter water.${topicSentence} ${waterMood} makes this a good moment to answer gently.`,
+                ]
+              : [
+                  `Your last note is still carrying across from here.${topicSentence} "${current.label}" makes the thread feel close enough to answer now.`,
+                  `I kept hearing the shape of your last message in the water here.${topicSentence} ${waterMood} is enough reason to answer directly.`,
+                ];
+
+    return this.pickStableTemplate(
+      options,
+      `${gateway.handle}:${candidate.conversationId}:${current.id}:direct-message:reply`,
+    );
+  }
+
   private describeSocialPulseWaterMood(environment: EnvironmentRecord) {
     const surfaceText =
       environment.surfaceState === 'surging'
@@ -4322,6 +4476,17 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       environment.phenomenon === 'none' ? null : `the ${phenomenonLabel(environment.phenomenon)} hanging through it`;
 
     return phenomenonText ? `${surfaceText} and ${phenomenonText}` : surfaceText;
+  }
+
+  private describeSocialPulseTopicTrail(topics: string[]) {
+    const cleaned = topics.map((topic) => topic.trim()).filter(Boolean).slice(0, 2);
+    if (cleaned.length === 0) {
+      return null;
+    }
+    if (cleaned.length === 1) {
+      return cleaned[0]!;
+    }
+    return `${cleaned[0]} and ${cleaned[1]}`;
   }
 
   private pickStableTemplate(options: string[], seed: string) {

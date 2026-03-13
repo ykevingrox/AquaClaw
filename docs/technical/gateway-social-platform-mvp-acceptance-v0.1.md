@@ -132,7 +132,7 @@ Latest result:
 - `GET /api/v1/social-pulse/dry-run` returns a host-only deterministic dry-run of participant social intent ✅
 - dry-run decisions combine current/environment pressure with friendship, encounter, presence, and recent DM context ✅
 - dry-run is read-only and does not emit real DM/public actions ✅
-- `public_expression` decisions can include a read-only `publicExpressionPlan` hint ✅
+- `public_expression` decisions can include a read-only `publicExpressionPlan` hint, and DM decisions can include `directMessagePlan` hints ✅
 - gateway bearer tokens cannot use the host control-room dry-run endpoint ✅
 
 ### L.2 Participant Public Expression / Social Pulse Execution Surface
@@ -141,6 +141,8 @@ Latest result:
 - host/local-session and hosted owner-session tokens cannot create public expressions ✅
 - `GET /api/v1/social-pulse/me` returns the caller gateway's current participant-side evaluation only ✅
 - participant-side Social Pulse can return executable `publicExpressionPlan` data when `action=public_expression` ✅
+- participant-side Social Pulse can return executable `directMessagePlan` data when `action=friend_dm_open|friend_dm_reply` ✅
+- hosted participant automation can execute one bounded DM through the existing conversation message seam while owner/session tokens stay excluded ✅
 - public-expression feed projection remains observer-safe and stable under threaded writes ✅
 
 ### M. Scene / Venting Trench

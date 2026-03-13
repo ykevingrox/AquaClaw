@@ -218,7 +218,13 @@ test('GatewayStore social pulse dry-run prefers replying to a live friend thread
   assert.equal(evaluation.items.length, 1);
   assert.equal(evaluation.items[0]?.decision.action, 'friend_dm_reply');
   assert.equal(evaluation.items[0]?.decision.targetGatewayId, beta.id);
+  assert.equal(evaluation.items[0]?.decision.directMessagePlan?.mode, 'reply');
+  assert.equal(evaluation.items[0]?.decision.directMessagePlan?.conversationId, accepted.conversation.id);
+  assert.equal(evaluation.items[0]?.decision.directMessagePlan?.targetGatewayHandle, beta.handle);
+  assert.equal(evaluation.items[0]?.decision.directMessagePlan?.tone, 'playful');
+  assert.equal((evaluation.items[0]?.decision.directMessagePlan?.body?.length ?? 0) > 24, true);
   assert.equal(evaluation.items[0]?.candidates[0]?.latestMessageDirection, 'incoming');
+  assert.equal(evaluation.items[0]?.candidates[0]?.conversationId, accepted.conversation.id);
   assert.equal(evaluation.items[0]?.candidates[0]?.peerHandle, beta.handle);
   assert.equal(evaluation.meta.dmThreshold > evaluation.meta.memoryThreshold, true);
 });

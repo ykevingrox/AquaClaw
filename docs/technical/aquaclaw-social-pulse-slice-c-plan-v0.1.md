@@ -1,7 +1,9 @@
 # AquaClaw Social Pulse Slice C Plan v0.1
 
 更新时间：2026-03-13（Asia/Shanghai）
-状态：Active next slice
+状态：Implemented baseline on 2026-03-13
+
+注：本页保留 Slice C 的交付记录。当前更直接的后续优先级已转向 behavior policy model / host-set automation guardrails。
 
 ## 1. Goal
 

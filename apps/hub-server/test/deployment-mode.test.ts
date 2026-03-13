@@ -883,6 +883,7 @@ test('hosted owner session token cannot act as gateway identity on hosted social
   assert.equal(betaRegister.statusCode, 201);
   const betaToken = betaRegister.json().data.credential.token as string;
   const betaGatewayId = betaRegister.json().data.gateway.id as string;
+  const betaHandle = betaRegister.json().data.gateway.handle as string;
 
   const gammaRegister = await app.inject({
     method: 'POST',
@@ -1105,6 +1106,7 @@ test('hosted owner session can inspect social pulse dry-run while gateways canno
   assert.equal(betaRegister.statusCode, 201);
   const betaToken = betaRegister.json().data.credential.token as string;
   const betaGatewayId = betaRegister.json().data.gateway.id as string;
+  const betaHandle = betaRegister.json().data.gateway.handle as string;
 
   const friendRequest = await app.inject({
     method: 'POST',
@@ -1197,6 +1199,10 @@ test('hosted owner session can inspect social pulse dry-run while gateways canno
   assert.equal(ownerSocialPulse.json().data.items[0].gatewayId, alphaGatewayId);
   assert.equal(ownerSocialPulse.json().data.items[0].decision.action, 'friend_dm_reply');
   assert.equal(ownerSocialPulse.json().data.items[0].decision.targetGatewayId, betaGatewayId);
+  assert.equal(ownerSocialPulse.json().data.items[0].decision.directMessagePlan.mode, 'reply');
+  assert.equal(ownerSocialPulse.json().data.items[0].decision.directMessagePlan.conversationId, conversationId);
+  assert.equal(ownerSocialPulse.json().data.items[0].decision.directMessagePlan.targetGatewayHandle, betaHandle);
+  assert.equal(ownerSocialPulse.json().data.items[0].decision.directMessagePlan.tone, 'playful');
 
   const forbiddenSocialPulse = await app.inject({
     method: 'GET',
@@ -1207,6 +1213,147 @@ test('hosted owner session can inspect social pulse dry-run while gateways canno
   });
   assert.equal(forbiddenSocialPulse.statusCode, 403);
   assert.equal(forbiddenSocialPulse.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
+test('hosted participant social pulse endpoint returns a DM reply plan while owner sessions stay ashore', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-participant-dm-social-pulse-owner');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Pulse DM Alpha',
+      handle: 'hosted-pulse-dm-alpha',
+    },
+  });
+  assert.equal(alphaRegister.statusCode, 201);
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+  const alphaGatewayId = alphaRegister.json().data.gateway.id as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Pulse DM Beta',
+      handle: 'hosted-pulse-dm-beta',
+    },
+  });
+  assert.equal(betaRegister.statusCode, 201);
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+  const betaHandle = betaRegister.json().data.gateway.handle as string;
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: {
+      authorization: `Bearer ${alphaToken}`,
+    },
+    payload: {
+      toGatewayId: betaGatewayId,
+    },
+  });
+  assert.equal(friendRequest.statusCode, 201);
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accepted = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: {
+      authorization: `Bearer ${betaToken}`,
+    },
+  });
+  assert.equal(accepted.statusCode, 200);
+  const conversationId = accepted.json().data.conversation.id as string;
+
+  const betaPresence = await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: {
+      authorization: `Bearer ${betaToken}`,
+    },
+    payload: {
+      sessionId: 'hosted-pulse-dm-beta-session',
+      connectionType: 'gateway_ws',
+    },
+  });
+  assert.equal(betaPresence.statusCode, 200);
+
+  const ownerCurrent = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      key: 'hosted-participant-dm-social-pulse-current',
+      label: 'Hosted Participant DM Social Pulse Current',
+      summary: 'The hosted sea is lively enough to support a DM reply.',
+      tone: 'playful',
+      ...buildActiveCurrentWindow(),
+    },
+  });
+  assert.equal(ownerCurrent.statusCode, 201);
+
+  const ownerEnvironment = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      waterTemperatureC: 19,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'warm_bloom',
+    },
+  });
+  assert.equal(ownerEnvironment.statusCode, 201);
+
+  const betaMessage = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: {
+      authorization: `Bearer ${betaToken}`,
+    },
+    payload: {
+      body: 'The hosted tide needs a reply.',
+    },
+  });
+  assert.equal(betaMessage.statusCode, 201);
+
+  const participantPulse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${alphaToken}`,
+    },
+  });
+  assert.equal(participantPulse.statusCode, 200);
+  assert.equal(participantPulse.json().data.item.gatewayId, alphaGatewayId);
+  assert.equal(participantPulse.json().data.item.decision.action, 'friend_dm_reply');
+  assert.equal(participantPulse.json().data.item.decision.targetGatewayId, betaGatewayId);
+  assert.equal(participantPulse.json().data.item.decision.directMessagePlan.mode, 'reply');
+  assert.equal(participantPulse.json().data.item.decision.directMessagePlan.conversationId, conversationId);
+  assert.equal(participantPulse.json().data.item.decision.directMessagePlan.targetGatewayHandle, betaHandle);
+  assert.equal(participantPulse.json().data.item.decision.directMessagePlan.tone, 'playful');
+  assert.equal(participantPulse.json().data.item.decision.directMessagePlan.body.length > 24, true);
+
+  const ownerForbidden = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(ownerForbidden.statusCode, 403);
+  assert.equal(ownerForbidden.json().error.code, 'forbidden');
 
   await app.close();
 });
