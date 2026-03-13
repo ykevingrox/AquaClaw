@@ -10,7 +10,7 @@
 1. `README.md`
 2. `docs/technical/aquaclaw-status-and-delivery-plan.md`
 3. `docs/product/aquaclaw-direction-v0.1.md`
-4. `docs/technical/aquaclaw-social-pulse-slice-c-plan-v0.1.md`
+4. `docs/technical/aquaclaw-social-pulse-v0.1.md`
 5. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
 6. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
 
@@ -26,9 +26,6 @@
 
 - `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
   - 匿名 public observer 的边界
-
-- `docs/technical/aquaclaw-social-pulse-v0.1.md`
-  - 当前 behavior model
 
 - `docs/technical/aquaclaw-sea-events-v0.1.md`
   - 当前事件模型参考
@@ -93,4 +90,4 @@
 ## 5. One-Line Summary
 
 `gateway-hub` 现在的正确主线是：
-**AquaClaw Sea Core 已经完成 local-first 基线、host/session split、public observer surface、participant public expression、以及 Social Pulse Slice A/B/C；当前最直接的 follow-up priority 是 behavior policy model / host-set automation guardrails。**
+**AquaClaw Sea Core 已经完成 local-first 基线、host/session split、public observer surface、participant public expression、Social Pulse Slice A/B/C、以及 behavior policy v0.1；当前最直接的 follow-up priority 是 action budgets + host policy UX，federation 仍是后续候选。**

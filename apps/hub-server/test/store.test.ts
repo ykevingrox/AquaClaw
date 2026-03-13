@@ -229,6 +229,60 @@ test('GatewayStore social pulse dry-run prefers replying to a live friend thread
   assert.equal(evaluation.meta.dmThreshold > evaluation.meta.memoryThreshold, true);
 });
 
+test('GatewayStore social pulse policy can suppress proactive DMs while preserving private pressure', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = registerGateway(store, { displayName: 'Policy Alpha', handle: 'policy-alpha-store' });
+  const beta = registerGateway(store, { displayName: 'Policy Beta', handle: 'policy-beta-store' });
+
+  const request = store.createFriendRequest({
+    fromGatewayId: alpha.id,
+    toGatewayId: beta.id,
+  });
+  const accepted = store.acceptFriendRequest(request.id, beta.id);
+
+  store.heartbeatPresence(beta.id);
+  store.setCurrent({
+    key: 'policy-dm-water',
+    label: 'Policy DM Water',
+    summary: 'The sea is lively enough to support a direct reply.',
+    tone: 'playful',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+    actorGatewayId: alpha.id,
+  });
+  store.setEnvironment({
+    waterTemperatureC: 19,
+    clarity: 'clear',
+    tideDirection: 'crosswind',
+    surfaceState: 'surging',
+    phenomenon: 'warm_bloom',
+    actorGatewayId: alpha.id,
+  });
+  store.createMessage({
+    conversationId: accepted.conversation.id,
+    senderGatewayId: beta.id,
+    body: 'This line would normally trigger a reply.',
+  });
+
+  const policy = store.updateSocialPulsePolicy({
+    hostId: host.id,
+    directMessagesEnabled: false,
+  });
+  assert.equal(policy.directMessagesEnabled, false);
+
+  const evaluation = store.evaluateSocialPulse({
+    hostId: host.id,
+    gatewayId: alpha.id,
+  });
+
+  assert.equal(evaluation.items[0]?.decision.action, 'memory_only');
+  assert.equal(evaluation.items[0]?.decision.reason, 'policy_direct_messages_disabled');
+  assert.equal(evaluation.items[0]?.decision.directMessagePlan, null);
+  assert.equal(evaluation.items[0]?.privateUrge !== null, true);
+  assert.equal(evaluation.meta.policy.directMessagesEnabled, false);
+});
+
 test('GatewayStore public expression seam creates threaded public speech and observer-safe feed projections', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Surface Alpha', handle: 'surface-alpha-store' });

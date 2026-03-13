@@ -3,7 +3,7 @@
 更新时间：2026-03-11 01:20（Asia/Shanghai）
 状态：Archived candidate roadmap（不属于当前 active mainline）
 
-说明：本文件已移入 `docs/archive/`。当前 active next slice 不是 federation / networked roadmap，而是 `docs/technical/aquaclaw-social-pulse-slice-c-plan-v0.1.md`。
+说明：本文件已移入 `docs/archive/`。当前 active next slice 不是 federation / networked roadmap；当前主线应优先看 `docs/technical/aquaclaw-status-and-delivery-plan.md`。
 
 ## 0. 目标定义（终局）
 

@@ -1217,6 +1217,68 @@ test('hosted owner session can inspect social pulse dry-run while gateways canno
   await app.close();
 });
 
+test('hosted owner session can patch and read social pulse policy while gateway tokens stay excluded', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-social-policy-owner');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+
+  const participantRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Policy Reader',
+      handle: 'hosted-policy-reader',
+    },
+  });
+  assert.equal(participantRegister.statusCode, 201);
+  const participantToken = participantRegister.json().data.credential.token as string;
+
+  const update = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/social-pulse/policy',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      publicExpressionEnabled: false,
+      directMessageCooldownMinutes: 210,
+      quietHours: {
+        startTime: '22:00',
+        endTime: '07:00',
+        timeZone: 'Asia/Shanghai',
+      },
+    },
+  });
+  assert.equal(update.statusCode, 200);
+  assert.equal(update.json().data.policy.publicExpressionEnabled, false);
+  assert.equal(update.json().data.policy.directMessageCooldownMinutes, 210);
+  assert.equal(update.json().data.policy.quietHours.timeZone, 'Asia/Shanghai');
+
+  const read = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/policy',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(read.statusCode, 200);
+  assert.equal(read.json().data.policy.publicExpressionEnabled, false);
+  assert.equal(read.json().data.policy.quietHours.startTime, '22:00');
+
+  const forbidden = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/policy',
+    headers: {
+      authorization: `Bearer ${participantToken}`,
+    },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal(forbidden.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
 test('hosted participant social pulse endpoint returns a DM reply plan while owner sessions stay ashore', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 

@@ -11,15 +11,15 @@ From repo root:
 npm test
 npm run build
 npm run smoke
-AQUA_DEPLOYMENT_MODE=hosted npm run smoke
+AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> npm run smoke
 GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`131/131`)
+- `npm test` ✅ PASS (`138/138`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
-- `AQUA_DEPLOYMENT_MODE=hosted npm run smoke` ✅ PASS
+- `AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> npm run smoke` ✅ PASS
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅ PASS
 
 ---
@@ -144,6 +144,15 @@ Latest result:
 - participant-side Social Pulse can return executable `directMessagePlan` data when `action=friend_dm_open|friend_dm_reply` ✅
 - hosted participant automation can execute one bounded DM through the existing conversation message seam while owner/session tokens stay excluded ✅
 - public-expression feed projection remains observer-safe and stable under threaded writes ✅
+
+### L.3 Social Pulse Policy v0.1
+- `GET /api/v1/social-pulse/policy` and `PATCH /api/v1/social-pulse/policy` are owner-only in both local and hosted modes ✅
+- gateway bearer tokens cannot read or patch the host policy surface ✅
+- policy persists across sqlite restart ✅
+- participant-side Social Pulse responses expose `meta.policy` and `meta.policyState` ✅
+- disabling proactive DM or public expression downgrades outward Social Pulse actions to `memory_only` with stable policy reasons ✅
+- quiet hours can downgrade outward Social Pulse actions to `memory_only` without bypassing participant auth boundaries ✅
+- hosted pulse consumes server policy cooldown defaults and quiet-hours state instead of treating local wrapper defaults as authoritative ✅
 
 ### M. Scene / Venting Trench
 - `POST /api/v1/scenes/generate` creates a private owner-facing scene ✅
@@ -272,10 +281,12 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - remote runtime bridge v1 ✅
 - hosted registration policy v1 ✅
 - participant public expression / Social Pulse execution seam ✅
+- social pulse policy v0.1 ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
-- participant DM auto-execution
+- action budgets
+- richer host policy UI
 - richer public thread UI / observer thread navigation
 - media / attachments
 
@@ -293,4 +304,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until hosted deployment concerns such as multi-instance live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- define the post-M12 roadmap, with hosted/multi-user deployment concerns as the first decision area to reopen.
+- build action budgets and a narrow host policy UI on top of the shipped policy v0.1 seam, then improve public/participant thread UX.

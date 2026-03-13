@@ -250,6 +250,59 @@ test('hosted owner session can rename aqua', async () => {
   await app.close();
 });
 
+test('local owner can patch and read social pulse policy while gateway tokens cannot', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const participant = await registerGateway(app, {
+    displayName: 'Policy Reader',
+    handle: 'policy-reader-local',
+  });
+
+  const update = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/social-pulse/policy',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      directMessagesEnabled: false,
+      publicExpressionCooldownMinutes: 300,
+      quietHours: {
+        startTime: '23:00',
+        endTime: '07:00',
+        timeZone: 'Asia/Shanghai',
+      },
+    },
+  });
+  assert.equal(update.statusCode, 200);
+  assert.equal(update.json().data.policy.directMessagesEnabled, false);
+  assert.equal(update.json().data.policy.publicExpressionCooldownMinutes, 300);
+  assert.equal(update.json().data.policy.quietHours.timeZone, 'Asia/Shanghai');
+
+  const read = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/policy',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+  });
+  assert.equal(read.statusCode, 200);
+  assert.equal(read.json().data.policy.directMessagesEnabled, false);
+  assert.equal(read.json().data.policy.quietHours.startTime, '23:00');
+
+  const forbidden = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/policy',
+    headers: {
+      authorization: `Bearer ${participant.token}`,
+    },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal(forbidden.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
 test('local host can inspect social pulse dry-run while gateway tokens cannot', async () => {
   const app = buildApp();
   const owner = await bootstrapLocalHost(app);
@@ -489,6 +542,138 @@ test('participant social pulse endpoint returns a DM reply plan for gateway bear
   });
   assert.equal(hostForbidden.statusCode, 401);
   assert.equal(hostForbidden.json().error.code, 'unauthorized');
+
+  await app.close();
+});
+
+test('participant social pulse respects host-set DM policy and downgrades to memory_only', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const alpha = await registerGateway(app, {
+    displayName: 'Policy DM Alpha',
+    handle: 'policy-dm-alpha',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Policy DM Beta',
+    handle: 'policy-dm-beta',
+  });
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      toGatewayId: beta.gateway.id,
+    },
+  });
+  assert.equal(friendRequest.statusCode, 201);
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accepted = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+  });
+  assert.equal(accepted.statusCode, 200);
+  const conversationId = accepted.json().data.conversation.id as string;
+
+  const betaPresence = await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      sessionId: 'policy-dm-beta-session',
+      connectionType: 'gateway_ws',
+    },
+  });
+  assert.equal(betaPresence.statusCode, 200);
+
+  const current = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      key: 'policy-dm-disabled-current',
+      label: 'Policy DM Disabled Current',
+      summary: 'The sea would normally support a direct reply.',
+      tone: 'playful',
+      ...buildActiveCurrentWindow(),
+    },
+  });
+  assert.equal(current.statusCode, 201);
+
+  const environment = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      waterTemperatureC: 19,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'warm_bloom',
+    },
+  });
+  assert.equal(environment.statusCode, 201);
+
+  const baselinePulse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(baselinePulse.statusCode, 200);
+  assert.equal(baselinePulse.json().data.item.decision.action, 'friend_dm_open');
+  assert.equal(baselinePulse.json().data.item.decision.directMessagePlan.mode, 'open');
+  assert.equal(baselinePulse.json().data.item.decision.targetGatewayId, beta.gateway.id);
+
+  const updatePolicy = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/social-pulse/policy',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      directMessagesEnabled: false,
+    },
+  });
+  assert.equal(updatePolicy.statusCode, 200);
+
+  const betaMessage = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      body: 'This would usually trigger a reply.',
+    },
+  });
+  assert.equal(betaMessage.statusCode, 201);
+
+  const participantPulse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(participantPulse.statusCode, 200);
+  assert.equal(participantPulse.json().data.item.decision.action, 'memory_only');
+  assert.equal(participantPulse.json().data.item.decision.reason, 'policy_direct_messages_disabled');
+  assert.equal(participantPulse.json().data.item.decision.directMessagePlan, null);
+  assert.equal(participantPulse.json().data.meta.policy.directMessagesEnabled, false);
 
   await app.close();
 });

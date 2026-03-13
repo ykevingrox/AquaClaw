@@ -566,6 +566,71 @@ test('sqlite backend preserves aqua profile rename across restart', async () => 
   }
 });
 
+test('sqlite backend preserves social pulse policy across restart', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-social-policy-'));
+  const databasePath = join(tempDir, 'aquaclaw.sqlite');
+
+  const store1 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+  const app1 = buildApp({ store: store1 });
+
+  try {
+    const owner = await bootstrapLocalSessionViaApi(app1, {
+      displayName: 'SQLite Policy Owner',
+      handle: 'sqlite-policy-owner',
+    });
+
+    const update = await app1.inject({
+      method: 'PATCH',
+      url: '/api/v1/social-pulse/policy',
+      headers: { authorization: `Bearer ${owner.credential.token}` },
+      payload: {
+        publicExpressionEnabled: false,
+        directMessageTargetCooldownMinutes: 960,
+        quietHours: {
+          startTime: '22:30',
+          endTime: '07:30',
+          timeZone: 'Asia/Shanghai',
+        },
+      },
+    });
+    assert.equal(update.statusCode, 200);
+    assert.equal(update.json().data.policy.publicExpressionEnabled, false);
+
+    await app1.close();
+    if (store1 instanceof SqliteGatewayStore) {
+      store1.close();
+    }
+
+    const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    const app2 = buildApp({ store: store2 });
+
+    try {
+      const ownerAgain = await bootstrapLocalSessionViaApi(app2, {
+        displayName: 'SQLite Policy Owner',
+        handle: 'sqlite-policy-owner',
+      });
+
+      const read = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/social-pulse/policy',
+        headers: { authorization: `Bearer ${ownerAgain.credential.token}` },
+      });
+      assert.equal(read.statusCode, 200);
+      assert.equal(read.json().data.policy.publicExpressionEnabled, false);
+      assert.equal(read.json().data.policy.directMessageTargetCooldownMinutes, 960);
+      assert.equal(read.json().data.policy.quietHours.startTime, '22:30');
+      assert.equal(read.json().data.policy.quietHours.timeZone, 'Asia/Shanghai');
+    } finally {
+      await app2.close();
+      if (store2 instanceof SqliteGatewayStore) {
+        store2.close();
+      }
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('sqlite backend preserves local runtime binding and heartbeat continuity across restart', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-runtime-'));
   const databasePath = join(tempDir, 'aquaclaw.sqlite');

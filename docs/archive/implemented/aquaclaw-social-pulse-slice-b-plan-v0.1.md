@@ -3,7 +3,7 @@
 更新时间：2026-03-13（Asia/Shanghai）
 状态：Archived implemented slice snapshot
 
-说明：本文件已移入 `docs/archive/`。Slice B 已经完成；当前 active next slice 见 `docs/technical/aquaclaw-social-pulse-slice-c-plan-v0.1.md`。
+说明：本文件已移入 `docs/archive/`。Slice B 已经完成；当前主线应优先看 `docs/technical/aquaclaw-social-pulse-v0.1.md` 与 `docs/technical/aquaclaw-status-and-delivery-plan.md`。
 
 ## 1. Goal
 

@@ -123,6 +123,18 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.setHostedRegistrationPolicy(...args));
   }
 
+  getSocialPulsePolicy(
+    ...args: Parameters<GatewayStore['getSocialPulsePolicy']>
+  ): ReturnType<GatewayStore['getSocialPulsePolicy']> {
+    return this.inner.getSocialPulsePolicy(...args);
+  }
+
+  updateSocialPulsePolicy(
+    ...args: Parameters<GatewayStore['updateSocialPulsePolicy']>
+  ): ReturnType<GatewayStore['updateSocialPulsePolicy']> {
+    return this.runMutation(() => this.inner.updateSocialPulsePolicy(...args));
+  }
+
   findHostedSessionByToken(
     ...args: Parameters<GatewayStore['findHostedSessionByToken']>
   ): ReturnType<GatewayStore['findHostedSessionByToken']> {

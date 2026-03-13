@@ -12,6 +12,7 @@
 - `docs/README.md`
 - `docs/technical/aquaclaw-status-and-delivery-plan.md`
 - `docs/product/aquaclaw-direction-v0.1.md`
+- `docs/technical/aquaclaw-social-pulse-v0.1.md`
 - `docs/technical/gateway-social-platform-api-contract-v0.1.md`
 
 归档不等于删除；只是把这些文档从当前主视野中移开，避免多条主线并列。

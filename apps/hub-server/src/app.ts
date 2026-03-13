@@ -21,6 +21,7 @@ import {
   type PublicExpressionRecord,
   type SeaEvent,
   type SeaEventLiveSource,
+  type SocialPulsePolicyRecord,
 } from './store.js';
 
 interface BuildAppOptions {
@@ -64,6 +65,19 @@ interface BootstrapHostedSessionBody {
 
 interface UpdateHostedRegistrationPolicyBody {
   policy?: string;
+}
+
+interface UpdateSocialPulsePolicyBody {
+  publicExpressionEnabled?: boolean;
+  directMessagesEnabled?: boolean;
+  publicExpressionCooldownMinutes?: number;
+  directMessageCooldownMinutes?: number;
+  directMessageTargetCooldownMinutes?: number;
+  quietHours?: {
+    startTime?: string;
+    endTime?: string;
+    timeZone?: string;
+  } | null;
 }
 
 interface RevokeHostedSessionsBody {
@@ -694,6 +708,25 @@ function toAquaProfileSummary(profile: AquaProfileRecord) {
   return {
     displayName: profile.displayName,
     updatedAt: profile.updatedAt,
+  };
+}
+
+function toSocialPulsePolicySummary(policy: SocialPulsePolicyRecord) {
+  return {
+    publicExpressionEnabled: policy.publicExpressionEnabled,
+    directMessagesEnabled: policy.directMessagesEnabled,
+    publicExpressionCooldownMinutes: policy.publicExpressionCooldownMinutes,
+    directMessageCooldownMinutes: policy.directMessageCooldownMinutes,
+    directMessageTargetCooldownMinutes: policy.directMessageTargetCooldownMinutes,
+    quietHours: policy.quietHours
+      ? {
+          startTime: policy.quietHours.startTime,
+          endTime: policy.quietHours.endTime,
+          timeZone: policy.quietHours.timeZone,
+        }
+      : null,
+    updatedAt: policy.updatedAt,
+    updatedByHostId: policy.updatedByHostId,
   };
 }
 
@@ -2995,6 +3028,178 @@ export function buildApp(options: BuildAppOptions = {}) {
         ok: false,
         error: {
           code: mapped.code,
+          message,
+        },
+      });
+    }
+  });
+
+  app.get('/api/v1/social-pulse/policy', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+    } else {
+      const localOwner = getLocalOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!localOwner.ok) {
+        const endpointError = localOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      data: {
+        policy: toSocialPulsePolicySummary(store.getSocialPulsePolicy()),
+      },
+    };
+  });
+
+  app.patch<{ Body: UpdateSocialPulsePolicyBody }>('/api/v1/social-pulse/policy', async (request, reply) => {
+    let actorHostId: string;
+
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorHostId = hostedOwner.session.host.id;
+    } else {
+      const localOwner = getLocalOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!localOwner.ok) {
+        const endpointError = localOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorHostId = localOwner.session.host.id;
+    }
+
+    const body = request.body ?? {};
+    const hasPatchField =
+      body.publicExpressionEnabled !== undefined ||
+      body.directMessagesEnabled !== undefined ||
+      body.publicExpressionCooldownMinutes !== undefined ||
+      body.directMessageCooldownMinutes !== undefined ||
+      body.directMessageTargetCooldownMinutes !== undefined ||
+      body.quietHours !== undefined;
+
+    if (!hasPatchField) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'at least one social pulse policy field is required',
+        },
+      });
+    }
+    if (body.publicExpressionEnabled !== undefined && typeof body.publicExpressionEnabled !== 'boolean') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'publicExpressionEnabled must be a boolean when provided',
+        },
+      });
+    }
+    if (body.directMessagesEnabled !== undefined && typeof body.directMessagesEnabled !== 'boolean') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'directMessagesEnabled must be a boolean when provided',
+        },
+      });
+    }
+
+    for (const [fieldName, fieldValue] of [
+      ['publicExpressionCooldownMinutes', body.publicExpressionCooldownMinutes],
+      ['directMessageCooldownMinutes', body.directMessageCooldownMinutes],
+      ['directMessageTargetCooldownMinutes', body.directMessageTargetCooldownMinutes],
+    ] as const) {
+      if (fieldValue !== undefined && (typeof fieldValue !== 'number' || !Number.isInteger(fieldValue) || fieldValue < 1)) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'validation_failed',
+            message: `${fieldName} must be a positive integer when provided`,
+          },
+        });
+      }
+    }
+
+    if (
+      body.quietHours !== undefined &&
+      body.quietHours !== null &&
+      (typeof body.quietHours !== 'object' || Array.isArray(body.quietHours))
+    ) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'quietHours must be an object or null when provided',
+        },
+      });
+    }
+
+    try {
+      const updated = store.updateSocialPulsePolicy({
+        hostId: actorHostId,
+        publicExpressionEnabled: body.publicExpressionEnabled,
+        directMessagesEnabled: body.directMessagesEnabled,
+        publicExpressionCooldownMinutes: body.publicExpressionCooldownMinutes,
+        directMessageCooldownMinutes: body.directMessageCooldownMinutes,
+        directMessageTargetCooldownMinutes: body.directMessageTargetCooldownMinutes,
+        quietHours:
+          body.quietHours === undefined
+            ? undefined
+            : body.quietHours === null
+              ? null
+              : {
+                  startTime: body.quietHours.startTime ?? '',
+                  endTime: body.quietHours.endTime ?? '',
+                  timeZone: body.quietHours.timeZone ?? '',
+                },
+      });
+
+      return {
+        ok: true,
+        data: {
+          policy: toSocialPulsePolicySummary(updated),
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to update social pulse policy';
+      const statusCode = message === 'host not found' ? 404 : 400;
+      return reply.code(statusCode).send({
+        ok: false,
+        error: {
+          code: statusCode === 404 ? 'not_found' : 'validation_failed',
           message,
         },
       });

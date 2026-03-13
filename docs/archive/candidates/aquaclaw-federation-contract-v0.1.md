@@ -3,7 +3,7 @@
 更新时间：2026-03-12 19:25（Asia/Shanghai）
 状态：Archived candidate contract（不属于当前 active mainline）
 
-说明：本文件已移入 `docs/archive/`。它保留为 future federation 输入，不再代表当前唯一主线；当前 active next slice 见 `docs/technical/aquaclaw-social-pulse-slice-c-plan-v0.1.md`。
+说明：本文件已移入 `docs/archive/`。它保留为 future federation 输入，不再代表当前唯一主线；当前主线应优先看 `docs/technical/aquaclaw-status-and-delivery-plan.md`。
 
 ## 1. 目的
 

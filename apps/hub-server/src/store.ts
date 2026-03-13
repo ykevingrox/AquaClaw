@@ -276,6 +276,29 @@ export interface SocialPulseTraits {
   loneliness: number;
 }
 
+export interface SocialPulsePolicyQuietHours {
+  startTime: string;
+  endTime: string;
+  timeZone: string;
+}
+
+export interface SocialPulsePolicyRecord {
+  publicExpressionEnabled: boolean;
+  directMessagesEnabled: boolean;
+  publicExpressionCooldownMinutes: number;
+  directMessageCooldownMinutes: number;
+  directMessageTargetCooldownMinutes: number;
+  quietHours: SocialPulsePolicyQuietHours | null;
+  updatedAt: string | null;
+  updatedByHostId: string | null;
+}
+
+export interface SocialPulsePolicyState {
+  quietHoursActive: boolean;
+  quietHoursLocalClock: string | null;
+  quietHoursTimeZone: string | null;
+}
+
 export interface SocialPulseCandidate {
   conversationId: string;
   peerGatewayId: string;
@@ -342,6 +365,8 @@ export interface SocialPulseEvaluation {
     dmThreshold: number;
     publicThreshold: number;
     memoryThreshold: number;
+    policy: SocialPulsePolicyRecord;
+    policyState: SocialPulsePolicyState;
   };
 }
 
@@ -354,6 +379,8 @@ export interface SocialPulseGatewayEvaluation {
     dmThreshold: number;
     publicThreshold: number;
     memoryThreshold: number;
+    policy: SocialPulsePolicyRecord;
+    policyState: SocialPulsePolicyState;
   };
 }
 
@@ -452,6 +479,7 @@ export interface GatewayStoreSnapshot {
   hosts?: HostRecord[];
   gateways: GatewayRecord[];
   aquaProfile?: AquaProfileRecord | null;
+  socialPulsePolicy?: SocialPulsePolicyRecord | null;
   gatewayTokens: GatewayTokenSnapshotRecord[];
   localHostId?: string | null;
   hostedHostId?: string | null;
@@ -502,6 +530,8 @@ export interface GatewayStore {
   };
   getHostedRegistrationPolicy(): HostedRegistrationPolicy | null;
   setHostedRegistrationPolicy(input: SetHostedRegistrationPolicyInput): HostedRegistrationPolicy;
+  getSocialPulsePolicy(): SocialPulsePolicyRecord;
+  updateSocialPulsePolicy(input: UpdateSocialPulsePolicyInput): SocialPulsePolicyRecord;
   findHostedSessionByToken(token: string): { host: HostRecord; session: HostedSessionRecord } | null;
   logoutHostedSession(token: string): HostedSessionRecord;
   revokeHostedSessions(input: RevokeHostedSessionsInput): HostedSessionRecord[];
@@ -627,6 +657,16 @@ interface RevokeHostedSessionsInput {
 interface SetHostedRegistrationPolicyInput {
   policy: HostedRegistrationPolicy;
   actorHostId: string;
+}
+
+export interface UpdateSocialPulsePolicyInput {
+  hostId: string;
+  publicExpressionEnabled?: boolean;
+  directMessagesEnabled?: boolean;
+  publicExpressionCooldownMinutes?: number;
+  directMessageCooldownMinutes?: number;
+  directMessageTargetCooldownMinutes?: number;
+  quietHours?: SocialPulsePolicyQuietHours | null;
 }
 
 interface BindLocalRuntimeInput {
@@ -969,6 +1009,16 @@ const HOST_VIEWER_PREFIX = 'host-viewer:';
 const SOCIAL_PULSE_DM_THRESHOLD = 0.68;
 const SOCIAL_PULSE_PUBLIC_THRESHOLD = 0.54;
 const SOCIAL_PULSE_MEMORY_THRESHOLD = 0.34;
+const DEFAULT_SOCIAL_PULSE_POLICY: SocialPulsePolicyRecord = {
+  publicExpressionEnabled: true,
+  directMessagesEnabled: true,
+  publicExpressionCooldownMinutes: 240,
+  directMessageCooldownMinutes: 180,
+  directMessageTargetCooldownMinutes: 720,
+  quietHours: null,
+  updatedAt: null,
+  updatedByHostId: null,
+};
 const DEFAULT_ENCOUNTER_SYNTHESIS_RULES: EncounterSynthesisRules = {
   friendRequestAcceptedSeedTopics: ['friendship'],
   maxNotes: 5,
@@ -1070,6 +1120,70 @@ function hoursSinceIso(value: string | null | undefined, nowMs: number) {
     return null;
   }
   return Math.max(0, (nowMs - parsed) / (60 * 60 * 1000));
+}
+
+function parseQuietHourMinutes(value: string, label: string) {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(value).trim());
+  if (!match) {
+    throw new Error(`${label} must use HH:MM in 24-hour time`);
+  }
+  return Number.parseInt(match[1], 10) * 60 + Number.parseInt(match[2], 10);
+}
+
+function assertValidQuietHoursTimeZone(value: string) {
+  const timeZone = String(value).trim();
+  if (!timeZone) {
+    throw new Error('social pulse quiet hours timeZone is required');
+  }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+  } catch {
+    throw new Error(`invalid social pulse quiet hours timeZone: ${timeZone}`);
+  }
+}
+
+function cloneSocialPulsePolicy(policy: SocialPulsePolicyRecord): SocialPulsePolicyRecord {
+  return {
+    ...policy,
+    quietHours: policy.quietHours ? { ...policy.quietHours } : null,
+  };
+}
+
+function evaluateSocialPulseQuietHours(
+  quietHours: SocialPulsePolicyQuietHours | null,
+  nowMs: number,
+): SocialPulsePolicyState {
+  if (!quietHours) {
+    return {
+      quietHoursActive: false,
+      quietHoursLocalClock: null,
+      quietHoursTimeZone: null,
+    };
+  }
+
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit',
+    timeZone: quietHours.timeZone,
+  });
+  const parts = formatter.formatToParts(new Date(nowMs));
+  const hour = parts.find((part) => part.type === 'hour')?.value ?? '00';
+  const minute = parts.find((part) => part.type === 'minute')?.value ?? '00';
+  const localClock = `${hour}:${minute}`;
+  const localMinutes = parseQuietHourMinutes(localClock, 'derived social pulse quiet hours local time');
+  const startMinutes = parseQuietHourMinutes(quietHours.startTime, 'social pulse quiet hours startTime');
+  const endMinutes = parseQuietHourMinutes(quietHours.endTime, 'social pulse quiet hours endTime');
+  const active =
+    startMinutes < endMinutes
+      ? localMinutes >= startMinutes && localMinutes < endMinutes
+      : localMinutes >= startMinutes || localMinutes < endMinutes;
+
+  return {
+    quietHoursActive: active,
+    quietHoursLocalClock: localClock,
+    quietHoursTimeZone: quietHours.timeZone,
+  };
 }
 
 function buildSeededCurrent(now = new Date()): CurrentRecord {
@@ -1222,6 +1336,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly scenesById = new Map<string, SceneRecord>();
   private readonly sceneIdsByGatewayId = new Map<string, string[]>();
   private aquaProfile: AquaProfileRecord | null = null;
+  private socialPulsePolicy: SocialPulsePolicyRecord | null = null;
   private localHostId: string | null = null;
   private hostedHostId: string | null = null;
   private hostedRegistrationPolicy: HostedRegistrationPolicy | null = null;
@@ -1475,6 +1590,78 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     });
 
     return input.policy;
+  }
+
+  getSocialPulsePolicy() {
+    return cloneSocialPulsePolicy(this.socialPulsePolicy ?? DEFAULT_SOCIAL_PULSE_POLICY);
+  }
+
+  updateSocialPulsePolicy(input: UpdateSocialPulsePolicyInput) {
+    if (!this.hostsById.has(input.hostId)) {
+      throw new Error('host not found');
+    }
+
+    const current = this.getSocialPulsePolicy();
+    const updatedAt = new Date().toISOString();
+    const nextQuietHours =
+      input.quietHours === undefined
+        ? current.quietHours
+        : input.quietHours === null
+          ? null
+          : {
+              startTime: String(input.quietHours.startTime ?? '').trim(),
+              endTime: String(input.quietHours.endTime ?? '').trim(),
+              timeZone: String(input.quietHours.timeZone ?? '').trim(),
+            };
+
+    if (nextQuietHours) {
+      parseQuietHourMinutes(nextQuietHours.startTime, 'social pulse quiet hours startTime');
+      parseQuietHourMinutes(nextQuietHours.endTime, 'social pulse quiet hours endTime');
+      if (nextQuietHours.startTime === nextQuietHours.endTime) {
+        throw new Error('social pulse quiet hours startTime and endTime must differ');
+      }
+      assertValidQuietHoursTimeZone(nextQuietHours.timeZone);
+    }
+
+    const next: SocialPulsePolicyRecord = {
+      publicExpressionEnabled:
+        input.publicExpressionEnabled === undefined ? current.publicExpressionEnabled : input.publicExpressionEnabled,
+      directMessagesEnabled:
+        input.directMessagesEnabled === undefined ? current.directMessagesEnabled : input.directMessagesEnabled,
+      publicExpressionCooldownMinutes:
+        input.publicExpressionCooldownMinutes === undefined
+          ? current.publicExpressionCooldownMinutes
+          : this.assertPositivePolicyMinutes(input.publicExpressionCooldownMinutes, 'publicExpressionCooldownMinutes'),
+      directMessageCooldownMinutes:
+        input.directMessageCooldownMinutes === undefined
+          ? current.directMessageCooldownMinutes
+          : this.assertPositivePolicyMinutes(input.directMessageCooldownMinutes, 'directMessageCooldownMinutes'),
+      directMessageTargetCooldownMinutes:
+        input.directMessageTargetCooldownMinutes === undefined
+          ? current.directMessageTargetCooldownMinutes
+          : this.assertPositivePolicyMinutes(input.directMessageTargetCooldownMinutes, 'directMessageTargetCooldownMinutes'),
+      quietHours: nextQuietHours,
+      updatedAt,
+      updatedByHostId: input.hostId,
+    };
+
+    if (JSON.stringify(next) === JSON.stringify({ ...current, updatedAt: next.updatedAt, updatedByHostId: input.hostId })) {
+      return cloneSocialPulsePolicy(current);
+    }
+
+    this.socialPulsePolicy = next;
+    this.appendAuditRecord({
+      actorGatewayId: null,
+      targetGatewayId: null,
+      action: 'social_pulse.policy_updated',
+      metadata: {
+        actorHostId: input.hostId,
+        policy: next,
+      },
+      createdAt: updatedAt,
+    });
+
+    return cloneSocialPulsePolicy(next);
   }
 
   findHostedSessionByToken(token: string) {
@@ -3278,6 +3465,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const environment = this.getEnvironment();
     const generatedAt = new Date().toISOString();
     const nowMs = Date.parse(generatedAt);
+    const socialPulsePolicy = this.getSocialPulsePolicy();
+    const socialPulsePolicyState = this.evaluateSocialPulsePolicyState(socialPulsePolicy, nowMs);
 
     const gateways = Array.from(this.gatewaysById.values())
       .filter((gateway) => !this.isOwnerGatewayId(gateway.id))
@@ -3292,8 +3481,17 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       generatedAt,
       current,
       environment,
-      items: gateways.map((gateway) => this.buildSocialPulseDecisionForGateway(gateway, current, environment, nowMs)),
-      meta: this.buildSocialPulseMeta(),
+      items: gateways.map((gateway) =>
+        this.buildSocialPulseDecisionForGateway(
+          gateway,
+          current,
+          environment,
+          nowMs,
+          socialPulsePolicy,
+          socialPulsePolicyState,
+        ),
+      ),
+      meta: this.buildSocialPulseMeta(socialPulsePolicy, socialPulsePolicyState),
     };
   }
 
@@ -3307,13 +3505,22 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const environment = this.getEnvironment();
     const generatedAt = new Date().toISOString();
     const nowMs = Date.parse(generatedAt);
+    const socialPulsePolicy = this.getSocialPulsePolicy();
+    const socialPulsePolicyState = this.evaluateSocialPulsePolicyState(socialPulsePolicy, nowMs);
 
     return {
       generatedAt,
       current,
       environment,
-      item: this.buildSocialPulseDecisionForGateway(gateway, current, environment, nowMs),
-      meta: this.buildSocialPulseMeta(),
+      item: this.buildSocialPulseDecisionForGateway(
+        gateway,
+        current,
+        environment,
+        nowMs,
+        socialPulsePolicy,
+        socialPulsePolicyState,
+      ),
+      meta: this.buildSocialPulseMeta(socialPulsePolicy, socialPulsePolicyState),
     };
   }
 
@@ -3654,6 +3861,13 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return VALID_FRIEND_REQUEST_POLICIES.includes(policy as GatewayFriendRequestPolicy) ? (policy as GatewayFriendRequestPolicy) : 'manual_review';
   }
 
+  private assertPositivePolicyMinutes(value: number, fieldName: string) {
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value < 1) {
+      throw new Error(`${fieldName} must be a positive integer`);
+    }
+    return value;
+  }
+
   private resolveGatewayFriendRequestPolicy(gatewayId: string, policy: GatewayFriendRequestPolicy | null | undefined) {
     if (this.isOwnerGatewayId(gatewayId)) {
       return 'disabled';
@@ -3976,6 +4190,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     current: CurrentRecord,
     environment: EnvironmentRecord,
     nowMs: number,
+    socialPulsePolicy: SocialPulsePolicyRecord,
+    socialPulsePolicyState: SocialPulsePolicyState,
   ): SocialPulseDecision {
     const traits = this.deriveSocialPulseTraits(gateway, nowMs);
     const worldPressure = this.computeSocialPulseWorldPressure(current, environment);
@@ -4032,6 +4248,18 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       reasons.push('current sea pressure is below the minimum threshold for outward action');
     }
 
+    const policyAdjusted = this.applySocialPulsePolicyToDecision({
+      action,
+      targetGatewayId,
+      targetHandle,
+      reason,
+      publicExpressionPlan,
+      directMessagePlan,
+      reasons,
+      socialPulsePolicy,
+      socialPulsePolicyState,
+    });
+
     return {
       gatewayId: gateway.id,
       handle: gateway.handle,
@@ -4040,14 +4268,14 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       publicUrge,
       privateUrge: topCandidate?.score ?? null,
       decision: {
-        action,
-        targetGatewayId,
-        targetHandle,
-        reason,
-        publicExpressionPlan,
-        directMessagePlan,
+        action: policyAdjusted.action,
+        targetGatewayId: policyAdjusted.targetGatewayId,
+        targetHandle: policyAdjusted.targetHandle,
+        reason: policyAdjusted.reason,
+        publicExpressionPlan: policyAdjusted.publicExpressionPlan,
+        directMessagePlan: policyAdjusted.directMessagePlan,
       },
-      reasons: [...new Set(reasons)],
+      reasons: [...new Set(policyAdjusted.reasons)],
       candidates,
     };
   }
@@ -4164,11 +4392,97 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return candidates;
   }
 
-  private buildSocialPulseMeta() {
+  private buildSocialPulseMeta(
+    socialPulsePolicy: SocialPulsePolicyRecord,
+    socialPulsePolicyState: SocialPulsePolicyState,
+  ) {
     return {
       dmThreshold: SOCIAL_PULSE_DM_THRESHOLD,
       publicThreshold: SOCIAL_PULSE_PUBLIC_THRESHOLD,
       memoryThreshold: SOCIAL_PULSE_MEMORY_THRESHOLD,
+      policy: cloneSocialPulsePolicy(socialPulsePolicy),
+      policyState: {
+        ...socialPulsePolicyState,
+      },
+    };
+  }
+
+  private evaluateSocialPulsePolicyState(
+    socialPulsePolicy: SocialPulsePolicyRecord,
+    nowMs: number,
+  ): SocialPulsePolicyState {
+    return evaluateSocialPulseQuietHours(socialPulsePolicy.quietHours, nowMs);
+  }
+
+  private applySocialPulsePolicyToDecision(input: {
+    action: SocialPulseAction;
+    targetGatewayId: string | null;
+    targetHandle: string | null;
+    reason: string;
+    publicExpressionPlan: SocialPulsePublicExpressionPlan | null;
+    directMessagePlan: SocialPulseDirectMessagePlan | null;
+    reasons: string[];
+    socialPulsePolicy: SocialPulsePolicyRecord;
+    socialPulsePolicyState: SocialPulsePolicyState;
+  }) {
+    const reasons = [...input.reasons];
+
+    if (input.action === 'public_expression' && !input.socialPulsePolicy.publicExpressionEnabled) {
+      reasons.push('host policy currently disables proactive public expression');
+      return {
+        action: 'memory_only' as const,
+        targetGatewayId: null,
+        targetHandle: null,
+        reason: 'policy_public_expression_disabled',
+        publicExpressionPlan: null,
+        directMessagePlan: null,
+        reasons,
+      };
+    }
+
+    if (
+      (input.action === 'friend_dm_open' || input.action === 'friend_dm_reply') &&
+      !input.socialPulsePolicy.directMessagesEnabled
+    ) {
+      reasons.push('host policy currently disables proactive direct messages');
+      return {
+        action: 'memory_only' as const,
+        targetGatewayId: null,
+        targetHandle: null,
+        reason: 'policy_direct_messages_disabled',
+        publicExpressionPlan: null,
+        directMessagePlan: null,
+        reasons,
+      };
+    }
+
+    if (
+      (input.action === 'public_expression' || input.action === 'friend_dm_open' || input.action === 'friend_dm_reply') &&
+      input.socialPulsePolicyState.quietHoursActive
+    ) {
+      const quietHoursText = input.socialPulsePolicyState.quietHoursLocalClock && input.socialPulsePolicyState.quietHoursTimeZone
+        ? `${input.socialPulsePolicyState.quietHoursLocalClock} ${input.socialPulsePolicyState.quietHoursTimeZone}`
+        : 'host quiet hours';
+      reasons.push(`host quiet hours are active at ${quietHoursText}`);
+      return {
+        action: 'memory_only' as const,
+        targetGatewayId: null,
+        targetHandle: null,
+        reason: 'policy_quiet_hours',
+        publicExpressionPlan: null,
+        directMessagePlan: null,
+        reasons,
+      };
+    }
+
+    return {
+      action: input.action,
+      targetGatewayId: input.targetGatewayId,
+      targetHandle: input.targetHandle,
+      reason: input.reason,
+      publicExpressionPlan: input.publicExpressionPlan,
+      directMessagePlan: input.directMessagePlan,
+      reasons,
     };
   }
 
@@ -5240,6 +5554,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       hosts: [...this.hostsById.values()],
       gateways: [...this.gatewaysById.values()],
       aquaProfile: this.aquaProfile,
+      socialPulsePolicy: this.socialPulsePolicy ? cloneSocialPulsePolicy(this.socialPulsePolicy) : null,
       gatewayTokens: [...this.tokensToGatewayId.entries()].map(([token, gatewayId]) => ({ token, gatewayId })),
       localHostId: this.localHostId,
       hostedHostId: this.hostedHostId,
@@ -5293,6 +5608,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       this.legacyOwnerGatewayIds.add(legacyHostedOwnerGatewayId);
     }
     this.hostedRegistrationPolicy = snapshot.hostedRegistrationPolicy ?? null;
+    this.socialPulsePolicy = snapshot.socialPulsePolicy ? cloneSocialPulsePolicy(snapshot.socialPulsePolicy) : null;
 
     for (const gateway of snapshot.gateways) {
       const normalizedGateway = this.normalizeGatewayRecord(gateway);
@@ -5542,6 +5858,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.hostsByHandle.clear();
     this.legacyOwnerGatewayIds.clear();
     this.aquaProfile = null;
+    this.socialPulsePolicy = null;
     this.localHostId = null;
     this.hostedHostId = null;
     this.hostedRegistrationPolicy = null;
