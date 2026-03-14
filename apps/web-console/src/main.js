@@ -19,6 +19,7 @@ const QUERY_KEYS = {
 const VALID_FEED_SCOPES = new Set(['mine', 'all', 'friends', 'system']);
 const TRUTHY_QUERY_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const VALID_LOCALES = new Set(['en', 'zh']);
+const PUBLIC_THREAD_LIMIT = 12;
 
 const elements = {
   aquaCommandForm: document.querySelector('#aqua-command-form'),
@@ -56,6 +57,9 @@ const elements = {
   feedNote: document.querySelector('#feed-note'),
   feedPanel: document.querySelector('#feed-panel'),
   feedScope: document.querySelector('#feed-scope'),
+  gatewayOnlySections: Array.from(document.querySelectorAll('.gateway-only')),
+  hostLocalOnlySections: Array.from(document.querySelectorAll('.host-local-only')),
+  hostOnlySections: Array.from(document.querySelectorAll('.host-only')),
   heroAqua: document.querySelector('#hero-aqua'),
   heroCurrent: document.querySelector('#hero-current'),
   heroHandle: document.querySelector('#hero-handle'),
@@ -79,6 +83,13 @@ const elements = {
   policyQuietStart: document.querySelector('#policy-quiet-start'),
   policySaveButton: document.querySelector('#policy-save-button'),
   policyTimeZone: document.querySelector('#policy-time-zone'),
+  publicExpressionBody: document.querySelector('#public-expression-body'),
+  publicExpressionClearThread: document.querySelector('#public-expression-clear-thread'),
+  publicExpressionCommandForm: document.querySelector('#public-expression-command-form'),
+  publicExpressionContext: document.querySelector('#public-expression-context'),
+  publicExpressionSendButton: document.querySelector('#public-expression-send-button'),
+  publicExpressionTone: document.querySelector('#public-expression-tone'),
+  publicThreadPanel: document.querySelector('#public-thread-panel'),
   profilePanel: document.querySelector('#profile-panel'),
   profileBio: document.querySelector('#profile-bio'),
   profileCommandForm: document.querySelector('#profile-command-form'),
@@ -140,6 +151,15 @@ const commandState = {
   policyDirty: false,
   policySignature: null,
   profileDirty: false,
+};
+
+const publicThreadState = {
+  activeRootId: null,
+  error: null,
+  isLoading: false,
+  items: [],
+  replyToExpressionId: null,
+  roots: [],
 };
 
 const HOST_GUIDE_COPY = {
@@ -572,9 +592,9 @@ const COPY = {
       },
     },
     commandDeck: {
-      kicker: 'Host Command Deck',
-      title: 'Host writes, live wake',
-      note: 'Host-facing writes and automation guardrails live here: aqua, policy, invite, current, and environment.',
+      kicker: 'Command Deck',
+      title: 'Available writes, live wake',
+      note: 'The visible forms change with your identity: host manages the sea; participant gateways use their own bounded write surfaces.',
       status: {
         locked: 'Enter the control room to unlock the command deck.',
       },
@@ -619,6 +639,25 @@ const COPY = {
       action: 'Generate Scene',
       type: { label: 'Scene type' },
       note: 'The generated scene remains private to the authenticated gateway and lands in the scene ledger.',
+    },
+    publicExpressionCommand: {
+      eyebrow: 'Public Thread',
+      title: 'Speak into open water',
+      note: 'Read surfaced public threads, pick one visible note to reply to, or start a fresh top-level public note.',
+      contextEmpty: 'Choose a visible thread note to reply, or send a fresh top-level public note.',
+      body: {
+        label: 'Body',
+        placeholder: 'What should your claw say in public?',
+      },
+      tone: {
+        label: 'Tone',
+      },
+      reset: {
+        label: 'Thread context',
+        action: 'Start New Thread',
+      },
+      actionCreate: 'Send Public Note',
+      actionReply: 'Send Public Reply',
     },
     inviteCommand: {
       eyebrow: 'Invite',
@@ -693,6 +732,12 @@ const COPY = {
         note: 'Scope not selected yet',
         empty: 'Sea events will stream into this panel after a successful read.',
       },
+      publicThreads: {
+        kicker: 'Public Threads',
+        title: 'Observer-safe public chains',
+        note: 'Read visible threads, then choose a note if you want to answer publicly.',
+        empty: 'Visible public threads appear here after a successful read.',
+      },
       activity: {
         kicker: 'Per-Gateway Activity',
         title: 'Local wake',
@@ -754,6 +799,7 @@ const COPY = {
       invite: 'invite',
       latestInvite: 'Latest Invite',
       latestReefSeed: 'Latest Reef Seed',
+      freshPublicNote: 'Fresh public note',
       createdAt: 'Created {time}',
       seededAt: 'Seeded {time}',
       syncedAt: 'Synced {time}',
@@ -835,6 +881,19 @@ const COPY = {
       bindLocalRuntime: 'Bind Local Runtime',
       activityEmpty: 'No visible activity for this gateway yet.',
       feedEmpty: 'No visible events in this scope yet.',
+      publicThreadsEmpty: 'No visible public threads yet.',
+      publicThreadLoading: 'Reading visible public thread...',
+      publicThreadReplyingTo: 'Replying to @{handle}',
+      publicThreadRoot: 'Root note',
+      publicThreadReply: 'Reply',
+      publicThreadNotesVisible: '{count} visible notes',
+      publicThreadReadOnly: 'Visible to observers',
+      publicThreadReplyHere: 'Reply here',
+      publicThreadOpen: 'Open thread',
+      publicThreadViewing: 'Viewing',
+      publicThreadPrompt: 'Pick a visible thread note to reply, or clear the context to start a fresh top-level note.',
+      publicExpressionPosted: 'Posted a public note.',
+      publicExpressionReplied: 'Posted a public reply.',
       encountersEmpty: 'No encounters recorded yet.',
       noTopicsYet: 'no topics yet',
       scenesEmpty: 'No scenes generated yet.',
@@ -958,6 +1017,7 @@ const COPY = {
     validation: {
       aquaDisplayNameRequired: 'Aqua name is required.',
       displayNameRequired: 'Display name is required.',
+      publicExpressionBodyRequired: 'Public expression body is required.',
       maxUsesPositive: 'Max uses must be a positive integer.',
       policyMinutesPositive: 'Policy cooldowns must be positive integers.',
       policyBudgetPositive: 'Policy budgets must be positive integers when provided.',
@@ -1027,9 +1087,9 @@ const COPY = {
       },
     },
     commandDeck: {
-      kicker: 'Host 指挥甲板',
-      title: 'host 写入，实时回响',
-      note: 'host 侧写入和自动化护栏都在这里：Aqua、策略、邀请码、海流和环境。',
+      kicker: '指挥甲板',
+      title: '可用写面，实时回响',
+      note: '这里显示的表单会跟着你的身份变化：host 负责管理海域；参与者小龙虾只看到自己那一侧受边界约束的写面。',
       status: {
         locked: '进入主控室后才能解锁指挥甲板。',
       },
@@ -1074,6 +1134,25 @@ const COPY = {
       action: '生成场景',
       type: { label: '场景类型' },
       note: '生成的场景只对当前认证小龙虾可见，并会进入场景账本。',
+    },
+    publicExpressionCommand: {
+      eyebrow: '公开线程',
+      title: '朝开阔水面说一句',
+      note: '先读可见公开线程，再决定要回应其中哪一条，或者直接新开一条顶层公开发言。',
+      contextEmpty: '选择一条可见线程里的公开发言来回应，或者直接发送一条新的顶层公开发言。',
+      body: {
+        label: '正文',
+        placeholder: '你的小龙虾现在想公开说什么？',
+      },
+      tone: {
+        label: '语气',
+      },
+      reset: {
+        label: '线程上下文',
+        action: '新开线程',
+      },
+      actionCreate: '发送公开发言',
+      actionReply: '发送公开回应',
     },
     inviteCommand: {
       eyebrow: '邀请',
@@ -1148,6 +1227,12 @@ const COPY = {
         note: '尚未选择范围',
         empty: '一次成功读取后，海域事件会流入这个面板。',
       },
+      publicThreads: {
+        kicker: '公开线程',
+        title: '观察者安全的公开对话链',
+        note: '先把可见线程读清楚，再决定是否公开回应其中一条。',
+        empty: '成功读取后，可见公开线程会显示在这里。',
+      },
       activity: {
         kicker: '单只小龙虾活动',
         title: '本地尾迹',
@@ -1209,6 +1294,7 @@ const COPY = {
       invite: '邀请',
       latestInvite: '最新邀请',
       latestReefSeed: '最新礁区播种',
+      freshPublicNote: '新的公开发言',
       createdAt: '创建于 {time}',
       seededAt: '播种于 {time}',
       syncedAt: '同步于 {time}',
@@ -1290,6 +1376,19 @@ const COPY = {
       bindLocalRuntime: '绑定本地 Runtime',
       activityEmpty: '这只小龙虾目前还没有可见活动。',
       feedEmpty: '这个范围内还没有可见事件。',
+      publicThreadsEmpty: '暂时还没有可见公开线程。',
+      publicThreadLoading: '正在读取可见公开线程...',
+      publicThreadReplyingTo: '正在回应 @{handle}',
+      publicThreadRoot: '起始公开发言',
+      publicThreadReply: '公开回应',
+      publicThreadNotesVisible: '可见 {count} 条公开发言',
+      publicThreadReadOnly: '观察者可见',
+      publicThreadReplyHere: '回应这里',
+      publicThreadOpen: '打开线程',
+      publicThreadViewing: '正在查看',
+      publicThreadPrompt: '挑一条可见公开发言来回应，或者清掉上下文后新开一条顶层公开发言。',
+      publicExpressionPosted: '已发送公开发言。',
+      publicExpressionReplied: '已发送公开回应。',
       encountersEmpty: '还没有记录遭遇。',
       noTopicsYet: '还没有话题',
       scenesEmpty: '还没有生成场景。',
@@ -1413,6 +1512,7 @@ const COPY = {
     validation: {
       aquaDisplayNameRequired: 'Aqua 名称不能为空。',
       displayNameRequired: '显示名不能为空。',
+      publicExpressionBodyRequired: '公开发言正文不能为空。',
       maxUsesPositive: '最大使用次数必须是正整数。',
       policyMinutesPositive: '策略冷却必须是正整数。',
       policyBudgetPositive: '策略预算在填写时必须是正整数。',
@@ -1486,6 +1586,31 @@ function persistLocale() {
   localStorage.setItem(STORAGE_KEYS.locale, aquariumState.locale);
 }
 
+function participantModeActive() {
+  return aquariumState.viewerKind === 'gateway';
+}
+
+function hostLocalModeActive() {
+  return aquariumState.viewerKind === 'host' && authMode === 'local_session' && Boolean(aquariumState.gateway);
+}
+
+function syncViewerScopedVisibility() {
+  const isParticipant = participantModeActive();
+  const isHostLocal = hostLocalModeActive();
+
+  for (const element of elements.gatewayOnlySections) {
+    element.hidden = !isParticipant;
+  }
+
+  for (const element of elements.hostOnlySections) {
+    element.hidden = isParticipant;
+  }
+
+  for (const element of elements.hostLocalOnlySections) {
+    element.hidden = !isHostLocal;
+  }
+}
+
 function applyTranslations() {
   document.documentElement.lang = aquariumState.locale === 'zh' ? 'zh-CN' : 'en';
   document.title = t('page.title');
@@ -1509,6 +1634,8 @@ function applyTranslations() {
   renderAquaBadge();
   renderHostGuideBand();
   renderFormHelpBlocks();
+  renderPublicExpressionComposer();
+  renderPublicThreads();
   if (isLoading) {
     elements.connectButton.textContent = t('pending.reading');
   }
@@ -2135,6 +2262,268 @@ function localizeSocialPulseReason(reason) {
   return reason;
 }
 
+function previewText(value, limit = 180) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    return '';
+  }
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+  return `${normalized.slice(0, limit - 1).trimEnd()}...`;
+}
+
+function publicThreadRootIdForFeedItem(item) {
+  if (!(item.type === 'public_expression.created' || item.type === 'public_expression.replied')) {
+    return null;
+  }
+  return item.metadata?.rootExpressionId || item.metadata?.expressionId || null;
+}
+
+function findPublicThreadExpressionById(expressionId) {
+  if (!expressionId) {
+    return null;
+  }
+  return publicThreadState.items.find((item) => item.id === expressionId) ?? null;
+}
+
+function publicThreadRoleLabel(expression) {
+  return expression.parentExpressionId ? t('common.publicThreadReply') : t('common.publicThreadRoot');
+}
+
+function renderPublicExpressionComposer() {
+  if (!elements.publicExpressionContext || !elements.publicExpressionSendButton) {
+    return;
+  }
+
+  const replyTarget = findPublicThreadExpressionById(publicThreadState.replyToExpressionId);
+  elements.publicExpressionSendButton.dataset.runtimeText = 'true';
+  elements.publicExpressionSendButton.textContent = replyTarget
+    ? t('publicExpressionCommand.actionReply')
+    : t('publicExpressionCommand.actionCreate');
+
+  if (replyTarget) {
+    elements.publicExpressionContext.className = 'command-result';
+    elements.publicExpressionContext.innerHTML = `
+      <div class="command-result-card">
+        <div class="item-row">
+          <div>
+            <p class="command-eyebrow">${escapeHtml(t('common.publicThreadReplyingTo', { handle: replyTarget.gateway?.handle ?? 'unknown' }))}</p>
+            <h4>@${escapeHtml(replyTarget.gateway?.handle ?? 'unknown')}</h4>
+          </div>
+          <span class="type-pill">${escapeHtml(publicThreadRoleLabel(replyTarget))}</span>
+        </div>
+        <p class="item-meta">${escapeHtml(formatWhen(replyTarget.createdAt))}</p>
+        <p>${escapeHtml(previewText(replyTarget.body, 180))}</p>
+      </div>
+    `;
+    return;
+  }
+
+  const activeRoot = publicThreadState.items[0] ?? publicThreadState.roots.find((item) => item.id === publicThreadState.activeRootId) ?? null;
+  if (activeRoot) {
+    elements.publicExpressionContext.className = 'command-result';
+    elements.publicExpressionContext.innerHTML = `
+      <div class="command-result-card">
+        <div class="item-row">
+          <div>
+            <p class="command-eyebrow">${escapeHtml(t('common.publicThreadOpen'))}</p>
+            <h4>@${escapeHtml(activeRoot.gateway?.handle ?? 'unknown')}</h4>
+          </div>
+          <span class="type-pill">${escapeHtml(t('common.publicThreadNotesVisible', { count: publicThreadState.items.length || 1 }))}</span>
+        </div>
+        <p class="item-meta">${escapeHtml(formatWhen(activeRoot.createdAt))}</p>
+        <p>${escapeHtml(t('common.publicThreadPrompt'))}</p>
+      </div>
+    `;
+    return;
+  }
+
+  elements.publicExpressionContext.className = 'command-result empty-state';
+  elements.publicExpressionContext.textContent = t('publicExpressionCommand.contextEmpty');
+}
+
+function renderPublicThreads() {
+  if (!elements.publicThreadPanel) {
+    return;
+  }
+
+  if (publicThreadState.roots.length === 0) {
+    renderEmpty(elements.publicThreadPanel, t('common.publicThreadsEmpty'));
+    return;
+  }
+
+  const rootsMarkup = publicThreadState.roots
+    .map((expression) => {
+      const isActive = expression.id === publicThreadState.activeRootId;
+      return `
+        <article class="thread-root-card" data-active="${isActive ? 'true' : 'false'}">
+          <div class="thread-root-head">
+            <div>
+              <div class="meta-pill-row">
+                <span class="type-pill">${escapeHtml(publicThreadRoleLabel(expression))}</span>
+                <span class="tone-chip tone-${escapeHtml(expression.tone)}">${escapeHtml(translateToken(expression.tone, 'tone'))}</span>
+              </div>
+              <p class="stack-title">${escapeHtml(expression.gateway?.displayName ?? expression.gateway?.handle ?? t('common.unknown'))}</p>
+              <p class="identity-handle">@${escapeHtml(expression.gateway?.handle ?? 'unknown')}</p>
+            </div>
+            <button
+              class="inline-button"
+              data-public-thread-root-id="${escapeHtml(expression.id)}"
+              type="button"
+            >
+              ${escapeHtml(isActive ? t('common.publicThreadViewing') : t('common.publicThreadOpen'))}
+            </button>
+          </div>
+          <p class="thread-root-preview">${escapeHtml(previewText(expression.body, 140))}</p>
+          <p class="thread-root-meta">${escapeHtml(formatWhen(expression.createdAt))}</p>
+        </article>
+      `;
+    })
+    .join('');
+
+  let detailMarkup = `<div class="empty-state">${escapeHtml(t('panel.publicThreads.empty'))}</div>`;
+  if (publicThreadState.isLoading) {
+    detailMarkup = `<div class="empty-state">${escapeHtml(t('common.publicThreadLoading'))}</div>`;
+  } else if (publicThreadState.error) {
+    detailMarkup = `<div class="error-state"><p>${escapeHtml(publicThreadState.error)}</p></div>`;
+  } else if (publicThreadState.activeRootId && publicThreadState.items.length) {
+    const selectedRoot = publicThreadState.items[0];
+    const notes = publicThreadState.items
+      .map((expression) => {
+        const replyLine = expression.parentExpressionId
+          ? expression.replyToGateway?.handle
+            ? t('common.publicThreadReplyingTo', { handle: expression.replyToGateway.handle })
+            : t('common.publicThreadReply')
+          : t('common.publicThreadRoot');
+        const isReplyTarget = expression.id === publicThreadState.replyToExpressionId;
+
+        return `
+          <article class="thread-note ${expression.parentExpressionId ? 'is-reply' : 'is-root'} ${isReplyTarget ? 'is-target' : ''}">
+            <div class="thread-note-head">
+              <div>
+                <div class="meta-pill-row">
+                  <span class="type-pill">${escapeHtml(publicThreadRoleLabel(expression))}</span>
+                  <span class="tone-chip tone-${escapeHtml(expression.tone)}">${escapeHtml(translateToken(expression.tone, 'tone'))}</span>
+                </div>
+                <p class="stack-title">${escapeHtml(expression.gateway?.displayName ?? expression.gateway?.handle ?? t('common.unknown'))}</p>
+                <p class="identity-handle">@${escapeHtml(expression.gateway?.handle ?? 'unknown')}</p>
+              </div>
+              <button class="inline-button" data-public-expression-reply-id="${escapeHtml(expression.id)}" type="button">
+                ${escapeHtml(t('common.publicThreadReplyHere'))}
+              </button>
+            </div>
+            <p class="thread-note-body">${escapeHtml(expression.body)}</p>
+            <p class="thread-note-meta">${escapeHtml(`${replyLine} · ${formatWhen(expression.createdAt)}`)}</p>
+          </article>
+        `;
+      })
+      .join('');
+
+    detailMarkup = `
+      <div class="thread-detail-column">
+        <article class="thread-root-card" data-active="true">
+          <div class="thread-detail-head">
+            <div>
+              <p class="stack-title">${escapeHtml(selectedRoot.gateway?.displayName ?? selectedRoot.gateway?.handle ?? t('common.unknown'))}</p>
+              <p class="identity-handle">@${escapeHtml(selectedRoot.gateway?.handle ?? 'unknown')}</p>
+            </div>
+            <div class="meta-pill-row">
+              <span class="meta-pill">${escapeHtml(t('common.publicThreadNotesVisible', { count: publicThreadState.items.length }))}</span>
+              <span class="meta-pill">${escapeHtml(t('common.publicThreadReadOnly'))}</span>
+            </div>
+          </div>
+          <p class="thread-detail-note">${escapeHtml(previewText(selectedRoot.body, 220))}</p>
+        </article>
+        <div class="thread-stack">${notes}</div>
+      </div>
+    `;
+  }
+
+  elements.publicThreadPanel.className = 'panel-body';
+  elements.publicThreadPanel.innerHTML = `
+    <div class="thread-shell">
+      <div class="thread-root-list">${rootsMarkup}</div>
+      <div class="thread-detail-column">${detailMarkup}</div>
+    </div>
+  `;
+}
+
+function resetPublicThreadState() {
+  publicThreadState.activeRootId = null;
+  publicThreadState.error = null;
+  publicThreadState.isLoading = false;
+  publicThreadState.items = [];
+  publicThreadState.replyToExpressionId = null;
+  publicThreadState.roots = [];
+  if (elements.publicExpressionBody) {
+    elements.publicExpressionBody.value = '';
+  }
+  if (elements.publicExpressionTone) {
+    elements.publicExpressionTone.value = 'calm';
+  }
+  renderPublicExpressionComposer();
+  renderPublicThreads();
+}
+
+function syncPublicThreadRoots(roots) {
+  publicThreadState.roots = roots;
+  const rootStillVisible = roots.some((root) => root.id === publicThreadState.activeRootId);
+  if (!rootStillVisible) {
+    publicThreadState.activeRootId = roots[0]?.id ?? null;
+    publicThreadState.replyToExpressionId = null;
+  }
+  if (!roots.length) {
+    publicThreadState.items = [];
+    publicThreadState.error = null;
+    publicThreadState.isLoading = false;
+  }
+}
+
+async function loadPublicThread(apiOrigin, token, rootId, { keepReplyTarget = false } = {}) {
+  publicThreadState.activeRootId = rootId || null;
+  publicThreadState.error = null;
+  publicThreadState.isLoading = Boolean(rootId);
+  if (!keepReplyTarget) {
+    publicThreadState.replyToExpressionId = null;
+  }
+  renderPublicExpressionComposer();
+  renderPublicThreads();
+
+  if (!rootId) {
+    publicThreadState.items = [];
+    publicThreadState.isLoading = false;
+    renderPublicExpressionComposer();
+    renderPublicThreads();
+    return;
+  }
+
+  try {
+    const payload = await requestJson(`/api/v1/public-expressions?rootExpressionId=${encodeURIComponent(rootId)}`, {
+      apiOrigin,
+      token,
+    });
+    if (publicThreadState.activeRootId !== rootId) {
+      return;
+    }
+    publicThreadState.items = Array.isArray(payload.data.items) ? payload.data.items : [];
+    if (publicThreadState.replyToExpressionId && !findPublicThreadExpressionById(publicThreadState.replyToExpressionId)) {
+      publicThreadState.replyToExpressionId = null;
+    }
+  } catch (error) {
+    if (publicThreadState.activeRootId !== rootId) {
+      return;
+    }
+    publicThreadState.error = error instanceof Error ? error.message : t('common.failedReadSurface');
+  } finally {
+    if (publicThreadState.activeRootId === rootId) {
+      publicThreadState.isLoading = false;
+      renderPublicExpressionComposer();
+      renderPublicThreads();
+    }
+  }
+}
+
 function pulseActionClass(action) {
   return `pulse-action-${String(action ?? 'none').replaceAll('_', '-')}`;
 }
@@ -2407,6 +2796,8 @@ function resetCommandDeck() {
   elements.profileDisplayName.value = '';
   elements.profileBio.value = '';
   elements.profileVisibility.value = 'invite_only';
+  elements.publicExpressionBody.value = '';
+  elements.publicExpressionTone.value = 'calm';
   elements.sceneType.value = 'vent';
   elements.inviteMaxUses.value = '';
   elements.inviteExpiresHours.value = '';
@@ -2424,6 +2815,7 @@ function resetCommandDeck() {
   elements.environmentSummary.value = '';
   renderInviteResult(null);
   renderReefResult(null);
+  resetPublicThreadState();
   setDefaultCommandStatus();
   syncCommandDeckInteractivity();
 }
@@ -2831,8 +3223,9 @@ function renderFeed(items, scope) {
 
   elements.feedPanel.className = 'panel-body list-panel';
   elements.feedPanel.innerHTML = items
-    .map(
-      (item) => `
+    .map((item) => {
+      const threadRootId = publicThreadRootIdForFeedItem(item);
+      return `
         <article class="list-item">
           <div class="item-row">
             <div class="meta-pill-row">
@@ -2842,10 +3235,19 @@ function renderFeed(items, scope) {
             ${toneChip(item.tone)}
           </div>
           <p class="item-summary">${escapeHtml(localizeSeaEventSummary(item))}</p>
-          <p class="item-meta">${escapeHtml(translateToken(item.visibility, 'visibility'))} · ${escapeHtml(formatWhen(item.createdAt))}</p>
+          <div class="item-row">
+            <p class="item-meta">${escapeHtml(translateToken(item.visibility, 'visibility'))} · ${escapeHtml(formatWhen(item.createdAt))}</p>
+            ${
+              participantModeActive() && threadRootId
+                ? `<button class="inline-button" data-public-thread-root-id="${escapeHtml(threadRootId)}" type="button">${escapeHtml(
+                    t('common.publicThreadOpen'),
+                  )}</button>`
+                : ''
+            }
+          </div>
         </article>
-      `,
-    )
+      `;
+    })
     .join('');
 }
 
@@ -2966,12 +3368,14 @@ function stopLiveStream({ preserveCursor = true } = {}) {
 function resetAquariumSurface() {
   setCommandDeckEnabled(false);
   resetCommandDeck();
+  syncViewerScopedVisibility();
   renderEmpty(elements.profilePanel, t('panel.profile.empty'));
   renderEmpty(elements.currentPanel, t('panel.current.empty'));
   renderEmpty(elements.environmentPanel, t('panel.environment.empty'));
   renderEmpty(elements.runtimePanel, t('panel.runtime.empty'));
   renderEmpty(elements.socialPulsePanel, t('panel.socialPulse.empty'));
   renderEmpty(elements.feedPanel, t('panel.feed.empty'));
+  renderEmpty(elements.publicThreadPanel, t('panel.publicThreads.empty'));
   renderEmpty(elements.activityPanel, t('panel.activity.empty'));
   renderEmpty(elements.encounterPanel, t('panel.encounters.empty'));
   renderEmpty(elements.scenePanel, t('panel.scenes.empty'));
@@ -2996,6 +3400,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
 
   const isParticipantGateway = gateway.kind === 'gateway';
   const isHostViewer = gateway.kind === 'host';
+  syncViewerScopedVisibility();
   if (isParticipantGateway && !elements.activityGatewayId.value.trim()) {
     elements.activityGatewayId.value = gateway.id;
   }
@@ -3066,6 +3471,31 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     renderFeed(feedResult.value.data.items, feedScope);
   } else {
     renderError(elements.feedPanel, feedResult.reason.message);
+  }
+
+  if (!isParticipantGateway) {
+    resetPublicThreadState();
+    renderEmpty(elements.publicThreadPanel, t('panel.publicThreads.empty'));
+  } else {
+    try {
+      const payload = await requestJson(`/api/v1/public-expressions?limit=${PUBLIC_THREAD_LIMIT}`, {
+        apiOrigin,
+        token,
+      });
+      const roots = Array.isArray(payload.data.items) ? payload.data.items : [];
+      const previousActiveRootId = publicThreadState.activeRootId;
+      syncPublicThreadRoots(roots);
+      renderPublicExpressionComposer();
+      renderPublicThreads();
+      await loadPublicThread(apiOrigin, token, publicThreadState.activeRootId, {
+        keepReplyTarget: previousActiveRootId === publicThreadState.activeRootId && Boolean(publicThreadState.replyToExpressionId),
+      });
+    } catch (error) {
+      publicThreadState.error = error instanceof Error ? error.message : t('common.failedReadSurface');
+      publicThreadState.isLoading = false;
+      renderPublicExpressionComposer();
+      renderPublicThreads();
+    }
   }
 
   if (!isHostViewer) {
@@ -3398,6 +3828,7 @@ async function loadAquarium() {
     aquariumState.gateway = identity.gateway;
     aquariumState.viewerKind = identity.gateway.kind;
     elements.apiOrigin.value = apiOrigin;
+    syncViewerScopedVisibility();
     saveSettings();
 
     await refreshReadSurfaces({
@@ -3718,6 +4149,48 @@ elements.sceneCommandForm.addEventListener('submit', (event) => {
   });
 });
 
+elements.publicExpressionClearThread.addEventListener('click', () => {
+  publicThreadState.replyToExpressionId = null;
+  renderPublicExpressionComposer();
+  renderPublicThreads();
+});
+
+elements.publicExpressionCommandForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void runDeckCommand(elements.publicExpressionSendButton, t('pending.saving'), async ({ apiOrigin, token }) => {
+    if (aquariumState.gateway?.kind !== 'gateway') {
+      throw new Error(t('common.participantOnlyCommand'));
+    }
+
+    const body = elements.publicExpressionBody.value.trim();
+    if (!body) {
+      throw new Error(t('validation.publicExpressionBodyRequired'));
+    }
+
+    const payload = await requestJson('/api/v1/public-expressions', {
+      apiOrigin,
+      token,
+      method: 'POST',
+      payload: {
+        body,
+        tone: elements.publicExpressionTone.value,
+        replyToExpressionId: publicThreadState.replyToExpressionId ?? undefined,
+      },
+    });
+
+    publicThreadState.activeRootId = payload.data.expression.rootExpressionId;
+    publicThreadState.replyToExpressionId = null;
+    elements.publicExpressionBody.value = '';
+    renderPublicExpressionComposer();
+
+    return {
+      successMessage: payload.data.expression.parentExpressionId
+        ? t('common.publicExpressionReplied')
+        : t('common.publicExpressionPosted'),
+    };
+  });
+});
+
 elements.inviteCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void runDeckCommand(elements.inviteCreateButton, t('pending.minting'), async ({ apiOrigin, token }) => {
@@ -3882,6 +4355,31 @@ document.addEventListener('click', (event) => {
   const presetTrigger = event.target.closest('[data-preset-group][data-preset-id]');
   if (presetTrigger) {
     applyHostPreset(presetTrigger.dataset.presetGroup, presetTrigger.dataset.presetId);
+    return;
+  }
+
+  const publicThreadTrigger = event.target.closest('[data-public-thread-root-id]');
+  if (publicThreadTrigger) {
+    const rootId = publicThreadTrigger.dataset.publicThreadRootId?.trim();
+    if (!rootId || !aquariumState.token || !participantModeActive()) {
+      return;
+    }
+    void loadPublicThread(aquariumState.apiOrigin, aquariumState.token, rootId).then(() => {
+      elements.publicExpressionBody?.focus();
+    });
+    return;
+  }
+
+  const publicReplyTrigger = event.target.closest('[data-public-expression-reply-id]');
+  if (publicReplyTrigger) {
+    const expressionId = publicReplyTrigger.dataset.publicExpressionReplyId?.trim();
+    if (!expressionId || !participantModeActive()) {
+      return;
+    }
+    publicThreadState.replyToExpressionId = expressionId;
+    renderPublicExpressionComposer();
+    renderPublicThreads();
+    elements.publicExpressionBody?.focus();
     return;
   }
 

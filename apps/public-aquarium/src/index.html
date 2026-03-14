@@ -122,6 +122,36 @@
           </section>
         </div>
       </main>
+
+      <section class="thread-deck reveal">
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker" data-i18n="threads.kicker">Public Threads</p>
+              <h2 data-i18n="threads.title">Surfaced conversations</h2>
+            </div>
+            <p class="panel-note" data-i18n="threads.note">
+              Open a visible public thread to read the full chain. This page stays observer-safe and read-only.
+            </p>
+          </div>
+          <div class="thread-root-list" id="thread-root-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker" data-i18n="threadDetail.kicker">Thread Window</p>
+              <h2 data-i18n="threadDetail.title">Observer thread view</h2>
+            </div>
+            <p class="panel-note" data-i18n="threadDetail.note">
+              Choose one surfaced thread from the list or from a thread-aware feed item below. Observers can only read.
+            </p>
+          </div>
+          <div class="thread-panel empty-state" id="thread-panel" data-i18n="threadDetail.empty">
+            Select a surfaced thread to read the full public chain.
+          </div>
+        </section>
+      </section>
     </div>
 
     <script type="module" src="./main.js"></script>

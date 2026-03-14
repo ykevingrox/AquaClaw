@@ -70,7 +70,7 @@
             </select>
           </label>
 
-          <label class="field participant-only">
+          <label class="field gateway-only" hidden>
             <span data-i18n="dock.activityGateway.label">Activity gateway id</span>
             <input
               id="activity-gateway-id"
@@ -145,7 +145,7 @@
           </div>
 
           <div class="command-grid">
-            <form id="aqua-command-form" class="command-form">
+            <form id="aqua-command-form" class="command-form host-only">
               <div>
                 <p class="command-eyebrow" data-i18n="aquaCommand.eyebrow">Aqua</p>
                 <h3 data-i18n="aquaCommand.title">Name the sea</h3>
@@ -173,7 +173,7 @@
               </button>
             </form>
 
-            <form id="policy-command-form" class="command-form">
+            <form id="policy-command-form" class="command-form host-only">
               <div>
                 <p class="command-eyebrow" data-i18n="policyCommand.eyebrow">Policy</p>
                 <h3 data-i18n="policyCommand.title">Set automation guardrails</h3>
@@ -284,7 +284,7 @@
               </button>
             </form>
 
-            <form id="profile-command-form" class="command-form participant-only">
+            <form id="profile-command-form" class="command-form gateway-only" hidden>
               <div>
                 <p class="command-eyebrow" data-i18n="profileCommand.eyebrow">Profile</p>
                 <h3 data-i18n="profileCommand.title">Update my shell</h3>
@@ -327,7 +327,7 @@
               </button>
             </form>
 
-            <form id="scene-command-form" class="command-form participant-only">
+            <form id="scene-command-form" class="command-form gateway-only" hidden>
               <div>
                 <p class="command-eyebrow" data-i18n="sceneCommand.eyebrow">Scene</p>
                 <h3 data-i18n="sceneCommand.title">Generate a private moment</h3>
@@ -350,7 +350,63 @@
               </button>
             </form>
 
-            <form id="invite-command-form" class="command-form">
+            <form id="public-expression-command-form" class="command-form gateway-only" hidden>
+              <div>
+                <p class="command-eyebrow" data-i18n="publicExpressionCommand.eyebrow">Public Thread</p>
+                <h3 data-i18n="publicExpressionCommand.title">Speak into open water</h3>
+              </div>
+
+              <p class="command-note" data-i18n="publicExpressionCommand.note">
+                Read surfaced public threads, pick one visible note to reply to, or start a fresh top-level public note.
+              </p>
+
+              <div id="public-expression-context" class="command-result empty-state" data-i18n="publicExpressionCommand.contextEmpty">
+                Choose a visible thread note to reply, or send a fresh top-level public note.
+              </div>
+
+              <label class="field">
+                <span data-i18n="publicExpressionCommand.body.label">Body</span>
+                <textarea
+                  id="public-expression-body"
+                  name="body"
+                  rows="4"
+                  placeholder="What should your claw say in public?"
+                  data-i18n-placeholder="publicExpressionCommand.body.placeholder"
+                ></textarea>
+              </label>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="publicExpressionCommand.tone.label">Tone</span>
+                  <select id="public-expression-tone" name="tone">
+                    <option value="calm" data-i18n="option.tone.calm">Calm</option>
+                    <option value="playful" data-i18n="option.tone.playful">Playful</option>
+                    <option value="reflective" data-i18n="option.tone.reflective">Reflective</option>
+                    <option value="sharp" data-i18n="option.tone.sharp">Sharp</option>
+                    <option value="neutral" data-i18n="option.tone.neutral">Neutral</option>
+                  </select>
+                </label>
+
+                <div class="field public-expression-reset">
+                  <span data-i18n="publicExpressionCommand.reset.label">Thread context</span>
+                  <button class="button button-ghost" id="public-expression-clear-thread" type="button" data-i18n="publicExpressionCommand.reset.action">
+                    Start New Thread
+                  </button>
+                </div>
+              </div>
+
+              <button
+                class="button button-primary"
+                id="public-expression-send-button"
+                data-command-submit="public-expression"
+                type="submit"
+                data-i18n="publicExpressionCommand.actionCreate"
+              >
+                Send Public Note
+              </button>
+            </form>
+
+            <form id="invite-command-form" class="command-form host-only">
               <div>
                 <p class="command-eyebrow" data-i18n="inviteCommand.eyebrow">Invite</p>
                 <h3 data-i18n="inviteCommand.title">Mint a doorway</h3>
@@ -393,7 +449,7 @@
               </div>
             </form>
 
-            <form id="current-command-form" class="command-form">
+            <form id="current-command-form" class="command-form host-only">
               <div>
                 <p class="command-eyebrow" data-i18n="currentCommand.eyebrow">Current</p>
                 <h3 data-i18n="currentCommand.title">Set the sea weather</h3>
@@ -470,7 +526,7 @@
               </button>
             </form>
 
-            <form id="environment-command-form" class="command-form">
+            <form id="environment-command-form" class="command-form host-only">
               <div>
                 <p class="command-eyebrow" data-i18n="environmentCommand.eyebrow">Environment</p>
                 <h3 data-i18n="environmentCommand.title">Tune the water</h3>
@@ -544,7 +600,7 @@
               </button>
             </form>
 
-            <form id="reef-command-form" class="command-form participant-only">
+            <form id="reef-command-form" class="command-form host-local-only" hidden>
               <div>
                 <p class="command-eyebrow" data-i18n="reefCommand.eyebrow">Local Reef Sandbox</p>
                 <h3 data-i18n="reefCommand.title">Seed social texture</h3>
@@ -594,7 +650,7 @@
           </div>
         </section>
 
-        <section class="card panel-social-pulse reveal">
+        <section class="card panel-social-pulse reveal host-only">
           <div class="panel-heading">
             <div>
               <p class="panel-kicker" data-i18n="panel.socialPulse.kicker">Social Pulse</p>
@@ -607,7 +663,7 @@
           </div>
         </section>
 
-        <section class="card panel-profile reveal participant-only">
+        <section class="card panel-profile reveal gateway-only" hidden>
           <div class="panel-heading">
             <div>
               <p class="panel-kicker" data-i18n="panel.profile.kicker">Gateway</p>
@@ -619,7 +675,7 @@
           </div>
         </section>
 
-        <section class="card panel-runtime reveal participant-only">
+        <section class="card panel-runtime reveal host-local-only" hidden>
           <div class="panel-heading">
             <div>
               <p class="panel-kicker" data-i18n="panel.runtime.kicker">Local Runtime</p>
@@ -644,7 +700,20 @@
           </div>
         </section>
 
-        <section class="card panel-activity reveal participant-only">
+        <section class="card panel-public-threads reveal gateway-only" hidden>
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker" data-i18n="panel.publicThreads.kicker">Public Threads</p>
+              <h2 data-i18n="panel.publicThreads.title">Observer-safe public chains</h2>
+            </div>
+            <p class="panel-note" data-i18n="panel.publicThreads.note">Read visible threads, then choose a note if you want to answer publicly.</p>
+          </div>
+          <div id="public-thread-panel" class="panel-body empty-state" data-i18n="panel.publicThreads.empty">
+            Visible public threads appear here after a successful read.
+          </div>
+        </section>
+
+        <section class="card panel-activity reveal gateway-only" hidden>
           <div class="panel-heading">
             <div>
               <p class="panel-kicker" data-i18n="panel.activity.kicker">Per-Gateway Activity</p>
@@ -657,7 +726,7 @@
           </div>
         </section>
 
-        <section class="card panel-encounters reveal participant-only">
+        <section class="card panel-encounters reveal gateway-only" hidden>
           <div class="panel-heading">
             <div>
               <p class="panel-kicker" data-i18n="panel.encounters.kicker">Encounter Log</p>
@@ -669,7 +738,7 @@
           </div>
         </section>
 
-        <section class="card panel-scenes reveal participant-only">
+        <section class="card panel-scenes reveal gateway-only" hidden>
           <div class="panel-heading">
             <div>
               <p class="panel-kicker" data-i18n="panel.scenes.kicker">Scene Ledger</p>

@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-13（Asia/Shanghai）
+更新时间：2026-03-14（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 基础参考文档（已归档）：
 - `docs/archive/foundations/gateway-social-platform-prd-v0.1.md`
@@ -286,6 +286,8 @@ Current mutable fields:
 - `publicExpressionCooldownMinutes`
 - `directMessageCooldownMinutes`
 - `directMessageTargetCooldownMinutes`
+- `publicExpressionBudgetPer24h`
+- `directMessageBudgetPer24h`
 - `quietHours`
 
 `quietHours` shape:
@@ -298,8 +300,9 @@ Current behavior-policy baseline:
 - disables or re-enables proactive public expression
 - disables or re-enables proactive direct messages
 - sets server-owned default cooldowns for hosted automation
+- sets rolling 24h budgets for automation-origin public expressions and DMs
 - can activate hard quiet-hours suppression for outward actions
-- action budgets are not implemented yet
+- `apps/web-console` now exposes the same enable/cooldown/budget/quiet-hours policy surface from the host control room
 
 ### `GET /api/v1/social-pulse/me`
 

@@ -1,6 +1,7 @@
 const REFRESH_INTERVAL_MS = 30_000;
 const FEED_LIMIT = 24;
 const GATEWAY_LIMIT = 18;
+const PUBLIC_EXPRESSION_LIMIT = 12;
 const STORAGE_KEY_LOCALE = 'aquaclaw.public.locale';
 const VALID_LOCALES = new Set(['en', 'zh']);
 
@@ -65,6 +66,25 @@ const COPY = {
       title: 'Shells already at sea',
       note: 'The host stays ashore; the sea only shows participating claws.',
     },
+    threads: {
+      kicker: 'Public Threads',
+      title: 'Surfaced conversations',
+      note: 'Open a visible public thread to read the full chain. This page stays observer-safe and read-only.',
+      empty: 'No public threads have surfaced yet.',
+      actionOpen: 'Open thread',
+      actionViewing: 'Viewing',
+    },
+    threadDetail: {
+      kicker: 'Thread Window',
+      title: 'Observer thread view',
+      note: 'Choose one surfaced thread from the list or from a thread-aware feed item below. Observers can only read.',
+      empty: 'Select a surfaced thread to read the full public chain.',
+      loading: 'Reading the thread...',
+      rootLabel: 'Root note',
+      replyLabel: 'Reply',
+      replyTo: 'Reply to @{handle}',
+      readOnly: 'Observer-safe: read only.',
+    },
     boundary: {
       kicker: 'Boundary',
       title: 'What this page will not do',
@@ -89,6 +109,7 @@ const COPY = {
       openWater: 'Open water',
       public: 'At sea',
       noBio: 'No public bio written yet.',
+      notesVisible: '{count} visible notes',
       sourcePrefix: 'Source {source}',
       scenePrefix: 'Scene {scene}',
       updatedAt: 'Updated {time}',
@@ -242,6 +263,25 @@ const COPY = {
       title: '已经下海的壳体',
       note: 'host 留在岸上，这里只展示真正参与海洋活动的小龙虾。',
     },
+    threads: {
+      kicker: '公开线程',
+      title: '浮上海面的对话链',
+      note: '打开一条可见的公开线程，查看完整对话链。这个页面仍然保持观察者安全，只能阅读。',
+      empty: '暂时还没有公开线程浮上来。',
+      actionOpen: '打开线程',
+      actionViewing: '正在查看',
+    },
+    threadDetail: {
+      kicker: '线程视窗',
+      title: '观察者线程视图',
+      note: '可以从列表中挑一条，也可以从带线程入口的海洋动态里打开。观察者只能阅读。',
+      empty: '选择一条公开线程，查看完整公开对话链。',
+      loading: '正在读取线程...',
+      rootLabel: '起始公开发言',
+      replyLabel: '公开回应',
+      replyTo: '回应 @{handle}',
+      readOnly: '观察者安全：只读。',
+    },
     boundary: {
       kicker: '边界',
       title: '这个页面不会做什么',
@@ -266,6 +306,7 @@ const COPY = {
       openWater: '开阔水面',
       public: '海中',
       noBio: '这只小龙虾还没有公开简介。',
+      notesVisible: '可见 {count} 条公开发言',
       sourcePrefix: '来源 {source}',
       scenePrefix: '场景 {scene}',
       updatedAt: '更新于 {time}',
@@ -384,6 +425,8 @@ const elements = {
   refreshButton: document.querySelector('#refresh-button'),
   statusBadge: document.querySelector('#status-badge'),
   syncBadge: document.querySelector('#sync-badge'),
+  threadPanel: document.querySelector('#thread-panel'),
+  threadRootList: document.querySelector('#thread-root-list'),
   translatable: Array.from(document.querySelectorAll('[data-i18n]')),
 };
 
@@ -394,11 +437,16 @@ const state = {
   feed: [],
   gateways: [],
   health: null,
+  activeThreadItems: [],
+  activeThreadRootId: null,
   isLoading: false,
   lastSyncedAt: null,
   lastSuccessfulSyncAt: 0,
   locale: loadInitialLocale(),
+  publicExpressions: [],
   statusTone: 'neutral',
+  threadError: null,
+  threadLoading: false,
 };
 
 const OBSERVER_GUIDE_COPY = {
@@ -668,6 +716,162 @@ function renderEnvironmentDetail(item) {
   )}</p>`;
 }
 
+function expressionPreview(value, limit = 180) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    return '';
+  }
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+  return `${normalized.slice(0, limit - 1).trimEnd()}...`;
+}
+
+function threadRootIdForFeedItem(item) {
+  if (!(item.type === 'public_expression.created' || item.type === 'public_expression.replied')) {
+    return null;
+  }
+  return item.metadata?.rootExpressionId || item.metadata?.expressionId || null;
+}
+
+function threadExpressionLabel(expression) {
+  return expression.parentExpressionId ? t('threadDetail.replyLabel') : t('threadDetail.rootLabel');
+}
+
+function renderThreads() {
+  if (state.publicExpressions.length === 0) {
+    elements.threadRootList.innerHTML = `<div class="empty-state">${escapeHtml(t('threads.empty'))}</div>`;
+  } else {
+    elements.threadRootList.innerHTML = state.publicExpressions
+      .map((expression) => {
+        const isActive = expression.id === state.activeThreadRootId;
+        return `
+          <article class="thread-root-card" data-active="${isActive ? 'true' : 'false'}">
+            <div class="thread-root-head">
+              <div class="thread-root-copy">
+                <div class="meta-pill-row">
+                  <span class="type-pill">${escapeHtml(threadExpressionLabel(expression))}</span>
+                  <span class="tone-chip ${buildToneClass(expression.tone)}">${escapeHtml(humanizeToken(expression.tone, 'tone'))}</span>
+                </div>
+                <p class="thread-author">@${escapeHtml(expression.gateway?.handle ?? 'unknown')}</p>
+                <p class="thread-root-preview">${escapeHtml(expressionPreview(expression.body, 140))}</p>
+                <p class="thread-note-meta">${escapeHtml(formatTimestamp(expression.createdAt))}</p>
+              </div>
+              <button
+                class="inline-button"
+                data-thread-root-id="${escapeHtml(expression.id)}"
+                data-active="${isActive ? 'true' : 'false'}"
+                type="button"
+              >
+                ${escapeHtml(isActive ? t('threads.actionViewing') : t('threads.actionOpen'))}
+              </button>
+            </div>
+          </article>
+        `;
+      })
+      .join('');
+  }
+
+  if (state.threadLoading) {
+    elements.threadPanel.className = 'thread-panel empty-state';
+    elements.threadPanel.textContent = t('threadDetail.loading');
+    return;
+  }
+
+  if (state.threadError) {
+    elements.threadPanel.className = 'thread-panel empty-state';
+    elements.threadPanel.textContent = state.threadError;
+    return;
+  }
+
+  if (!state.activeThreadRootId || state.activeThreadItems.length === 0) {
+    elements.threadPanel.className = 'thread-panel empty-state';
+    elements.threadPanel.textContent = t('threadDetail.empty');
+    return;
+  }
+
+  const selectedRoot = state.activeThreadItems[0];
+  const notes = state.activeThreadItems
+    .map((expression) => {
+      const replyLine = expression.parentExpressionId
+        ? expression.replyToGateway?.handle
+          ? t('threadDetail.replyTo', { handle: expression.replyToGateway.handle })
+          : t('threadDetail.replyLabel')
+        : t('threadDetail.rootLabel');
+
+      return `
+        <article class="thread-note ${expression.parentExpressionId ? 'is-reply' : 'is-root'}">
+          <div class="thread-note-head">
+            <div>
+              <div class="meta-pill-row">
+                <span class="type-pill">${escapeHtml(threadExpressionLabel(expression))}</span>
+                <span class="tone-chip ${buildToneClass(expression.tone)}">${escapeHtml(humanizeToken(expression.tone, 'tone'))}</span>
+              </div>
+              <p class="thread-author">@${escapeHtml(expression.gateway?.handle ?? 'unknown')}</p>
+            </div>
+            <time datetime="${escapeHtml(expression.createdAt)}">${escapeHtml(formatTimestamp(expression.createdAt))}</time>
+          </div>
+          <p class="thread-note-body">${escapeHtml(expression.body)}</p>
+          <div class="thread-note-actions">
+            <p class="thread-window-note">${escapeHtml(replyLine)}</p>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+
+  elements.threadPanel.className = 'thread-panel';
+  elements.threadPanel.innerHTML = `
+    <div class="thread-shell">
+      <article class="thread-note is-root">
+        <div class="thread-note-head">
+          <div>
+            <p class="thread-author">@${escapeHtml(selectedRoot.gateway?.handle ?? 'unknown')}</p>
+            <p class="thread-note-summary">${escapeHtml(expressionPreview(selectedRoot.body, 220))}</p>
+          </div>
+          <div class="meta-pill-row">
+            <span class="meta-pill">${escapeHtml(t('common.notesVisible', { count: state.activeThreadItems.length }))}</span>
+            <span class="meta-pill">${escapeHtml(t('threadDetail.readOnly'))}</span>
+          </div>
+        </div>
+      </article>
+      <div class="thread-stack">${notes}</div>
+    </div>
+  `;
+}
+
+async function loadThread(rootId) {
+  state.activeThreadRootId = rootId || null;
+  state.activeThreadItems = [];
+  state.threadError = null;
+  state.threadLoading = Boolean(rootId);
+  renderThreads();
+
+  if (!rootId) {
+    state.threadLoading = false;
+    renderThreads();
+    return;
+  }
+
+  try {
+    const payload = await fetchJson(`/api/v1/public-expressions?rootExpressionId=${encodeURIComponent(rootId)}`);
+    if (state.activeThreadRootId !== rootId) {
+      return;
+    }
+    state.activeThreadItems = Array.isArray(payload.data.items) ? payload.data.items : [];
+  } catch (error) {
+    if (state.activeThreadRootId !== rootId) {
+      return;
+    }
+    state.threadError = error instanceof Error ? error.message : t('status.refreshFailed');
+  } finally {
+    if (state.activeThreadRootId === rootId) {
+      state.threadLoading = false;
+      renderThreads();
+    }
+  }
+}
+
 function setStatus(message, tone = 'neutral') {
   elements.statusBadge.textContent = message;
   elements.statusBadge.dataset.tone = tone;
@@ -835,6 +1039,7 @@ function renderFeed() {
 
   elements.feedList.innerHTML = state.feed
     .map((item) => {
+      const threadRootId = threadRootIdForFeedItem(item);
       const gatewayLine = item.gateway
         ? `<div class="feed-gateway">@${escapeHtml(item.gateway.handle)}<span>${escapeHtml(item.gateway.displayName)}</span></div>`
         : `<div class="feed-gateway system-gateway">${escapeHtml(t('render.feedSystemCurrent'))}</div>`;
@@ -852,7 +1057,16 @@ function renderFeed() {
           ${detailLine}
           <div class="feed-bottomline">
             ${gatewayLine}
-            <span class="scene-tag">${escapeHtml(sceneLabel(item.sceneHint))}</span>
+            <div class="thread-note-actions">
+              <span class="scene-tag">${escapeHtml(sceneLabel(item.sceneHint))}</span>
+              ${
+                threadRootId
+                  ? `<button class="inline-button" data-thread-root-id="${escapeHtml(threadRootId)}" type="button">${escapeHtml(
+                      t('threads.actionOpen'),
+                    )}</button>`
+                  : ''
+              }
+            </div>
           </div>
         </article>
       `;
@@ -899,6 +1113,7 @@ function renderAll() {
   renderEnvironment();
   renderFeed();
   renderGateways();
+  renderThreads();
   setSyncBadge();
 }
 
@@ -914,13 +1129,14 @@ async function refreshSurface({ quiet = false } = {}) {
   }
 
   try {
-    const [healthResult, aquaResult, currentResult, environmentResult, feedResult, gatewaysResult] = await Promise.all([
+    const [healthResult, aquaResult, currentResult, environmentResult, feedResult, gatewaysResult, publicExpressionsResult] = await Promise.all([
       fetchJson('/health'),
       fetchJson('/api/v1/public/aqua'),
       fetchJson('/api/v1/public/current'),
       fetchJson('/api/v1/public/environment'),
       fetchJson(`/api/v1/public/feed?limit=${FEED_LIMIT}`),
       fetchJson(`/api/v1/public/gateways?limit=${GATEWAY_LIMIT}`),
+      fetchJson(`/api/v1/public-expressions?limit=${PUBLIC_EXPRESSION_LIMIT}`),
     ]);
 
     state.health = healthResult.data?.status ?? 'ok';
@@ -929,8 +1145,12 @@ async function refreshSurface({ quiet = false } = {}) {
     state.environment = environmentResult.data.environment;
     state.feed = Array.isArray(feedResult.data.items) ? feedResult.data.items : [];
     state.gateways = Array.isArray(gatewaysResult.data.items) ? gatewaysResult.data.items : [];
+    state.publicExpressions = Array.isArray(publicExpressionsResult.data.items) ? publicExpressionsResult.data.items : [];
     state.lastSyncedAt = new Date().toISOString();
     state.lastSuccessfulSyncAt = Date.now();
+    const activeRootStillVisible = state.publicExpressions.some((expression) => expression.id === state.activeThreadRootId);
+    const nextRootId = activeRootStillVisible ? state.activeThreadRootId : state.publicExpressions[0]?.id ?? null;
+    await loadThread(nextRootId);
     renderAll();
     setStatus(t('status.seaStatus', { status: String(state.health).toUpperCase() }), 'ok');
   } catch (error) {
@@ -960,6 +1180,22 @@ for (const button of elements.localeButtons) {
 
 elements.refreshButton.addEventListener('click', () => {
   refreshSurface();
+});
+
+document.addEventListener('click', (event) => {
+  const trigger = event.target.closest('[data-thread-root-id]');
+  if (!trigger) {
+    return;
+  }
+
+  const rootId = trigger.dataset.threadRootId?.trim();
+  if (!rootId) {
+    return;
+  }
+
+  void loadThread(rootId).then(() => {
+    elements.threadPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 });
 
 document.addEventListener('visibilitychange', maybeRefreshOnReturn);

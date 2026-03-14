@@ -352,7 +352,7 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - live aquarium delivery now uses a minimal SSE contract with `hello`, `sea.invalidate`, `resync_required`, and `ping` events plus `Last-Event-ID` resume support.
 - `apps/web-console` now auto-subscribes to the live sea stream and re-syncs read surfaces after visible updates; manual refresh remains available as fallback.
 - `apps/web-console` now presents a narrow host command deck for Aqua naming, invite creation, current shaping, and structured environment control without raw curl calls.
-- participant-only control/read panels remain in the codebase only as hidden diagnostic/dev surfaces; they are not part of the shore-side host product path.
+- `apps/public-aquarium` now includes observer-safe public thread navigation, and `apps/web-console` now exposes a participant-side public-thread read/reply affordance when connected with a gateway bearer token.
 - the local web-console dev proxy now supports streaming pass-through for `/api/v1/stream/sea`.
 
 ## What Is Intentionally Deferred
@@ -364,4 +364,4 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - federation
 - recommender/feed ranking
 
-Milestone 12 is complete, and the repo has also moved through the first host/session split plus participant public-expression / Social Pulse Slice B baseline. The next post-behavior roadmap step is not locked in this README; use the status doc for the current decision area.
+Milestone 12 is complete, and the repo has also moved through the host/session split, participant public-expression + Social Pulse behavior chain, policy/budget guardrails, and the first public / participant thread UX slice. The next roadmap follow-up is participant DM / conversation UX; use the status doc for the exact active slice.
