@@ -450,6 +450,14 @@ export interface RemoteRuntimeBridgeCredentialRecord {
   updatedAt: string;
 }
 
+export interface GatewayReconnectCredentialRecord {
+  id: string;
+  gatewayId: string;
+  token: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RemoteRuntimeBindingRecord {
   id: string;
   bridgeCredentialId: string;
@@ -502,6 +510,7 @@ export interface GatewayStoreSnapshot {
   localSessions?: LocalSessionRecord[];
   hostedSessions?: HostedSessionRecord[];
   localRuntimeBinding?: LocalRuntimeBindingRecord | null;
+  gatewayReconnectCredentials?: GatewayReconnectCredentialRecord[];
   remoteRuntimeBridgeCredentials?: RemoteRuntimeBridgeCredentialRecord[];
   remoteRuntimeBindings?: RemoteRuntimeBindingRecord[];
   presenceHeartbeats: GatewayPresenceSnapshotRecord[];
@@ -555,6 +564,13 @@ export interface GatewayStore {
   };
   createRemoteRuntimeBridgeCredential(input: CreateRemoteRuntimeBridgeCredentialInput): RemoteRuntimeBridgeCredentialRecord;
   revokeRemoteRuntimeBridgeCredential(input: RevokeRemoteRuntimeBridgeCredentialInput): RemoteRuntimeBridgeCredentialRecord;
+  getOrCreateGatewayReconnectCredential(gatewayId: string): GatewayReconnectCredentialRecord;
+  rotateGatewayReconnectCredential(gatewayId: string): GatewayReconnectCredentialRecord;
+  reconnectGatewayByReconnectToken(token: string): {
+    gateway: GatewayRecord;
+    token: string;
+    reconnectCredential: GatewayReconnectCredentialRecord;
+  };
   bindRemoteRuntime(input: BindRemoteRuntimeInput): {
     runtime: RemoteRuntimeBindingState;
     bridgeCredential: RemoteRuntimeBridgeCredentialRecord;
@@ -732,6 +748,7 @@ interface JoinHostedRuntimeWithInviteInput {
 interface JoinHostedRuntimeWithInviteResult {
   gateway: GatewayRecord;
   token: string;
+  reconnectCredential: GatewayReconnectCredentialRecord;
   invite: InviteRecord;
   claim: InviteClaimRecord;
   friendRequest: FriendRequestRecord | null;
@@ -1360,6 +1377,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly gatewaysById = new Map<string, GatewayRecord>();
   private readonly gatewaysByHandle = new Map<string, GatewayRecord>();
   private readonly tokensToGatewayId = new Map<string, string>();
+  private readonly gatewayReconnectCredentialsByGatewayId = new Map<string, GatewayReconnectCredentialRecord>();
+  private readonly gatewayReconnectCredentialsByToken = new Map<string, GatewayReconnectCredentialRecord>();
   private readonly localSessionsByToken = new Map<string, LocalSessionRecord>();
   private readonly hostedSessionsByToken = new Map<string, HostedSessionRecord>();
   private readonly friendRequestsById = new Map<string, FriendRequestRecord>();
@@ -1474,6 +1493,119 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const token = randomBytes(24).toString('hex');
     this.tokensToGatewayId.set(token, gatewayId);
     return token;
+  }
+
+  private revokeGatewayTokens(gatewayId: string) {
+    let revokedCount = 0;
+    for (const [token, tokenGatewayId] of this.tokensToGatewayId.entries()) {
+      if (tokenGatewayId !== gatewayId) {
+        continue;
+      }
+      this.tokensToGatewayId.delete(token);
+      revokedCount += 1;
+    }
+    return revokedCount;
+  }
+
+  private issueGatewayReconnectToken() {
+    return `reconnect_${randomBytes(16).toString('hex')}`;
+  }
+
+  private cloneGatewayReconnectCredential(credential: GatewayReconnectCredentialRecord): GatewayReconnectCredentialRecord {
+    return {
+      ...credential,
+    };
+  }
+
+  getOrCreateGatewayReconnectCredential(gatewayId: string) {
+    if (!this.gatewaysById.has(gatewayId)) {
+      throw new Error('gateway not found');
+    }
+
+    const existing = this.gatewayReconnectCredentialsByGatewayId.get(gatewayId);
+    if (existing) {
+      return this.cloneGatewayReconnectCredential(existing);
+    }
+
+    const now = new Date().toISOString();
+    const credential: GatewayReconnectCredentialRecord = {
+      id: `gateway-reconnect-${randomUUID()}`,
+      gatewayId,
+      token: this.issueGatewayReconnectToken(),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.gatewayReconnectCredentialsByGatewayId.set(gatewayId, credential);
+    this.gatewayReconnectCredentialsByToken.set(credential.token, credential);
+    this.appendAuditRecord({
+      actorGatewayId: gatewayId,
+      targetGatewayId: gatewayId,
+      action: 'gateway.reconnect_credential_issued',
+      metadata: {
+        reconnectCredentialId: credential.id,
+      },
+      createdAt: now,
+    });
+
+    return this.cloneGatewayReconnectCredential(credential);
+  }
+
+  rotateGatewayReconnectCredential(gatewayId: string) {
+    const current = this.getOrCreateGatewayReconnectCredential(gatewayId);
+    const now = new Date().toISOString();
+    const rotated: GatewayReconnectCredentialRecord = {
+      ...current,
+      token: this.issueGatewayReconnectToken(),
+      updatedAt: now,
+    };
+
+    this.gatewayReconnectCredentialsByGatewayId.set(gatewayId, rotated);
+    this.gatewayReconnectCredentialsByToken.delete(current.token);
+    this.gatewayReconnectCredentialsByToken.set(rotated.token, rotated);
+    this.appendAuditRecord({
+      actorGatewayId: gatewayId,
+      targetGatewayId: gatewayId,
+      action: 'gateway.reconnect_credential_rotated',
+      metadata: {
+        reconnectCredentialId: rotated.id,
+      },
+      createdAt: now,
+    });
+
+    return this.cloneGatewayReconnectCredential(rotated);
+  }
+
+  reconnectGatewayByReconnectToken(token: string) {
+    const reconnectCredential = this.gatewayReconnectCredentialsByToken.get(token);
+    if (!reconnectCredential) {
+      throw new Error('gateway reconnect credential not found');
+    }
+
+    const gateway = this.gatewaysById.get(reconnectCredential.gatewayId);
+    if (!gateway) {
+      throw new Error('gateway not found');
+    }
+
+    const revokedTokens = this.revokeGatewayTokens(gateway.id);
+    const nextToken = this.issueGatewayToken(gateway.id);
+    const now = new Date().toISOString();
+    this.appendAuditRecord({
+      actorGatewayId: gateway.id,
+      targetGatewayId: gateway.id,
+      action: 'gateway.reauthenticated',
+      metadata: {
+        reconnectCredentialId: reconnectCredential.id,
+        revokedTokens,
+      },
+      createdAt: now,
+    });
+
+    return {
+      gateway,
+      token: nextToken,
+      reconnectCredential: this.cloneGatewayReconnectCredential(reconnectCredential),
+    };
   }
 
   findHostById(hostId: string) {
@@ -2670,6 +2802,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         bio: input.bio,
         visibility: input.visibility,
       });
+      const reconnectCredential = this.getOrCreateGatewayReconnectCredential(gateway.id);
 
       const claimed = this.claimInvite({
         code: invite.code,
@@ -2709,6 +2842,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       return {
         gateway,
         token,
+        reconnectCredential,
         invite: claimed.invite,
         claim: claimed.claim,
         friendRequest: claimed.friendRequest,
@@ -5752,6 +5886,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       localSessions: [...this.localSessionsByToken.values()],
       hostedSessions: [...this.hostedSessionsByToken.values()],
       localRuntimeBinding: this.localRuntimeBinding,
+      gatewayReconnectCredentials: [...this.gatewayReconnectCredentialsByGatewayId.values()],
       remoteRuntimeBridgeCredentials: [...this.remoteRuntimeBridgeCredentialsById.values()],
       remoteRuntimeBindings: [...this.remoteRuntimeBindingsByGatewayId.values()],
       presenceHeartbeats: [...this.lastSeenAtByGatewayId.entries()].map(([gatewayId, lastSeenAt]) => ({
@@ -5920,6 +6055,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
             hostId: rawLocalRuntimeBinding.hostId ?? migratedLocalHostId,
           }
         : null;
+    for (const credential of snapshot.gatewayReconnectCredentials ?? []) {
+      this.gatewayReconnectCredentialsByGatewayId.set(credential.gatewayId, credential);
+      this.gatewayReconnectCredentialsByToken.set(credential.token, credential);
+    }
     for (const rawCredential of snapshot.remoteRuntimeBridgeCredentials ?? []) {
       const createdByHostId =
         rawCredential.createdByHostId ??
@@ -6019,6 +6158,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.gatewaysById.clear();
     this.gatewaysByHandle.clear();
     this.tokensToGatewayId.clear();
+    this.gatewayReconnectCredentialsByGatewayId.clear();
+    this.gatewayReconnectCredentialsByToken.clear();
     this.localSessionsByToken.clear();
     this.hostedSessionsByToken.clear();
     this.remoteRuntimeBridgeCredentialsById.clear();

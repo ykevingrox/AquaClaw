@@ -13,6 +13,7 @@ import {
   type EnvironmentRecord,
   type EncounterRecord,
   type GatewayFriendRequestPolicy,
+  type GatewayReconnectCredentialRecord,
   type GatewayRecord,
   type GatewayStore,
   type GatewayVisibility,
@@ -36,6 +37,7 @@ interface BuildAppOptions {
 interface HostedRateLimitPolicies {
   bootstrapHosted: RateLimitPolicy;
   registerGateway: RateLimitPolicy;
+  reconnectGateway: RateLimitPolicy;
   remoteBind: RateLimitPolicy;
   remoteHeartbeat: RateLimitPolicy;
 }
@@ -125,6 +127,10 @@ interface JoinHostedRuntimeByInviteBody {
   metadata?: Record<string, unknown>;
   connectionType?: string;
   heartbeatMetadata?: Record<string, unknown>;
+}
+
+interface ReconnectGatewayByCodeBody {
+  reconnectCode?: string;
 }
 
 interface UpdateMeBody {
@@ -660,6 +666,17 @@ function toHostSummary(host: Pick<HostRecord, 'id' | 'handle' | 'displayName' | 
     handle: host.handle,
     displayName: host.displayName,
     bio: host.bio,
+  };
+}
+
+function toGatewayReconnectCredentialSummary(credential: GatewayReconnectCredentialRecord) {
+  return {
+    id: credential.id,
+    gatewayId: credential.gatewayId,
+    token: credential.token,
+    kind: 'gateway_reconnect_code',
+    createdAt: credential.createdAt,
+    updatedAt: credential.updatedAt,
   };
 }
 
@@ -1233,6 +1250,13 @@ function remoteRuntimeErrorToHttp(message: string) {
   return { statusCode: 400, code: 'validation_failed' };
 }
 
+function gatewayReconnectErrorToHttp(message: string) {
+  if (message === 'gateway reconnect credential not found' || message === 'gateway not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
 function localReefErrorToHttp(message: string) {
   if (message === 'gateway not found') {
     return { statusCode: 404, code: 'not_found' };
@@ -1289,6 +1313,7 @@ function getSourceRateLimitKey(request: FastifyRequest) {
 const DEFAULT_HOSTED_RATE_LIMITS: HostedRateLimitPolicies = {
   bootstrapHosted: { limit: 5, windowMs: 60_000 },
   registerGateway: { limit: 10, windowMs: 60_000 },
+  reconnectGateway: { limit: 10, windowMs: 60_000 },
   remoteBind: { limit: 10, windowMs: 60_000 },
   remoteHeartbeat: { limit: 120, windowMs: 60_000 },
 };
@@ -2136,6 +2161,133 @@ export function buildApp(options: BuildAppOptions = {}) {
     };
   });
 
+  app.get('/api/v1/runtime/remote/reconnect-credential', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const result = getAuthedGatewayCredentialOnly(store, request.headers.authorization);
+    if (!('gateway' in result)) {
+      const error = result.error;
+      return reply.code(error.statusCode).send({
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
+    }
+
+    try {
+      const credential = store.getOrCreateGatewayReconnectCredential(result.gateway!.id);
+      return {
+        ok: true,
+        data: {
+          gateway: toGatewaySummary(result.gateway!),
+          reconnectCredential: toGatewayReconnectCredentialSummary(credential),
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to load gateway reconnect credential';
+      const mapped = gatewayReconnectErrorToHttp(message);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message,
+        },
+      });
+    }
+  });
+
+  app.post('/api/v1/runtime/remote/reconnect-credential/rotate', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const result = getAuthedGatewayCredentialOnly(store, request.headers.authorization);
+    if (!('gateway' in result)) {
+      const error = result.error;
+      return reply.code(error.statusCode).send({
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
+    }
+
+    try {
+      const credential = store.rotateGatewayReconnectCredential(result.gateway!.id);
+      return {
+        ok: true,
+        data: {
+          gateway: toGatewaySummary(result.gateway!),
+          reconnectCredential: toGatewayReconnectCredentialSummary(credential),
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to rotate gateway reconnect credential';
+      const mapped = gatewayReconnectErrorToHttp(message);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: ReconnectGatewayByCodeBody }>('/api/v1/runtime/remote/reconnect-by-code', async (request, reply) => {
+    if (deploymentMode !== 'hosted') {
+      return sendHostedModeOnly(reply);
+    }
+
+    const reconnectCode = request.body?.reconnectCode?.trim();
+    if (!reconnectCode) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'reconnectCode is required',
+        },
+      });
+    }
+
+    const reconnectLimit = enforceHostedRateLimit('reconnectGateway', getSourceRateLimitKey(request), reply);
+    if (reconnectLimit) {
+      return reconnectLimit;
+    }
+
+    try {
+      const reauthed = store.reconnectGatewayByReconnectToken(reconnectCode);
+      const runtime = store.getRemoteRuntimeBindingByGatewayId(reauthed.gateway.id);
+
+      return {
+        ok: true,
+        data: {
+          gateway: toGatewaySummary(reauthed.gateway),
+          credential: {
+            token: reauthed.token,
+            kind: 'gateway_bearer',
+          },
+          runtime: runtime ? toRemoteRuntimeSummary(store, runtime) : null,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to reconnect gateway by code';
+      const mapped = gatewayReconnectErrorToHttp(message);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message,
+        },
+      });
+    }
+  });
+
   app.post<{ Body: CreateRemoteRuntimeBridgeCredentialBody }>('/api/v1/runtime/remote/bridge-credentials', async (request, reply) => {
     if (deploymentMode !== 'hosted') {
       return sendHostedModeOnly(reply);
@@ -2638,6 +2790,7 @@ export function buildApp(options: BuildAppOptions = {}) {
             token: joined.token,
             kind: 'gateway_bearer',
           },
+          reconnectCredential: toGatewayReconnectCredentialSummary(joined.reconnectCredential),
           invite: joined.invite,
           claim: joined.claim,
           inviterGateway: inviterGateway ? toGatewaySummary(inviterGateway) : null,

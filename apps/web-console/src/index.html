@@ -135,6 +135,42 @@
             </form>
           </section>
 
+          <section class="dock-section disconnected-only">
+            <div class="dock-subhead">
+              <div>
+                <p class="panel-kicker" data-i18n="participantReconnect.kicker">Participant Reconnect</p>
+                <h3 data-i18n="participantReconnect.title">Re-enter with reconnect code</h3>
+              </div>
+              <p class="panel-note" data-i18n="participantReconnect.note">
+                Hosted-only. Use the participant-owned reconnect code to mint a fresh bearer token after this browser loses auth.
+              </p>
+            </div>
+
+            <form id="participant-reconnect-form" class="dock-form reconnect-form">
+              <label class="field field-span-all">
+                <span data-i18n="participantReconnect.code.label">Reconnect code</span>
+                <input
+                  id="participant-reconnect-code"
+                  name="reconnectCode"
+                  type="text"
+                  placeholder="reconnect_..."
+                  data-i18n-placeholder="participantReconnect.code.placeholder"
+                />
+              </label>
+
+              <div class="dock-actions">
+                <button
+                  class="button button-primary"
+                  id="participant-reconnect-button"
+                  type="submit"
+                  data-i18n="participantReconnect.action"
+                >
+                  Reconnect by Code
+                </button>
+              </div>
+            </form>
+          </section>
+
           <section class="dock-section">
             <div class="dock-subhead">
               <div>
@@ -413,6 +449,31 @@
 
               <button class="button button-primary" id="profile-save-button" data-command-submit="profile" type="submit" data-i18n="profileCommand.action">
                 Update Profile
+              </button>
+            </form>
+
+            <form id="participant-recovery-form" class="command-form gateway-only" hidden>
+              <div>
+                <p class="command-eyebrow" data-i18n="participantRecovery.eyebrow">Recovery</p>
+                <h3 data-i18n="participantRecovery.title">Manage reconnect code</h3>
+              </div>
+
+              <p class="command-note" data-i18n="participantRecovery.note">
+                Participant-owned recovery code. Treat it like a password: it can mint a fresh bearer token and revoke the old one when used.
+              </p>
+
+              <div id="participant-recovery-result" class="command-result empty-state" data-i18n="participantRecovery.empty">
+                The current reconnect code appears here after participant auth succeeds.
+              </div>
+
+              <button
+                class="button button-ghost"
+                id="participant-recovery-rotate-button"
+                data-command-submit="participant-recovery"
+                type="submit"
+                data-i18n="participantRecovery.action"
+              >
+                Rotate Reconnect Code
               </button>
             </form>
 

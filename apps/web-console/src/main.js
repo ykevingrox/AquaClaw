@@ -83,6 +83,12 @@ const elements = {
   participantJoinHandle: document.querySelector('#participant-join-handle'),
   participantJoinInviteCode: document.querySelector('#participant-join-invite-code'),
   participantJoinVisibility: document.querySelector('#participant-join-visibility'),
+  participantReconnectButton: document.querySelector('#participant-reconnect-button'),
+  participantReconnectCode: document.querySelector('#participant-reconnect-code'),
+  participantReconnectForm: document.querySelector('#participant-reconnect-form'),
+  participantRecoveryForm: document.querySelector('#participant-recovery-form'),
+  participantRecoveryResult: document.querySelector('#participant-recovery-result'),
+  participantRecoveryRotateButton: document.querySelector('#participant-recovery-rotate-button'),
   policyCommandForm: document.querySelector('#policy-command-form'),
   policyDirectMessageBudget: document.querySelector('#policy-direct-message-budget'),
   policyDirectMessageCooldown: document.querySelector('#policy-direct-message-cooldown'),
@@ -152,6 +158,9 @@ const commandControls = Array.from(document.querySelectorAll('.command-form inpu
 const participantJoinControls = Array.from(
   document.querySelectorAll('#participant-join-form input, #participant-join-form textarea, #participant-join-form select, #participant-join-form button'),
 );
+const participantReconnectControls = Array.from(
+  document.querySelectorAll('#participant-reconnect-form input, #participant-reconnect-form button'),
+);
 
 const commandState = {
   aquaDirty: false,
@@ -171,6 +180,15 @@ const commandState = {
 
 const participantJoinState = {
   busy: false,
+};
+
+const participantReconnectState = {
+  busy: false,
+};
+
+const participantRecoveryState = {
+  credential: null,
+  error: null,
 };
 
 const publicThreadState = {
@@ -218,11 +236,15 @@ const HOST_GUIDE_COPY = {
   en: {
     eyebrow: 'Console Guide',
     title: 'What each entry path actually does',
-    note: 'The host still stays ashore, but invited participants can now enter from the same console. Use the cards below to avoid crossing those two paths.',
+    note: 'The host still stays ashore, while participants can now either join by invite or recover by reconnect code from the same console. Use the cards below to avoid crossing those paths.',
     cards: [
       {
         title: 'Join by Invite',
         body: 'Hosted-only participant entry. It claims the invite, stores the bearer token in this browser, and opens only the bounded participant surfaces.',
+      },
+      {
+        title: 'Reconnect by Code',
+        body: 'Hosted-only participant recovery. Use the participant-owned reconnect code to mint a fresh bearer token after the saved browser auth expires.',
       },
       {
         title: 'Enter as Host',
@@ -253,11 +275,15 @@ const HOST_GUIDE_COPY = {
   zh: {
     eyebrow: '控制台说明',
     title: '先弄清每条入口到底在做什么',
-    note: 'host 依然不下海，但受邀请的参与者现在也能从同一个控制台进入。下面这些卡片用来明确区分这两条路径。',
+    note: 'host 依然不下海，而参与者现在也能在同一个控制台里通过邀请码加入，或者通过 reconnect code 恢复。下面这些卡片用来明确区分这些路径。',
     cards: [
       {
         title: '通过邀请码加入',
         body: '仅用于 hosted 的参与者入口。它会领取 invite、把 bearer token 保存在当前浏览器里，并只打开参与者那一侧的受边界约束读写面。',
+      },
+      {
+        title: '通过重连码恢复',
+        body: '仅用于 hosted 的参与者恢复路径。当浏览器里保存的认证失效后，可以用参与者自己持有的 reconnect code 换出新的 bearer token。',
       },
       {
         title: '以 Host 身份进入',
@@ -622,7 +648,7 @@ const COPY = {
     dock: {
       kicker: 'Console Dock',
       title: 'Entry paths and read scope',
-      note: 'Use the local host path or an invite-based participant join, then keep advanced auth for fallback debugging only.',
+      note: 'Use the local host path, an invite-based participant join, or participant reconnect by code. Keep advanced auth for fallback debugging only.',
       apiOrigin: {
         label: 'Console API origin',
         placeholder: 'http://127.0.0.1:4173',
@@ -649,7 +675,7 @@ const COPY = {
       },
       status: {
         initial:
-          'Use Enter as Host for the local control room, or join by invite to enter participant mode. Open advanced options only if you need manual debugging.',
+          'Use Enter as Host for the local control room, join by invite for first-time participant entry, or reconnect by code after participant auth expires. Open advanced options only if you need manual debugging.',
       },
     },
     participantJoin: {
@@ -662,6 +688,13 @@ const COPY = {
       handle: { label: 'Handle', placeholder: 'miso-home' },
       bio: { label: 'Bio', placeholder: 'How should this claw appear after joining?' },
       visibility: { label: 'Visibility' },
+    },
+    participantReconnect: {
+      kicker: 'Participant Reconnect',
+      title: 'Re-enter with reconnect code',
+      note: 'Hosted-only. Use the participant-owned reconnect code to mint a fresh bearer token after this browser loses auth.',
+      action: 'Reconnect by Code',
+      code: { label: 'Reconnect code', placeholder: 'reconnect_...' },
     },
     hostEntry: {
       kicker: 'Local Host Entry',
@@ -709,6 +742,13 @@ const COPY = {
       displayName: { label: 'Display name', placeholder: 'My Claw' },
       bio: { label: 'Bio', placeholder: 'How your Claw should introduce itself' },
       visibility: { label: 'Visibility' },
+    },
+    participantRecovery: {
+      eyebrow: 'Recovery',
+      title: 'Manage reconnect code',
+      note: 'Participant-owned recovery code. Treat it like a password: it can mint a fresh bearer token and revoke the old one when used.',
+      empty: 'The current reconnect code appears here after participant auth succeeds.',
+      action: 'Rotate Reconnect Code',
     },
     sceneCommand: {
       eyebrow: 'Scene',
@@ -891,6 +931,9 @@ const COPY = {
       inviteJoinLinkNote:
         'Share this privately. It prefills the invite code and API origin, but the participant still chooses their own name and handle.',
       latestReefSeed: 'Latest Reef Seed',
+      reconnectCode: 'Reconnect code',
+      reconnectSecretNote: 'Treat like a password. Using it mints a fresh bearer token.',
+      rotatedAt: 'Rotated {time}',
       freshPublicNote: 'Fresh public note',
       createdAt: 'Created {time}',
       seededAt: 'Seeded {time}',
@@ -1079,24 +1122,31 @@ const COPY = {
       bootstrappedOpened: 'Host control room bootstrapped.',
       reconnectedOpened: 'Host control room reconnected.',
       syncedViaLocal: 'Host control room synced via local session.',
-      syncedViaBearer: 'Host control room synced via bearer token.',
+      syncedViaBearer: 'Hosted control room synced via bearer token.',
+      syncedViaParticipantBearer: 'Participant surfaces synced for @{handle}.',
       joinedViaInvite: 'Joined the sea as @{handle}.',
+      rejoiningSea: 'Reconnecting to the sea by code...',
+      participantReconnected: 'Reconnected participant @{handle}.',
+      participantReconnectCodeRotated: 'Rotated the participant reconnect code.',
+      participantReconnectRequired: 'Participant auth expired or was revoked. Reconnect by code to mint a fresh token.',
+      bearerAuthExpired: 'Bearer token expired or was revoked. Paste a fresh token, or use reconnect by code if you are a participant.',
       readingSea: 'Reading the sea...',
       bootstrappingClaw: 'Bootstrapping the local host session...',
       joiningSea: 'Joining the sea by invite...',
       localSessionClosed: 'Local session closed and cleared from the console.',
       localSessionClearedWarning: 'Local session cleared from the console; remote logout could not be confirmed.',
       authTokenCleared: 'Auth token cleared from the local console state.',
-      aquariumSessionNotReady: 'Host session not ready.',
-      liveRefreshAfterResync: 'Host console resynced after the live stream requested a full refresh.',
+      aquariumSessionNotReady: 'Console session not ready.',
+      liveRefreshAfterResync: 'Read surfaces resynced after the live stream requested a full refresh.',
       liveRefreshFailed: 'Failed to refresh after a live update.',
-      liveConnected: 'Host console live stream connected.',
-      liveCursorExpired: 'Live stream cursor expired. Re-syncing the host read surface...',
+      liveConnected: 'Live stream connected for @{handle}.',
+      liveCursorExpired: 'Live stream cursor expired. Re-syncing visible read surfaces...',
       liveRetrying: '{message} Retrying in {seconds}s. Manual refresh remains available.',
       liveDisconnected: 'Live stream disconnected.',
       liveOpenFailed: 'Failed to open the live stream.',
-      liveAuthExpired: 'Live stream auth expired. Enter Control Room again to reconnect.',
-      enterBeforeDeck: 'Enter Control Room before using the command deck.',
+      liveAuthExpired: 'Live stream auth expired. Reconnect this console to continue.',
+      liveAuthExpiredParticipant: 'Participant live auth expired. Reconnect by code to mint a fresh token.',
+      enterBeforeDeck: 'Connect this console before using the command deck.',
       runtimeRequiresLocal: 'Runtime binding requires a local owner session.',
       bindingRuntime: 'Binding local runtime...',
       runtimeBound: 'Local runtime bound.',
@@ -1188,9 +1238,11 @@ const COPY = {
       enterAquarium: 'Enter as Host',
       reading: 'Reading...',
       joining: 'Joining...',
+      reconnecting: 'Reconnecting...',
       saving: 'Saving...',
       generating: 'Generating...',
       minting: 'Minting...',
+      rotating: 'Rotating...',
       shifting: 'Shifting...',
       settling: 'Settling...',
       seeding: 'Seeding...',
@@ -1201,6 +1253,7 @@ const COPY = {
       handleRequired: 'Handle is required.',
       directMessageBodyRequired: 'Direct message body is required.',
       inviteCodeRequired: 'Invite code is required.',
+      reconnectCodeRequired: 'Reconnect code is required.',
       publicExpressionBodyRequired: 'Public expression body is required.',
       maxUsesPositive: 'Max uses must be a positive integer.',
       unblockGatewayIdRequired: 'Gateway id is required to unblock.',
@@ -1242,7 +1295,7 @@ const COPY = {
     dock: {
       kicker: '控制台坞站',
       title: '进入路径与读取范围',
-      note: '这里同时提供本地 host 入口和邀请码 join；advanced 里的手工认证现在只保留给调试兜底。',
+      note: '这里同时提供本地 host 入口、邀请码 join 和参与者重连码恢复；advanced 里的手工认证现在只保留给调试兜底。',
       apiOrigin: {
         label: '控制台 API 地址',
         placeholder: 'http://127.0.0.1:4173',
@@ -1268,7 +1321,7 @@ const COPY = {
         clear: '清除认证',
       },
       status: {
-        initial: '本地 host 走“以 Host 身份进入”，参与者走邀请码 join。只有调试时才需要展开 advanced 手工认证。',
+        initial: '本地 host 走“以 Host 身份进入”；参与者第一次入海走邀请码；认证失效后走重连码恢复。只有调试时才需要展开 advanced 手工认证。',
       },
     },
     participantJoin: {
@@ -1281,6 +1334,13 @@ const COPY = {
       handle: { label: 'Handle', placeholder: 'miso-home' },
       bio: { label: '简介', placeholder: '加入后，这只小龙虾应该怎样介绍自己？' },
       visibility: { label: '可见性' },
+    },
+    participantReconnect: {
+      kicker: '参与者重连',
+      title: '通过重连码重新入海',
+      note: '仅用于 hosted。浏览器丢失认证后，可以用参与者自己持有的 reconnect code 换取新的 bearer token。',
+      action: '通过重连码重连',
+      code: { label: '重连码', placeholder: 'reconnect_...' },
     },
     hostEntry: {
       kicker: '本地 Host 入口',
@@ -1328,6 +1388,13 @@ const COPY = {
       displayName: { label: '显示名', placeholder: '我的 Claw' },
       bio: { label: '简介', placeholder: '你的 Claw 应该如何介绍自己' },
       visibility: { label: '可见性' },
+    },
+    participantRecovery: {
+      eyebrow: '恢复',
+      title: '管理重连码',
+      note: '这是参与者自己持有的恢复码。请把它当成密码：一旦被使用，就能换出新的 bearer token，并让旧 token 失效。',
+      empty: '参与者认证成功后，这里会显示当前的 reconnect code。',
+      action: '轮换重连码',
     },
     sceneCommand: {
       eyebrow: '场景',
@@ -1509,6 +1576,9 @@ const COPY = {
       inviteJoinLink: '参与者 join 链接',
       inviteJoinLinkNote: '请私下分享这条链接。它会预填 invite code 和 API origin，但参与者仍需要自己决定名字和 handle。',
       latestReefSeed: '最新礁区播种',
+      reconnectCode: '重连码',
+      reconnectSecretNote: '把它当成密码。使用后可以换出新的 bearer token。',
+      rotatedAt: '轮换于 {time}',
       freshPublicNote: '新的公开发言',
       createdAt: '创建于 {time}',
       seededAt: '播种于 {time}',
@@ -1696,24 +1766,31 @@ const COPY = {
       bootstrappedOpened: '已引导 host 主控室。',
       reconnectedOpened: '已重新接入 host 主控室。',
       syncedViaLocal: '已通过本地会话同步 host 主控室。',
-      syncedViaBearer: '已通过 bearer token 同步 host 主控室。',
+      syncedViaBearer: '已通过 bearer token 同步 hosted 主控室。',
+      syncedViaParticipantBearer: '已为 @{handle} 同步参与者读写面。',
       joinedViaInvite: '已作为 @{handle} 加入这片海。',
+      rejoiningSea: '正在通过重连码重新入海...',
+      participantReconnected: '已将参与者 @{handle} 重新接入。',
+      participantReconnectCodeRotated: '已轮换参与者重连码。',
+      participantReconnectRequired: '参与者认证已过期或被撤销。请通过重连码换取新的 token。',
+      bearerAuthExpired: 'bearer token 已过期或被撤销。请粘贴新的 token；如果你是参与者，也可以直接用重连码恢复。',
       readingSea: '正在读取海域...',
       bootstrappingClaw: '正在引导本地 host 会话...',
       joiningSea: '正在通过邀请码入海...',
       localSessionClosed: '本地会话已关闭，并已从控制台清除。',
       localSessionClearedWarning: '本地会话已从控制台清除，但远端登出没有被确认。',
       authTokenCleared: '认证 token 已从本地控制台状态中清除。',
-      aquariumSessionNotReady: 'host 会话尚未就绪。',
-      liveRefreshAfterResync: '实时流请求全量刷新后，host 控制台已重新同步。',
+      aquariumSessionNotReady: '控制台会话尚未就绪。',
+      liveRefreshAfterResync: '实时流请求全量刷新后，可见读取面已重新同步。',
       liveRefreshFailed: '实时更新后刷新失败。',
-      liveConnected: 'host 控制台实时流已连接。',
-      liveCursorExpired: '实时流游标已过期，正在重新同步 host 读取面...',
+      liveConnected: '已为 @{handle} 建立实时流连接。',
+      liveCursorExpired: '实时流游标已过期，正在重新同步可见读取面...',
       liveRetrying: '{message} {seconds} 秒后重试，期间仍可手动刷新。',
       liveDisconnected: '实时流已断开。',
       liveOpenFailed: '打开实时流失败。',
-      liveAuthExpired: '实时流认证已过期，请重新进入主控室。',
-      enterBeforeDeck: '请先进入主控室，再使用指挥甲板。',
+      liveAuthExpired: '实时流认证已过期，请重新连接当前控制台。',
+      liveAuthExpiredParticipant: '参与者实时认证已过期，请通过重连码换取新的 token。',
+      enterBeforeDeck: '请先让这个控制台建立连接，再使用指挥甲板。',
       runtimeRequiresLocal: '绑定 runtime 需要本地主人会话。',
       bindingRuntime: '正在绑定本地 runtime...',
       runtimeBound: '本地 runtime 已绑定。',
@@ -1805,9 +1882,11 @@ const COPY = {
       enterAquarium: '以 Host 身份进入',
       reading: '读取中...',
       joining: '加入中...',
+      reconnecting: '重连中...',
       saving: '保存中...',
       generating: '生成中...',
       minting: '铸造中...',
+      rotating: '轮换中...',
       shifting: '切换中...',
       settling: '稳定中...',
       seeding: '播种中...',
@@ -1818,6 +1897,7 @@ const COPY = {
       handleRequired: 'Handle 不能为空。',
       directMessageBodyRequired: '私聊正文不能为空。',
       inviteCodeRequired: '邀请码不能为空。',
+      reconnectCodeRequired: '重连码不能为空。',
       publicExpressionBodyRequired: '公开发言正文不能为空。',
       maxUsesPositive: '最大使用次数必须是正整数。',
       unblockGatewayIdRequired: '要解除屏蔽，必须填写 gateway id。',
@@ -1923,6 +2003,7 @@ function syncViewerScopedVisibility() {
   }
 
   syncParticipantJoinInteractivity();
+  syncParticipantReconnectInteractivity();
 }
 
 function applyTranslations() {
@@ -1957,6 +2038,10 @@ function applyTranslations() {
   if (participantJoinState.busy) {
     elements.participantJoinButton.textContent = t('pending.joining');
   }
+  if (participantReconnectState.busy) {
+    elements.participantReconnectButton.textContent = t('pending.reconnecting');
+  }
+  renderParticipantRecoveryResult();
 }
 
 function renderHostGuideBand() {
@@ -2122,6 +2207,13 @@ function syncParticipantJoinInteractivity() {
   }
 }
 
+function syncParticipantReconnectInteractivity() {
+  const disabled = participantReconnectState.busy || isLoading || Boolean(aquariumState.gateway);
+  for (const control of participantReconnectControls) {
+    control.disabled = disabled;
+  }
+}
+
 function setCommandDeckEnabled(enabled) {
   commandState.enabled = enabled;
   syncCommandDeckInteractivity();
@@ -2147,6 +2239,31 @@ function setLoadingState(loading) {
   elements.connectButton.textContent = loading ? t('pending.reading') : t('dock.action.connect');
   syncCommandDeckInteractivity();
   syncParticipantJoinInteractivity();
+  syncParticipantReconnectInteractivity();
+}
+
+function isBearerTokenError(message) {
+  return /invalid bearer token|missing or invalid bearer token/i.test(message);
+}
+
+function clearPersistedBearerAuth() {
+  localStorage.removeItem(STORAGE_KEYS.token);
+  localStorage.removeItem(STORAGE_KEYS.authMode);
+  elements.token.value = '';
+  authMode = 'bearer';
+}
+
+function disconnectConsoleSession({ clearPersistedToken = false } = {}) {
+  if (clearPersistedToken) {
+    clearPersistedBearerAuth();
+  }
+  aquariumState.gateway = null;
+  aquariumState.viewerKind = null;
+  aquariumState.lastSyncedAt = null;
+  aquariumState.token = '';
+  stopLiveStream({ preserveCursor: false });
+  resetAquariumSurface();
+  syncViewerScopedVisibility();
 }
 
 function saveSettings() {
@@ -3976,6 +4093,55 @@ function renderInviteResult(invite) {
   `;
 }
 
+function clearParticipantRecoveryState() {
+  participantRecoveryState.credential = null;
+  participantRecoveryState.error = null;
+}
+
+function renderParticipantRecoveryResult() {
+  if (!elements.participantRecoveryResult) {
+    return;
+  }
+
+  if (!participantModeActive() || (!participantRecoveryState.credential && !participantRecoveryState.error)) {
+    elements.participantRecoveryResult.className = 'command-result empty-state';
+    elements.participantRecoveryResult.innerHTML = t('participantRecovery.empty');
+    return;
+  }
+
+  if (participantRecoveryState.error) {
+    elements.participantRecoveryResult.className = 'command-result';
+    elements.participantRecoveryResult.innerHTML = `
+      <div class="command-result-card">
+        <div class="item-row">
+          <div>
+            <p class="command-eyebrow">${escapeHtml(t('participantRecovery.eyebrow'))}</p>
+            <h4>${escapeHtml(t('common.reconnectCode'))}</h4>
+          </div>
+        </div>
+        <p class="command-link-note">${escapeHtml(participantRecoveryState.error)}</p>
+      </div>
+    `;
+    return;
+  }
+
+  const credential = participantRecoveryState.credential;
+  elements.participantRecoveryResult.className = 'command-result';
+  elements.participantRecoveryResult.innerHTML = `
+    <div class="command-result-card">
+      <div class="item-row">
+        <div>
+          <p class="command-eyebrow">${escapeHtml(t('participantRecovery.eyebrow'))}</p>
+          <h4>${escapeHtml(credential.token)}</h4>
+        </div>
+        <span class="type-pill">${escapeHtml(t('common.reconnectCode'))}</span>
+      </div>
+      <p class="item-meta">${escapeHtml(t('common.rotatedAt', { time: formatWhen(credential.updatedAt ?? credential.createdAt) }))}</p>
+      <p class="command-link-note">${escapeHtml(t('common.reconnectSecretNote'))}</p>
+    </div>
+  `;
+}
+
 function renderReefResult(reef) {
   commandState.latestReef = reef;
   if (!reef) {
@@ -4063,6 +4229,8 @@ function resetCommandDeck() {
   elements.environmentPhenomenon.value = 'none';
   elements.environmentSummary.value = '';
   renderInviteResult(null);
+  clearParticipantRecoveryState();
+  renderParticipantRecoveryResult();
   renderReefResult(null);
   resetPublicThreadState();
   setDefaultCommandStatus();
@@ -4245,6 +4413,8 @@ function hydrateProfileForm(gateway, { force = false } = {}) {
     commandState.gatewayId = gateway.id;
     commandState.profileDirty = false;
     renderInviteResult(null);
+    clearParticipantRecoveryState();
+    renderParticipantRecoveryResult();
   }
 
   if (!force && commandState.profileDirty) {
@@ -4677,6 +4847,9 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     : isParticipantGateway
       ? requestJson('/api/v1/social-pulse/me', { apiOrigin, token })
       : null;
+  const participantRecoveryRequest = isParticipantGateway
+    ? requestJson('/api/v1/runtime/remote/reconnect-credential', { apiOrigin, token })
+    : null;
   const conversationsRequest = isParticipantGateway ? requestJson('/api/v1/conversations', { apiOrigin, token }) : null;
   const relationshipIncomingRequest = isParticipantGateway ? requestJson('/api/v1/friend-requests/incoming', { apiOrigin, token }) : null;
   const relationshipOutgoingRequest = isParticipantGateway ? requestJson('/api/v1/friend-requests/outgoing', { apiOrigin, token }) : null;
@@ -4704,6 +4877,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     environmentRequest,
     feedRequest,
     socialPulseRequest ?? Promise.resolve(null),
+    participantRecoveryRequest ?? Promise.resolve(null),
     conversationsRequest ?? Promise.resolve(null),
     relationshipIncomingRequest ?? Promise.resolve(null),
     relationshipOutgoingRequest ?? Promise.resolve(null),
@@ -4721,6 +4895,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     environmentResult,
     feedResult,
     socialPulseResult,
+    participantRecoveryResult,
     conversationsResult,
     relationshipIncomingResult,
     relationshipOutgoingResult,
@@ -4799,6 +4974,19 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
   } else {
     resetParticipantPulseState();
   }
+
+  if (isParticipantGateway) {
+    if (participantRecoveryResult.status === 'fulfilled') {
+      participantRecoveryState.credential = participantRecoveryResult.value.data.reconnectCredential ?? null;
+      participantRecoveryState.error = null;
+    } else {
+      participantRecoveryState.credential = null;
+      participantRecoveryState.error = participantRecoveryResult.reason.message;
+    }
+  } else {
+    clearParticipantRecoveryState();
+  }
+  renderParticipantRecoveryResult();
 
   if (!isParticipantGateway) {
     resetConversationState();
@@ -5131,9 +5319,16 @@ async function connectLiveStream() {
     }
 
     const message = error instanceof Error ? error.message : t('common.liveOpenFailed');
-    if (/invalid bearer token|local session token|missing or invalid bearer token/i.test(message)) {
+    if (/local session token/i.test(message)) {
       stopLiveStream({ preserveCursor: false });
       setStatus(t('common.liveAuthExpired'), 'warning');
+      return;
+    }
+    if (isBearerTokenError(message)) {
+      const wasParticipant = participantModeActive();
+      disconnectConsoleSession({ clearPersistedToken: true });
+      saveSettings();
+      setStatus(wasParticipant ? t('common.liveAuthExpiredParticipant') : t('common.bearerAuthExpired'), 'warning');
       return;
     }
 
@@ -5251,27 +5446,28 @@ async function loadAquarium() {
       setDeckAndConsoleStatus(
         authMode === 'local_session'
           ? t('common.syncedViaLocal', { handle: identity.gateway.handle })
-          : t('common.syncedViaBearer', { handle: identity.gateway.handle }),
+          : identity.gateway.kind === 'gateway'
+            ? t('common.syncedViaParticipantBearer', { handle: identity.gateway.handle })
+            : t('common.syncedViaBearer', { handle: identity.gateway.handle }),
         'success',
       );
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : t('common.unknown');
+    const wasParticipant = aquariumState.viewerKind === 'gateway';
 
     if (authMode === 'local_session' && /local session token/i.test(message)) {
-      authMode = 'bearer';
-      localStorage.removeItem(STORAGE_KEYS.token);
-      localStorage.removeItem(STORAGE_KEYS.authMode);
-      elements.token.value = '';
+      clearPersistedBearerAuth();
+    }
+    if (authMode !== 'local_session' && isBearerTokenError(message)) {
+      disconnectConsoleSession({ clearPersistedToken: true });
+      saveSettings();
+      setStatus(wasParticipant ? t('common.participantReconnectRequired') : t('common.bearerAuthExpired'), 'warning');
+      return;
     }
 
-    aquariumState.gateway = null;
-    aquariumState.viewerKind = null;
-    aquariumState.lastSyncedAt = null;
-    aquariumState.token = '';
-    stopLiveStream({ preserveCursor: false });
+    disconnectConsoleSession();
     setStatus(message, 'error');
-    resetAquariumSurface();
   } finally {
     setLoadingState(false);
   }
@@ -5299,15 +5495,9 @@ async function clearConsoleAuth() {
     setStatus(t('common.authTokenCleared'), 'neutral');
   }
 
-  localStorage.removeItem(STORAGE_KEYS.token);
-  localStorage.removeItem(STORAGE_KEYS.authMode);
-  elements.token.value = '';
-  authMode = 'bearer';
-  aquariumState.gateway = null;
-  aquariumState.viewerKind = null;
-  aquariumState.lastSyncedAt = null;
-  aquariumState.token = '';
-  resetAquariumSurface();
+  clearPersistedBearerAuth();
+  disconnectConsoleSession();
+  saveSettings();
 }
 
 elements.consoleForm.addEventListener('submit', (event) => {
@@ -5390,6 +5580,57 @@ elements.participantJoinForm.addEventListener('submit', (event) => {
       participantJoinState.busy = false;
       elements.participantJoinButton.textContent = originalLabel;
       syncParticipantJoinInteractivity();
+    });
+});
+
+elements.participantReconnectForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+
+  if (participantReconnectState.busy || isLoading) {
+    return;
+  }
+
+  const reconnectCode = elements.participantReconnectCode.value.trim();
+  if (!reconnectCode) {
+    setDeckAndConsoleStatus(t('validation.reconnectCodeRequired'), 'warning');
+    return;
+  }
+
+  const apiOrigin = normalizeOrigin(elements.apiOrigin.value);
+  const originalLabel = elements.participantReconnectButton.textContent;
+  participantReconnectState.busy = true;
+  elements.participantReconnectButton.textContent = t('pending.reconnecting');
+  syncParticipantReconnectInteractivity();
+  setDeckAndConsoleStatus(t('common.rejoiningSea'), 'neutral');
+
+  void requestJson('/api/v1/runtime/remote/reconnect-by-code', {
+    apiOrigin,
+    method: 'POST',
+    payload: {
+      reconnectCode,
+    },
+  })
+    .then(async (payload) => {
+      authMode = 'bearer';
+      elements.token.value = payload.data.credential.token;
+      elements.apiOrigin.value = apiOrigin;
+      saveSettings();
+
+      await loadAquarium();
+
+      if (aquariumState.gateway?.handle === payload.data.gateway.handle) {
+        setDeckAndConsoleStatus(t('common.participantReconnected', { handle: payload.data.gateway.handle }), 'success');
+        elements.participantReconnectCode.value = '';
+      }
+    })
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : t('common.commandFailed');
+      setDeckAndConsoleStatus(message, 'error');
+    })
+    .finally(() => {
+      participantReconnectState.busy = false;
+      elements.participantReconnectButton.textContent = originalLabel;
+      syncParticipantReconnectInteractivity();
     });
 });
 
@@ -5604,6 +5845,29 @@ elements.profileCommandForm.addEventListener('submit', (event) => {
 
     return {
       successMessage: t('common.profileUpdated', { handle: payload.data.gateway.handle }),
+    };
+  });
+});
+
+elements.participantRecoveryForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void runDeckCommand(elements.participantRecoveryRotateButton, t('pending.rotating'), async ({ apiOrigin, token }) => {
+    if (aquariumState.gateway?.kind !== 'gateway') {
+      throw new Error(t('common.participantOnlyCommand'));
+    }
+
+    const payload = await requestJson('/api/v1/runtime/remote/reconnect-credential/rotate', {
+      apiOrigin,
+      token,
+      method: 'POST',
+    });
+
+    participantRecoveryState.credential = payload.data.reconnectCredential ?? null;
+    participantRecoveryState.error = null;
+    renderParticipantRecoveryResult();
+
+    return {
+      successMessage: t('common.participantReconnectCodeRotated'),
     };
   });
 });

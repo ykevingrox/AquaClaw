@@ -635,6 +635,106 @@ test('sqlite backend preserves social pulse policy across restart', async () => 
   }
 });
 
+test('sqlite backend preserves gateway reconnect credentials across restart', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-reconnect-'));
+  const databasePath = join(tempDir, 'aquaclaw.sqlite');
+
+  const store1 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+  const app1 = buildApp({
+    store: store1,
+    deploymentMode: 'hosted',
+    hostedOwnerBootstrapKey: 'hosted-secret',
+  });
+
+  try {
+    const owner = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/session/bootstrap-hosted',
+      payload: {
+        bootstrapKey: 'hosted-secret',
+        displayName: 'SQLite Hosted Reconnect Owner',
+        handle: 'sqlite-hosted-reconnect-owner',
+      },
+    });
+    assert.equal(owner.statusCode, 201);
+    const ownerToken = owner.json().data.credential.token as string;
+
+    const policy = await app1.inject({
+      method: 'PATCH',
+      url: '/api/v1/registration-policy',
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { policy: 'open' },
+    });
+    assert.equal(policy.statusCode, 200);
+
+    const register = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/gateways/register',
+      payload: {
+        displayName: 'SQLite Reconnect Gateway',
+        handle: 'sqlite-reconnect-gateway',
+      },
+    });
+    assert.equal(register.statusCode, 201);
+    const gatewayToken = register.json().data.credential.token as string;
+
+    const rotate = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/runtime/remote/reconnect-credential/rotate',
+      headers: { authorization: `Bearer ${gatewayToken}` },
+    });
+    assert.equal(rotate.statusCode, 200);
+    const reconnectCode = rotate.json().data.reconnectCredential.token as string;
+
+    await app1.close();
+    if (store1 instanceof SqliteGatewayStore) {
+      store1.close();
+    }
+
+    const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    const app2 = buildApp({
+      store: store2,
+      deploymentMode: 'hosted',
+      hostedOwnerBootstrapKey: 'hosted-secret',
+    });
+
+    try {
+      const reconnect = await app2.inject({
+        method: 'POST',
+        url: '/api/v1/runtime/remote/reconnect-by-code',
+        payload: {
+          reconnectCode,
+        },
+      });
+      assert.equal(reconnect.statusCode, 200);
+      const reauthedToken = reconnect.json().data.credential.token as string;
+      assert.equal(reconnect.json().data.gateway.handle, 'sqlite-reconnect-gateway');
+
+      const staleMe = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/gateways/me',
+        headers: { authorization: `Bearer ${gatewayToken}` },
+      });
+      assert.equal(staleMe.statusCode, 401);
+
+      const reauthedMe = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/gateways/me',
+        headers: { authorization: `Bearer ${reauthedToken}` },
+      });
+      assert.equal(reauthedMe.statusCode, 200);
+      assert.equal(reauthedMe.json().data.gateway.handle, 'sqlite-reconnect-gateway');
+    } finally {
+      await app2.close();
+      if (store2 instanceof SqliteGatewayStore) {
+        store2.close();
+      }
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('sqlite backend preserves local runtime binding and heartbeat continuity across restart', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-runtime-'));
   const databasePath = join(tempDir, 'aquaclaw.sqlite');

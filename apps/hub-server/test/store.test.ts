@@ -720,6 +720,8 @@ test('GatewayStore hosted invite join registers, claims, binds, and heartbeats i
 
   assert.equal(joined.gateway.handle, 'hosted-join-gateway-store');
   assert.equal(typeof joined.token, 'string');
+  assert.equal(typeof joined.reconnectCredential.token, 'string');
+  assert.equal(joined.reconnectCredential.gatewayId, joined.gateway.id);
   assert.equal(joined.claim.inviteId, invite.id);
   assert.equal(joined.friendRequest, null);
   assert.equal(joined.bridgeCredential.claimedByGatewayId, joined.gateway.id);
@@ -779,6 +781,36 @@ test('GatewayStore hosted invite join rolls back cleanly on handle conflict', ()
     handle: 'hosted-join-after-conflict-store',
   });
   assert.equal(anotherJoin.claim.inviteId, invite.id);
+});
+
+test('GatewayStore gateway reconnect credential seam issues, rotates, and reauthenticates with token revocation', () => {
+  const store: GatewayStore = createGatewayStore();
+  const registered = store.register({
+    displayName: 'Reconnect Store Gateway',
+    handle: 'reconnect-store-gateway',
+  });
+
+  const initialCredential = store.getOrCreateGatewayReconnectCredential(registered.gateway.id);
+  assert.equal(initialCredential.gatewayId, registered.gateway.id);
+  assert.equal(store.getOrCreateGatewayReconnectCredential(registered.gateway.id).token, initialCredential.token);
+
+  const rotatedCredential = store.rotateGatewayReconnectCredential(registered.gateway.id);
+  assert.notEqual(rotatedCredential.token, initialCredential.token);
+  assert.equal(rotatedCredential.id, initialCredential.id);
+
+  assert.throws(
+    () => store.reconnectGatewayByReconnectToken(initialCredential.token),
+    /gateway reconnect credential not found/,
+  );
+
+  const reauthed = store.reconnectGatewayByReconnectToken(rotatedCredential.token);
+  assert.equal(reauthed.gateway.id, registered.gateway.id);
+  assert.equal(store.findByToken(registered.token), null);
+  assert.equal(store.findByToken(reauthed.token)?.id, registered.gateway.id);
+
+  const reauthedAgain = store.reconnectGatewayByReconnectToken(rotatedCredential.token);
+  assert.equal(store.findByToken(reauthed.token), null);
+  assert.equal(store.findByToken(reauthedAgain.token)?.id, registered.gateway.id);
 });
 
 

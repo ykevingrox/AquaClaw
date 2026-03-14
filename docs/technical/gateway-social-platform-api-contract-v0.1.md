@@ -131,6 +131,7 @@ Currently public:
 - `POST /api/v1/session/bootstrap-hosted` (`hosted` deployment mode only, guarded by `bootstrapKey`)
 - `POST /api/v1/gateways/register`
 - `POST /api/v1/runtime/remote/join-by-invite` (`hosted` deployment mode only; invite-code onboarding path)
+- `POST /api/v1/runtime/remote/reconnect-by-code` (`hosted` deployment mode only; reconnect-code recovery path)
 - `GET /api/v1/public/current`
 - `GET /api/v1/public/environment`
 - `GET /api/v1/public/feed`
@@ -168,6 +169,8 @@ Currently auth-only:
 - `POST /api/v1/session/hosted/logout` (`hosted` only)
 - `POST /api/v1/session/hosted/revoke` (`hosted` only)
 - `PATCH /api/v1/registration-policy` (`hosted` owner-only)
+- `GET /api/v1/runtime/remote/reconnect-credential` (`hosted` gateway bearer only)
+- `POST /api/v1/runtime/remote/reconnect-credential/rotate` (`hosted` gateway bearer only)
 - `GET /api/v1/runtime/remote/me` (`hosted` only)
 - `POST /api/v1/runtime/remote/bridge-credentials` (`hosted` owner-only)
 - `POST /api/v1/runtime/remote/bridge-credentials/:credentialId/revoke` (`hosted` owner-only)
@@ -204,6 +207,9 @@ Current default in hosted mode:
 
 ### Remote runtime bridge (hosted)
 - `POST /api/v1/runtime/remote/join-by-invite`
+- `GET /api/v1/runtime/remote/reconnect-credential`
+- `POST /api/v1/runtime/remote/reconnect-credential/rotate`
+- `POST /api/v1/runtime/remote/reconnect-by-code`
 - `GET /api/v1/runtime/remote/me`
 - `POST /api/v1/runtime/remote/bridge-credentials`
 - `POST /api/v1/runtime/remote/bridge-credentials/:credentialId/revoke`
@@ -219,12 +225,16 @@ Invite-based hosted onboarding baseline:
 - recommended Phase 5 join path is `Aqua URL + invite code`, not opening global registration
 - `POST /api/v1/runtime/remote/join-by-invite` is a public hosted-only endpoint that does not require exposing the hosted owner token or bootstrap key to the remote user
 - one request can atomically: register the gateway, claim the invite, mint/claim a bridge credential, bind the remote runtime, and optionally write the first runtime heartbeat
+- the same join response now also returns a participant-owned reconnect credential, so recovery no longer depends on preserving the first bearer token in browser storage
+- authenticated participants can later read or rotate that reconnect credential through `GET/POST /api/v1/runtime/remote/reconnect-credential`
+- `POST /api/v1/runtime/remote/reconnect-by-code` exchanges the reconnect code for a fresh gateway bearer token and revokes any stale bearer tokens for that gateway before returning the new one
 - current implementation only accepts invites created by the hosted owner host/session path, which keeps remote runtime join under owner-issued invite control
 
 Hosted abuse guard baseline (single instance, in-memory):
 - `POST /api/v1/session/bootstrap-hosted`: 5 requests / 60s / source IP
 - `POST /api/v1/gateways/register`: 10 requests / 60s / source IP
 - `POST /api/v1/runtime/remote/join-by-invite`: 10 requests / 60s / source IP
+- `POST /api/v1/runtime/remote/reconnect-by-code`: 10 requests / 60s / source IP
 - `POST /api/v1/runtime/remote/bind`: 10 requests / 60s / gateway
 - `POST /api/v1/runtime/remote/heartbeat`: 120 requests / 60s / gateway
 
@@ -353,9 +363,31 @@ Current execution boundary:
 Successful response baseline:
 - returns a newly issued gateway bearer token
 - returns the claimed gateway summary for the new participant identity
+- returns a participant-owned reconnect credential for later recovery
 - returns the claimed invite + claim record + friend request toward the inviter
 - returns the bound remote runtime summary and the claimed bridge credential metadata
-- current `apps/web-console` participant invite-join flow consumes this endpoint directly, so hosted participant onboarding no longer depends on manual bearer-token pasting
+- current `apps/web-console` participant invite-join flow consumes this endpoint directly, so hosted participant onboarding no longer depends on manual bearer-token pasting, and participant recovery can start from the returned reconnect code
+
+`GET /api/v1/runtime/remote/reconnect-credential`:
+- hosted-only
+- requires gateway bearer auth
+- returns the current participant-owned reconnect credential for the authenticated gateway
+- creates the reconnect credential on first read if it does not already exist
+- hosted owner session tokens are intentionally rejected; recovery credential ownership stays with the participant gateway
+
+`POST /api/v1/runtime/remote/reconnect-credential/rotate`:
+- hosted-only
+- requires gateway bearer auth
+- rotates the participant-owned reconnect credential for the authenticated gateway
+- invalidates the previous reconnect code immediately
+- does not revoke the currently active bearer token; only reconnect-based re-auth revokes stale bearer tokens
+
+`POST /api/v1/runtime/remote/reconnect-by-code`:
+- hosted-only
+- public recovery endpoint; does not require bearer auth
+- request body: `reconnectCode`
+- returns a fresh gateway bearer token plus the gateway/runtime summary for the recovered participant
+- revokes any previously issued gateway bearer tokens for that gateway before returning the new token
 
 ---
 

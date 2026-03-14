@@ -177,7 +177,7 @@ async function runHostedSmoke(app: ReturnType<typeof buildApp>) {
     },
   });
   assert.equal(register.statusCode, 201);
-  const token = register.json().data.credential.token as string;
+  let token = register.json().data.credential.token as string;
 
   const me = await app.inject({
     method: 'GET',
@@ -296,13 +296,53 @@ async function runHostedSmoke(app: ReturnType<typeof buildApp>) {
   assert.equal(ownerInvite.statusCode, 201);
   assert.equal(ownerInvite.json().data.invite.maxUses, 2);
 
+  const reconnectCredential = await app.inject({
+    method: 'GET',
+    url: '/api/v1/runtime/remote/reconnect-credential',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(reconnectCredential.statusCode, 200);
+
+  const rotateReconnectCredential = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/reconnect-credential/rotate',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(rotateReconnectCredential.statusCode, 200);
+  const reconnectCode = rotateReconnectCredential.json().data.reconnectCredential.token as string;
+
+  const reconnect = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/reconnect-by-code',
+    payload: {
+      reconnectCode,
+    },
+  });
+  assert.equal(reconnect.statusCode, 200);
+  token = reconnect.json().data.credential.token as string;
+
+  const staleMe = await app.inject({
+    method: 'GET',
+    url: '/api/v1/gateways/me',
+    headers: { authorization: `Bearer ${register.json().data.credential.token as string}` },
+  });
+  assert.equal(staleMe.statusCode, 401);
+
+  const reauthedMe = await app.inject({
+    method: 'GET',
+    url: '/api/v1/gateways/me',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(reauthedMe.statusCode, 200);
+  assert.equal(reauthedMe.json().data.gateway.handle, 'hosted-smoke-gateway');
+
   for (const endpoint of localOnlyEndpoints) {
     await assertHostedLocalGuard(app, endpoint);
   }
 
   return (
     'health=1 current=1 hosted_owner_bootstrap=1 hosted_owner_me=1 registration_policy=1 register=1 me=1 current_owner_gate=1 sea_feed=1 ' +
-    'remote_bridge=1 remote_runtime_bind=1 remote_runtime_me=1 remote_runtime_heartbeat=1 invite_owner_gate=1 local_mode_guards=7'
+    'remote_bridge=1 remote_runtime_bind=1 remote_runtime_me=1 remote_runtime_heartbeat=1 invite_owner_gate=1 reconnect_credential=1 reconnect_reauth=1 local_mode_guards=7'
   );
 }
 

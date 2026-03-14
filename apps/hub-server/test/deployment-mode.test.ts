@@ -27,7 +27,10 @@ const hostedOnlyEndpoints = [
   { method: 'POST', url: '/api/v1/session/hosted/revoke' },
   { method: 'PATCH', url: '/api/v1/registration-policy' },
   { method: 'POST', url: '/api/v1/runtime/remote/join-by-invite' },
+  { method: 'POST', url: '/api/v1/runtime/remote/reconnect-by-code' },
   { method: 'GET', url: '/api/v1/runtime/remote/me' },
+  { method: 'GET', url: '/api/v1/runtime/remote/reconnect-credential' },
+  { method: 'POST', url: '/api/v1/runtime/remote/reconnect-credential/rotate' },
   { method: 'POST', url: '/api/v1/runtime/remote/bridge-credentials' },
   { method: 'POST', url: '/api/v1/runtime/remote/bridge-credentials/remote-bridge-id/revoke' },
   { method: 'POST', url: '/api/v1/runtime/remote/bind' },
@@ -397,7 +400,9 @@ test('hosted invite join lets a remote gateway enter and bind without opening gl
   });
   assert.equal(joined.statusCode, 201);
   const joinedToken = joined.json().data.credential.token as string;
+  const reconnectCode = joined.json().data.reconnectCredential.token as string;
   assert.equal(joined.json().data.gateway.handle, 'hosted-join-invite-gateway');
+  assert.equal(typeof reconnectCode, 'string');
   assert.equal(joined.json().data.runtime.runtime.runtimeId, 'hosted-join-runtime');
   assert.equal(joined.json().data.runtime.runtime.installationId, 'hosted-join-installation');
   assert.equal(joined.json().data.runtime.runtime.metadata.source, 'deployment_test_join_heartbeat');
@@ -405,11 +410,74 @@ test('hosted invite join lets a remote gateway enter and bind without opening gl
   assert.equal(joined.json().data.runtime.presence.status, 'online');
   assert.equal(joined.json().data.friendRequest, null);
 
+  const reconnectCredential = await app.inject({
+    method: 'GET',
+    url: '/api/v1/runtime/remote/reconnect-credential',
+    headers: {
+      authorization: `Bearer ${joinedToken}`,
+    },
+  });
+  assert.equal(reconnectCredential.statusCode, 200);
+  assert.equal(reconnectCredential.json().data.reconnectCredential.token, reconnectCode);
+
+  const ownerReconnectCredentialAttempt = await app.inject({
+    method: 'GET',
+    url: '/api/v1/runtime/remote/reconnect-credential',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  assert.equal(ownerReconnectCredentialAttempt.statusCode, 403);
+  assert.equal(ownerReconnectCredentialAttempt.json().error.code, 'forbidden');
+
+  const rotatedReconnectCredential = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/reconnect-credential/rotate',
+    headers: {
+      authorization: `Bearer ${joinedToken}`,
+    },
+  });
+  assert.equal(rotatedReconnectCredential.statusCode, 200);
+  const rotatedReconnectCode = rotatedReconnectCredential.json().data.reconnectCredential.token as string;
+  assert.notEqual(rotatedReconnectCode, reconnectCode);
+
+  const staleReconnectAttempt = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/reconnect-by-code',
+    payload: {
+      reconnectCode,
+    },
+  });
+  assert.equal(staleReconnectAttempt.statusCode, 404);
+  assert.equal(staleReconnectAttempt.json().error.code, 'not_found');
+
+  const reauthed = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/reconnect-by-code',
+    payload: {
+      reconnectCode: rotatedReconnectCode,
+    },
+  });
+  assert.equal(reauthed.statusCode, 200);
+  const reauthedToken = reauthed.json().data.credential.token as string;
+  assert.equal(reauthed.json().data.gateway.handle, 'hosted-join-invite-gateway');
+  assert.equal(reauthed.json().data.runtime.runtime.runtimeId, 'hosted-join-runtime');
+
+  const oldTokenRejected = await app.inject({
+    method: 'GET',
+    url: '/api/v1/gateways/me',
+    headers: {
+      authorization: `Bearer ${joinedToken}`,
+    },
+  });
+  assert.equal(oldTokenRejected.statusCode, 401);
+  assert.equal(oldTokenRejected.json().error.code, 'unauthorized');
+
   const remoteMe = await app.inject({
     method: 'GET',
     url: '/api/v1/runtime/remote/me',
     headers: {
-      authorization: `Bearer ${joinedToken}`,
+      authorization: `Bearer ${reauthedToken}`,
     },
   });
   assert.equal(remoteMe.statusCode, 200);
@@ -601,7 +669,7 @@ test('hosted bootstrap requires configured key and supports hosted session lifec
   await app.close();
 });
 
-test('hosted mode rate limits bootstrap/register/remote bind/heartbeat with a stable 429 contract', async () => {
+test('hosted mode rate limits bootstrap/register/reconnect/remote bind/heartbeat with a stable 429 contract', async () => {
   const nowMs = Date.parse('2026-03-11T00:00:00.000Z');
   const app = buildApp({
     deploymentMode: 'hosted',
@@ -610,6 +678,7 @@ test('hosted mode rate limits bootstrap/register/remote bind/heartbeat with a st
     hostedRateLimits: {
       bootstrapHosted: { limit: 1, windowMs: 60_000 },
       registerGateway: { limit: 1, windowMs: 60_000 },
+      reconnectGateway: { limit: 1, windowMs: 60_000 },
       remoteBind: { limit: 1, windowMs: 60_000 },
       remoteHeartbeat: { limit: 1, windowMs: 60_000 },
     },
@@ -736,6 +805,34 @@ test('hosted mode rate limits bootstrap/register/remote bind/heartbeat with a st
     },
   });
   assertRateLimited(secondHeartbeat);
+
+  const reconnectCredential = await app.inject({
+    method: 'GET',
+    url: '/api/v1/runtime/remote/reconnect-credential',
+    headers: {
+      authorization: `Bearer ${gatewayToken}`,
+    },
+  });
+  assert.equal(reconnectCredential.statusCode, 200);
+  const reconnectCode = reconnectCredential.json().data.reconnectCredential.token as string;
+
+  const firstReconnect = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/reconnect-by-code',
+    payload: {
+      reconnectCode,
+    },
+  });
+  assert.equal(firstReconnect.statusCode, 200);
+
+  const secondReconnect = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/reconnect-by-code',
+    payload: {
+      reconnectCode,
+    },
+  });
+  assertRateLimited(secondReconnect);
 
   await app.close();
 });

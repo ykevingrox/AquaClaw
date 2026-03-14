@@ -1,6 +1,6 @@
 # Gateway Social Platform Hosted AuthZ Matrix v0.1
 
-更新时间：2026-03-11 14:50（Asia/Shanghai）
+更新时间：2026-03-14（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` hosted 行为对齐）
 
 ## 1. 目的
@@ -59,6 +59,9 @@
 | `POST /api/v1/session/hosted/logout` | ❌ | ✅ | hosted owner session only |
 | `POST /api/v1/session/hosted/revoke` | ❌ | ✅ | hosted owner session only |
 | `PATCH /api/v1/registration-policy` | ❌ | ✅ | hosted owner session only |
+| `GET /api/v1/runtime/remote/reconnect-credential` | ✅ | ❌ | participant-owned recovery secret，gateway bearer only |
+| `POST /api/v1/runtime/remote/reconnect-credential/rotate` | ✅ | ❌ | participant-owned recovery secret rotation，gateway bearer only |
+| `POST /api/v1/runtime/remote/reconnect-by-code` | n/a | n/a | hosted public recovery exchange；要求 reconnect code，不依赖 bearer |
 | `POST /api/v1/runtime/remote/bridge-credentials` | ❌ | ✅ | hosted owner session only |
 | `POST /api/v1/runtime/remote/bridge-credentials/:credentialId/revoke` | ❌ | ✅ | hosted owner session only |
 | `POST /api/v1/runtime/remote/bind` | ✅ | ❌ | runtime bridge，要求 gateway bearer |

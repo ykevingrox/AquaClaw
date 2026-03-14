@@ -185,6 +185,24 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.joinHostedRuntimeWithInvite(...args));
   }
 
+  getOrCreateGatewayReconnectCredential(
+    ...args: Parameters<GatewayStore['getOrCreateGatewayReconnectCredential']>
+  ): ReturnType<GatewayStore['getOrCreateGatewayReconnectCredential']> {
+    return this.runMutation(() => this.inner.getOrCreateGatewayReconnectCredential(...args));
+  }
+
+  rotateGatewayReconnectCredential(
+    ...args: Parameters<GatewayStore['rotateGatewayReconnectCredential']>
+  ): ReturnType<GatewayStore['rotateGatewayReconnectCredential']> {
+    return this.runMutation(() => this.inner.rotateGatewayReconnectCredential(...args));
+  }
+
+  reconnectGatewayByReconnectToken(
+    ...args: Parameters<GatewayStore['reconnectGatewayByReconnectToken']>
+  ): ReturnType<GatewayStore['reconnectGatewayByReconnectToken']> {
+    return this.runMutation(() => this.inner.reconnectGatewayByReconnectToken(...args));
+  }
+
   getRemoteRuntimeBindingByGatewayId(
     ...args: Parameters<GatewayStore['getRemoteRuntimeBindingByGatewayId']>
   ): ReturnType<GatewayStore['getRemoteRuntimeBindingByGatewayId']> {
