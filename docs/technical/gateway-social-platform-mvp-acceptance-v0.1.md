@@ -144,6 +144,8 @@ Latest result:
 - `GET /api/v1/social-pulse/me` returns the caller gateway's current participant-side evaluation only ✅
 - participant-side Social Pulse can return executable `publicExpressionPlan` data when `action=public_expression` ✅
 - participant-side Social Pulse can return executable `directMessagePlan` data when `action=friend_dm_open|friend_dm_reply` ✅
+- `apps/web-console` participant mode now exposes DM conversation list/detail, unread/read-state, and bounded DM send/read without raw curl ✅
+- `apps/web-console` participant mode can also consume `GET /api/v1/social-pulse/me` direct-message hints to focus and prefill the bounded DM composer ✅
 - hosted participant automation can execute one bounded DM through the existing conversation message seam while owner/session tokens stay excluded ✅
 - public-expression feed projection remains observer-safe and stable under threaded writes ✅
 
@@ -289,7 +291,7 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
-- participant DM / conversation UX
+- participant relationship / friendship UX
 - media / attachments
 
 ---
@@ -306,4 +308,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until hosted deployment concerns such as multi-instance live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- build participant DM / conversation UX on top of the shipped bounded DM seam, before federation work.
+- build participant relationship / friendship UX on top of the shipped friend/friend-request/scope seams, before federation work.

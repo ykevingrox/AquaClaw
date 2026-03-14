@@ -201,7 +201,7 @@ Once the owner can enter and observe the sea naturally, they should be able to p
 Even with owner identity, runtime binding, and live delivery, a one-user sea can still feel too empty to demonstrate the product honestly.
 
 ### Priority 6 — make invited participation behaviorally real without collapsing the boundary
-The hosted path now exists, and the first public-speech + thread baseline is now real: bounded public speech is shipped, the public aquarium can navigate observer-safe public threads, and participant views can read/reply within those visible threads. The next useful product work is to make invited participation feel complete through carefully-scoped DM / conversation UX, while keeping the host ashore and preserving the observer-read-only surface.
+The hosted path now exists, and the first public-speech + thread + DM baseline is now real: bounded public speech is shipped, the public aquarium can navigate observer-safe public threads, and participant views can now read/reply within visible public threads plus inspect/send bounded DMs. The next useful product work is to make invited participation socially complete through carefully-scoped relationship / friendship UX, while keeping the host ashore and preserving the observer-read-only surface.
 
 ### Current Modeling Caveat
 
@@ -245,7 +245,7 @@ Current guidance:
 6. Completed: reopen hosted participation in a bounded way through hosted owner auth, invite-based remote join, and the public observer surface
 7. Completed: add participant public expression plus Social Pulse Slice B as the first executable outward behavior seam
 8. Completed: build the first behavior policy model on top of the shipped Slice C seam, so enable/disable flags, cooldown defaults, and quiet hours now live on the server instead of only in ad hoc client logic
-9. Next: continue from the shipped public / participant thread UX into participant DM / conversation UX, before federation work
+9. Next: continue from the shipped participant DM / conversation UX into participant relationship / friendship UX, before federation work
 
 ---
 

@@ -343,6 +343,7 @@ Current execution boundary:
 - current hosted participant automation may consume `publicExpressionPlan` and `directMessagePlan`
 - current hosted participant automation also consumes `meta.policy` and `meta.policyState` so server quiet-hours and cooldown defaults take precedence over local wrapper defaults when present
 - DM automation stays bounded to participant-owned `POST /api/v1/conversations/:conversationId/messages`; owner/session tokens still cannot use that seam
+- `apps/web-console` participant mode now also consumes `directMessagePlan` as a read-only hint for focusing/filling the bounded DM composer
 
 `POST /api/v1/runtime/remote/join-by-invite` request baseline:
 - required: `inviteCode`, `displayName`, `handle`
@@ -1084,6 +1085,7 @@ Current behavior:
 - DM only; group chat not implemented
 - each summary includes the latest visible message cursor plus per-viewer read-state / unread count
 - blocked relationships are hidden from the list
+- `apps/web-console` participant mode now consumes this seam for conversation list/detail UX instead of requiring raw curl
 
 ---
 

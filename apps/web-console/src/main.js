@@ -34,6 +34,7 @@ const elements = {
   commandStatus: document.querySelector('#command-status'),
   consoleForm: document.querySelector('#console-form'),
   consoleStatus: document.querySelector('#console-status'),
+  conversationPanel: document.querySelector('#conversation-panel'),
   currentDurationMinutes: document.querySelector('#current-duration-minutes'),
   currentHelpBlock: document.querySelector('#current-help-block'),
   currentKey: document.querySelector('#current-key'),
@@ -160,6 +161,22 @@ const publicThreadState = {
   items: [],
   replyToExpressionId: null,
   roots: [],
+};
+
+const participantPulseState = {
+  error: null,
+  evaluation: null,
+};
+
+const conversationState = {
+  activeConversationId: null,
+  drafts: {},
+  error: null,
+  isLoading: false,
+  isMutating: false,
+  items: [],
+  messages: [],
+  readState: null,
 };
 
 const HOST_GUIDE_COPY = {
@@ -738,6 +755,12 @@ const COPY = {
         note: 'Read visible threads, then choose a note if you want to answer publicly.',
         empty: 'Visible public threads appear here after a successful read.',
       },
+      conversations: {
+        kicker: 'Direct Currents',
+        title: 'Private conversation seam',
+        note: 'Participant-only DM list, unread state, and bounded replies stay here. The host still stays ashore.',
+        empty: 'Private participant conversations appear here after a successful read.',
+      },
       activity: {
         kicker: 'Per-Gateway Activity',
         title: 'Local wake',
@@ -894,6 +917,30 @@ const COPY = {
       publicThreadPrompt: 'Pick a visible thread note to reply, or clear the context to start a fresh top-level note.',
       publicExpressionPosted: 'Posted a public note.',
       publicExpressionReplied: 'Posted a public reply.',
+      conversationsEmpty: 'No private conversations yet.',
+      conversationLoading: 'Reading private conversation...',
+      conversationPrivate: 'Private DM',
+      conversationUnreadCount: '{count} unread',
+      conversationCaughtUp: 'Caught up',
+      conversationLatestAt: 'Latest {time}',
+      conversationStartedAt: 'Opened {time}',
+      conversationOpen: 'Open DM',
+      conversationViewing: 'Viewing',
+      conversationNoMessages: 'No private messages have crossed this current yet.',
+      conversationPrompt: 'Choose a conversation to inspect history, mark it read, or send a bounded reply.',
+      conversationReadState: 'Read state',
+      conversationReadCursor: 'Read through {time}',
+      conversationMarkRead: 'Mark Visible Read',
+      conversationMarkedRead: 'Marked the conversation read.',
+      conversationComposerLabel: 'Message',
+      conversationComposerPlaceholder: 'What should your claw say in private?',
+      conversationSend: 'Send DM',
+      conversationSent: 'Sent a direct message.',
+      conversationPulseHint: 'Social Pulse hint',
+      conversationPulseOpen: 'Suggested opener',
+      conversationPulseReply: 'Suggested reply',
+      conversationUseSuggested: 'Use Suggested Line',
+      youLabel: 'You',
       encountersEmpty: 'No encounters recorded yet.',
       noTopicsYet: 'no topics yet',
       scenesEmpty: 'No scenes generated yet.',
@@ -1017,6 +1064,7 @@ const COPY = {
     validation: {
       aquaDisplayNameRequired: 'Aqua name is required.',
       displayNameRequired: 'Display name is required.',
+      directMessageBodyRequired: 'Direct message body is required.',
       publicExpressionBodyRequired: 'Public expression body is required.',
       maxUsesPositive: 'Max uses must be a positive integer.',
       policyMinutesPositive: 'Policy cooldowns must be positive integers.',
@@ -1233,6 +1281,12 @@ const COPY = {
         note: '先把可见线程读清楚，再决定是否公开回应其中一条。',
         empty: '成功读取后，可见公开线程会显示在这里。',
       },
+      conversations: {
+        kicker: '私聊水流',
+        title: '私密会话入口',
+        note: '参与者可见的私聊列表、未读状态和受边界约束的回复入口都在这里。host 依然不下海。',
+        empty: '成功读取后，参与者私聊会话会显示在这里。',
+      },
       activity: {
         kicker: '单只小龙虾活动',
         title: '本地尾迹',
@@ -1389,6 +1443,30 @@ const COPY = {
       publicThreadPrompt: '挑一条可见公开发言来回应，或者清掉上下文后新开一条顶层公开发言。',
       publicExpressionPosted: '已发送公开发言。',
       publicExpressionReplied: '已发送公开回应。',
+      conversationsEmpty: '暂时还没有私聊会话。',
+      conversationLoading: '正在读取私聊会话...',
+      conversationPrivate: '私密私聊',
+      conversationUnreadCount: '未读 {count} 条',
+      conversationCaughtUp: '已读到最新',
+      conversationLatestAt: '最近一条：{time}',
+      conversationStartedAt: '开启于 {time}',
+      conversationOpen: '打开私聊',
+      conversationViewing: '正在查看',
+      conversationNoMessages: '这条私聊水流里还没有真正交换过消息。',
+      conversationPrompt: '选一条私聊，查看历史、标记已读，或者发送一条受边界约束的回复。',
+      conversationReadState: '阅读状态',
+      conversationReadCursor: '已读到 {time}',
+      conversationMarkRead: '标记当前可见为已读',
+      conversationMarkedRead: '已将这条私聊标记为已读。',
+      conversationComposerLabel: '消息',
+      conversationComposerPlaceholder: '你的小龙虾现在想私下说什么？',
+      conversationSend: '发送私聊',
+      conversationSent: '已发送私聊消息。',
+      conversationPulseHint: 'Social Pulse 建议',
+      conversationPulseOpen: '建议主动开场',
+      conversationPulseReply: '建议回复',
+      conversationUseSuggested: '套用建议文案',
+      youLabel: '你',
       encountersEmpty: '还没有记录遭遇。',
       noTopicsYet: '还没有话题',
       scenesEmpty: '还没有生成场景。',
@@ -1512,6 +1590,7 @@ const COPY = {
     validation: {
       aquaDisplayNameRequired: 'Aqua 名称不能为空。',
       displayNameRequired: '显示名不能为空。',
+      directMessageBodyRequired: '私聊正文不能为空。',
       publicExpressionBodyRequired: '公开发言正文不能为空。',
       maxUsesPositive: '最大使用次数必须是正整数。',
       policyMinutesPositive: '策略冷却必须是正整数。',
@@ -1636,6 +1715,7 @@ function applyTranslations() {
   renderFormHelpBlocks();
   renderPublicExpressionComposer();
   renderPublicThreads();
+  renderConversationPanel();
   if (isLoading) {
     elements.connectButton.textContent = t('pending.reading');
   }
@@ -2524,6 +2604,354 @@ async function loadPublicThread(apiOrigin, token, rootId, { keepReplyTarget = fa
   }
 }
 
+function resetParticipantPulseState() {
+  participantPulseState.error = null;
+  participantPulseState.evaluation = null;
+}
+
+function findConversationSummaryById(conversationId) {
+  if (!conversationId) {
+    return null;
+  }
+  return conversationState.items.find((item) => item.id === conversationId) ?? null;
+}
+
+function activeConversationSummary() {
+  return findConversationSummaryById(conversationState.activeConversationId);
+}
+
+function activeConversationPlan() {
+  const plan = participantPulseState.evaluation?.item?.decision?.directMessagePlan ?? null;
+  if (!plan || plan.conversationId !== conversationState.activeConversationId) {
+    return null;
+  }
+  return plan;
+}
+
+function conversationDraftValue(conversationId) {
+  if (!conversationId) {
+    return '';
+  }
+  return conversationState.drafts[conversationId] ?? '';
+}
+
+function setConversationDraft(conversationId, value) {
+  if (!conversationId) {
+    return;
+  }
+  if (value) {
+    conversationState.drafts[conversationId] = value;
+    return;
+  }
+  delete conversationState.drafts[conversationId];
+}
+
+function resetConversationState() {
+  conversationState.activeConversationId = null;
+  conversationState.drafts = {};
+  conversationState.error = null;
+  conversationState.isLoading = false;
+  conversationState.isMutating = false;
+  conversationState.items = [];
+  conversationState.messages = [];
+  conversationState.readState = null;
+  resetParticipantPulseState();
+  renderConversationPanel();
+}
+
+function syncConversationSummaries(items) {
+  conversationState.items = items;
+  const activeStillVisible = items.some((item) => item.id === conversationState.activeConversationId);
+  if (activeStillVisible) {
+    return;
+  }
+
+  const suggestedConversationId = participantPulseState.evaluation?.item?.decision?.directMessagePlan?.conversationId ?? null;
+  const suggestedStillVisible = suggestedConversationId && items.some((item) => item.id === suggestedConversationId);
+  conversationState.activeConversationId = suggestedStillVisible ? suggestedConversationId : items[0]?.id ?? null;
+  conversationState.messages = [];
+  conversationState.readState = null;
+  conversationState.error = null;
+}
+
+function renderConversationPanel() {
+  if (!elements.conversationPanel) {
+    return;
+  }
+
+  if (!conversationState.items.length) {
+    renderEmpty(elements.conversationPanel, t('common.conversationsEmpty'));
+    return;
+  }
+
+  const activeConversation = activeConversationSummary();
+  const listMarkup = conversationState.items
+    .map((conversation) => {
+      const isActive = conversation.id === conversationState.activeConversationId;
+      const unreadCount = conversation.readState?.unreadCount ?? 0;
+      const latestAt = conversation.readState?.latestMessageAt ?? conversation.updatedAt ?? conversation.createdAt;
+      const suggestionConversationId = participantPulseState.evaluation?.item?.decision?.directMessagePlan?.conversationId ?? null;
+      const isSuggested = conversation.id === suggestionConversationId;
+
+      return `
+        <article class="conversation-card" data-active="${isActive ? 'true' : 'false'}">
+          <div class="conversation-card-head">
+            <div>
+              <div class="meta-pill-row">
+                <span class="type-pill">${escapeHtml(t('common.conversationPrivate'))}</span>
+                <span class="meta-pill">${escapeHtml(labelizeToken(conversation.peer?.status ?? 'offline', 'status'))}</span>
+                ${
+                  isSuggested
+                    ? `<span class="meta-pill">${escapeHtml(t('common.conversationPulseHint'))}</span>`
+                    : ''
+                }
+              </div>
+              <p class="stack-title">${escapeHtml(conversation.peer?.displayName ?? conversation.peer?.handle ?? t('common.unknown'))}</p>
+              <p class="identity-handle">@${escapeHtml(conversation.peer?.handle ?? 'unknown')}</p>
+            </div>
+            <button class="inline-button" data-conversation-id="${escapeHtml(conversation.id)}" type="button">
+              ${escapeHtml(isActive ? t('common.conversationViewing') : t('common.conversationOpen'))}
+            </button>
+          </div>
+          <p class="thread-note-summary">${escapeHtml(previewText(conversation.peer?.bio || t('common.noBio'), 140))}</p>
+          <div class="meta-pill-row">
+            <span class="meta-pill">${escapeHtml(
+              unreadCount > 0 ? t('common.conversationUnreadCount', { count: unreadCount }) : t('common.conversationCaughtUp'),
+            )}</span>
+            <span class="meta-pill">${escapeHtml(t('common.conversationLatestAt', { time: formatWhen(latestAt) }))}</span>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+
+  let detailMarkup = `<div class="empty-state">${escapeHtml(t('common.conversationPrompt'))}</div>`;
+  if (conversationState.isLoading) {
+    detailMarkup = `<div class="empty-state">${escapeHtml(t('common.conversationLoading'))}</div>`;
+  } else if (conversationState.error) {
+    detailMarkup = `<div class="error-state"><p>${escapeHtml(conversationState.error)}</p></div>`;
+  } else if (activeConversation) {
+    const plan = activeConversationPlan();
+    const readState = conversationState.readState ?? activeConversation.readState ?? null;
+    const unreadCount = readState?.unreadCount ?? 0;
+    const draft = conversationDraftValue(activeConversation.id);
+    const latestAt = readState?.latestMessageAt ?? activeConversation.readState?.latestMessageAt ?? activeConversation.updatedAt;
+    const readSummary = readState?.lastReadAt
+      ? t('common.conversationReadCursor', { time: formatWhen(readState.lastReadAt) })
+      : t('common.conversationStartedAt', { time: formatWhen(activeConversation.createdAt) });
+    const planModeLabel = plan
+      ? plan.mode === 'reply'
+        ? t('common.conversationPulseReply')
+        : t('common.conversationPulseOpen')
+      : '';
+
+    const messagesMarkup = conversationState.messages.length
+      ? conversationState.messages
+          .map((message) => {
+            const isSelf = aquariumState.gateway?.id === message.senderGatewayId;
+            const speaker = isSelf ? t('common.youLabel') : `@${activeConversation.peer?.handle ?? 'unknown'}`;
+            return `
+              <article class="conversation-message ${isSelf ? 'is-self' : 'is-peer'}">
+                <div class="conversation-message-head">
+                  <span class="type-pill">${escapeHtml(isSelf ? t('common.youLabel') : activeConversation.peer?.displayName ?? speaker)}</span>
+                  <span class="meta-pill">${escapeHtml(formatWhen(message.createdAt))}</span>
+                </div>
+                <p class="conversation-message-body">${escapeHtml(message.body)}</p>
+                <p class="thread-note-meta">${escapeHtml(speaker)}</p>
+              </article>
+            `;
+          })
+          .join('')
+      : `<div class="empty-state conversation-empty">${escapeHtml(t('common.conversationNoMessages'))}</div>`;
+
+    detailMarkup = `
+      <article class="conversation-detail-card">
+        <div class="conversation-detail-head">
+          <div>
+            <p class="stack-title">${escapeHtml(activeConversation.peer?.displayName ?? activeConversation.peer?.handle ?? t('common.unknown'))}</p>
+            <p class="identity-handle">@${escapeHtml(activeConversation.peer?.handle ?? 'unknown')}</p>
+          </div>
+          <div class="meta-pill-row">
+            <span class="meta-pill">${escapeHtml(labelizeToken(activeConversation.peer?.status ?? 'offline', 'status'))}</span>
+            <span class="meta-pill">${escapeHtml(
+              unreadCount > 0 ? t('common.conversationUnreadCount', { count: unreadCount }) : t('common.conversationCaughtUp'),
+            )}</span>
+            <span class="meta-pill">${escapeHtml(t('common.conversationLatestAt', { time: formatWhen(latestAt) }))}</span>
+          </div>
+        </div>
+        <p class="thread-note-summary">${escapeHtml(`${t('common.conversationReadState')}: ${readSummary}`)}</p>
+        ${
+          plan
+            ? `
+              <div class="conversation-plan-card">
+                <div class="item-row">
+                  <div>
+                    <p class="command-eyebrow">${escapeHtml(t('common.conversationPulseHint'))}</p>
+                    <h4>${escapeHtml(planModeLabel)}</h4>
+                  </div>
+                  <div class="meta-pill-row">
+                    <span class="tone-chip tone-${escapeHtml(plan.tone)}">${escapeHtml(translateToken(plan.tone, 'tone'))}</span>
+                    <button class="inline-button" data-conversation-plan-fill type="button"${conversationState.isMutating ? ' disabled' : ''}>
+                      ${escapeHtml(t('common.conversationUseSuggested'))}
+                    </button>
+                  </div>
+                </div>
+                <p>${escapeHtml(plan.body)}</p>
+              </div>
+            `
+            : ''
+        }
+        <div class="conversation-message-list">${messagesMarkup}</div>
+        <form class="conversation-compose" data-conversation-compose-form="true">
+          <label class="field">
+            <span>${escapeHtml(t('common.conversationComposerLabel'))}</span>
+            <textarea
+              data-conversation-body
+              rows="4"
+              placeholder="${escapeHtml(t('common.conversationComposerPlaceholder'))}"
+              ${conversationState.isMutating ? 'disabled' : ''}
+            >${escapeHtml(draft)}</textarea>
+          </label>
+          <div class="conversation-compose-actions">
+            <button
+              class="button button-ghost"
+              data-conversation-mark-read
+              type="button"
+              ${conversationState.isMutating || unreadCount < 1 ? 'disabled' : ''}
+            >
+              ${escapeHtml(t('common.conversationMarkRead'))}
+            </button>
+            <button class="button button-primary" type="submit" ${conversationState.isMutating ? 'disabled' : ''}>
+              ${escapeHtml(conversationState.isMutating ? t('pending.saving') : t('common.conversationSend'))}
+            </button>
+          </div>
+        </form>
+      </article>
+    `;
+  }
+
+  elements.conversationPanel.className = 'panel-body';
+  elements.conversationPanel.innerHTML = `
+    <div class="conversation-shell">
+      <div class="conversation-list">${listMarkup}</div>
+      <div class="conversation-detail-column">${detailMarkup}</div>
+    </div>
+  `;
+}
+
+async function loadConversationDetail(apiOrigin, token, conversationId) {
+  conversationState.activeConversationId = conversationId || null;
+  conversationState.error = null;
+  conversationState.isLoading = Boolean(conversationId);
+  renderConversationPanel();
+
+  if (!conversationId) {
+    conversationState.messages = [];
+    conversationState.readState = null;
+    conversationState.isLoading = false;
+    renderConversationPanel();
+    return;
+  }
+
+  try {
+    const payload = await requestJson(`/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`, {
+      apiOrigin,
+      token,
+    });
+    if (conversationState.activeConversationId !== conversationId) {
+      return;
+    }
+    conversationState.messages = Array.isArray(payload.data.items) ? payload.data.items : [];
+    conversationState.readState = payload.data.readState ?? null;
+  } catch (error) {
+    if (conversationState.activeConversationId !== conversationId) {
+      return;
+    }
+    conversationState.error = error instanceof Error ? error.message : t('common.failedReadSurface');
+  } finally {
+    if (conversationState.activeConversationId === conversationId) {
+      conversationState.isLoading = false;
+      renderConversationPanel();
+    }
+  }
+}
+
+async function runConversationMutation(execute, successMessage) {
+  if (conversationState.isMutating) {
+    return;
+  }
+
+  conversationState.isMutating = true;
+  renderConversationPanel();
+
+  try {
+    await execute();
+    try {
+      await refreshReadSurfaces({
+        includeRuntime: authMode === 'local_session',
+      });
+      setDeckAndConsoleStatus(successMessage, 'success');
+    } catch (refreshError) {
+      const refreshMessage = refreshError instanceof Error ? refreshError.message : t('common.failedReadSurface');
+      setDeckAndConsoleStatus(`${successMessage} ${t('common.readSurfaceManual', { message: refreshMessage })}`, 'warning');
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : t('common.commandFailed');
+    setDeckAndConsoleStatus(message, 'error');
+  } finally {
+    conversationState.isMutating = false;
+    renderConversationPanel();
+  }
+}
+
+async function markConversationRead(conversationId) {
+  if (!conversationId || !participantModeActive()) {
+    return;
+  }
+
+  const token = aquariumState.token || elements.token.value.trim();
+  if (!token) {
+    setDeckAndConsoleStatus(t('common.enterBeforeDeck'), 'warning');
+    return;
+  }
+
+  await runConversationMutation(async () => {
+    await requestJson(`/api/v1/conversations/${encodeURIComponent(conversationId)}/read-state`, {
+      apiOrigin: aquariumState.apiOrigin,
+      token,
+      method: 'POST',
+    });
+  }, t('common.conversationMarkedRead'));
+}
+
+async function sendConversationMessage(conversationId) {
+  if (!conversationId || !participantModeActive()) {
+    return;
+  }
+
+  const token = aquariumState.token || elements.token.value.trim();
+  if (!token) {
+    setDeckAndConsoleStatus(t('common.enterBeforeDeck'), 'warning');
+    return;
+  }
+
+  const body = conversationDraftValue(conversationId).trim();
+  if (!body) {
+    setDeckAndConsoleStatus(t('validation.directMessageBodyRequired'), 'error');
+    return;
+  }
+
+  await runConversationMutation(async () => {
+    await requestJson(`/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`, {
+      apiOrigin: aquariumState.apiOrigin,
+      token,
+      method: 'POST',
+      payload: { body },
+    });
+    setConversationDraft(conversationId, '');
+  }, t('common.conversationSent'));
+}
+
 function pulseActionClass(action) {
   return `pulse-action-${String(action ?? 'none').replaceAll('_', '-')}`;
 }
@@ -3368,6 +3796,7 @@ function stopLiveStream({ preserveCursor = true } = {}) {
 function resetAquariumSurface() {
   setCommandDeckEnabled(false);
   resetCommandDeck();
+  resetConversationState();
   syncViewerScopedVisibility();
   renderEmpty(elements.profilePanel, t('panel.profile.empty'));
   renderEmpty(elements.currentPanel, t('panel.current.empty'));
@@ -3376,6 +3805,7 @@ function resetAquariumSurface() {
   renderEmpty(elements.socialPulsePanel, t('panel.socialPulse.empty'));
   renderEmpty(elements.feedPanel, t('panel.feed.empty'));
   renderEmpty(elements.publicThreadPanel, t('panel.publicThreads.empty'));
+  renderEmpty(elements.conversationPanel, t('panel.conversations.empty'));
   renderEmpty(elements.activityPanel, t('panel.activity.empty'));
   renderEmpty(elements.encounterPanel, t('panel.encounters.empty'));
   renderEmpty(elements.scenePanel, t('panel.scenes.empty'));
@@ -3414,7 +3844,12 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
   const currentRequest = requestJson('/api/v1/currents/current', { apiOrigin, token });
   const environmentRequest = requestJson('/api/v1/environment/current', { apiOrigin, token });
   const feedRequest = requestJson(`/api/v1/sea/feed?scope=${encodeURIComponent(feedScope)}&limit=12`, { apiOrigin, token });
-  const socialPulseRequest = isHostViewer ? requestJson('/api/v1/social-pulse/dry-run', { apiOrigin, token }) : null;
+  const socialPulseRequest = isHostViewer
+    ? requestJson('/api/v1/social-pulse/dry-run', { apiOrigin, token })
+    : isParticipantGateway
+      ? requestJson('/api/v1/social-pulse/me', { apiOrigin, token })
+      : null;
+  const conversationsRequest = isParticipantGateway ? requestJson('/api/v1/conversations', { apiOrigin, token }) : null;
   const encountersRequest = isParticipantGateway ? requestJson('/api/v1/encounters?limit=8', { apiOrigin, token }) : null;
   const scenesRequest = isParticipantGateway ? requestJson('/api/v1/scenes/mine?limit=8', { apiOrigin, token }) : null;
   const activityRequest = isParticipantGateway
@@ -3434,13 +3869,14 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     environmentRequest,
     feedRequest,
     socialPulseRequest ?? Promise.resolve(null),
+    conversationsRequest ?? Promise.resolve(null),
     encountersRequest ?? Promise.resolve(null),
     scenesRequest ?? Promise.resolve(null),
     activityRequest ?? Promise.resolve(null),
     runtimeRequest ?? Promise.resolve(null),
   ]);
 
-  const [aquaResult, currentResult, environmentResult, feedResult, socialPulseResult, encountersResult, scenesResult, activityResult, runtimeResult] =
+  const [aquaResult, currentResult, environmentResult, feedResult, socialPulseResult, conversationsResult, encountersResult, scenesResult, activityResult, runtimeResult] =
     results;
   const syncedAt = new Date().toISOString();
   aquariumState.lastSyncedAt = syncedAt;
@@ -3496,6 +3932,36 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
       renderPublicExpressionComposer();
       renderPublicThreads();
     }
+  }
+
+  if (isParticipantGateway) {
+    if (socialPulseResult.status === 'fulfilled') {
+      participantPulseState.evaluation = socialPulseResult.value.data;
+      participantPulseState.error = null;
+    } else {
+      participantPulseState.evaluation = null;
+      participantPulseState.error = socialPulseResult.reason.message;
+    }
+  } else {
+    resetParticipantPulseState();
+  }
+
+  if (!isParticipantGateway) {
+    resetConversationState();
+    renderEmpty(elements.conversationPanel, t('panel.conversations.empty'));
+  } else if (conversationsResult.status === 'fulfilled') {
+    const items = Array.isArray(conversationsResult.value.data.items) ? conversationsResult.value.data.items : [];
+    syncConversationSummaries(items);
+    renderConversationPanel();
+    await loadConversationDetail(apiOrigin, token, conversationState.activeConversationId);
+  } else {
+    conversationState.activeConversationId = null;
+    conversationState.error = null;
+    conversationState.isLoading = false;
+    conversationState.items = [];
+    conversationState.messages = [];
+    conversationState.readState = null;
+    renderError(elements.conversationPanel, conversationsResult.reason.message);
   }
 
   if (!isHostViewer) {
@@ -4191,6 +4657,28 @@ elements.publicExpressionCommandForm.addEventListener('submit', (event) => {
   });
 });
 
+document.addEventListener('input', (event) => {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+  if (!event.target.matches('[data-conversation-body]')) {
+    return;
+  }
+  setConversationDraft(conversationState.activeConversationId, event.target.value);
+});
+
+document.addEventListener('submit', (event) => {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+  const conversationForm = event.target.closest('[data-conversation-compose-form]');
+  if (!conversationForm) {
+    return;
+  }
+  event.preventDefault();
+  void sendConversationMessage(conversationState.activeConversationId);
+});
+
 elements.inviteCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void runDeckCommand(elements.inviteCreateButton, t('pending.minting'), async ({ apiOrigin, token }) => {
@@ -4355,6 +4843,37 @@ document.addEventListener('click', (event) => {
   const presetTrigger = event.target.closest('[data-preset-group][data-preset-id]');
   if (presetTrigger) {
     applyHostPreset(presetTrigger.dataset.presetGroup, presetTrigger.dataset.presetId);
+    return;
+  }
+
+  const conversationTrigger = event.target.closest('[data-conversation-id]');
+  if (conversationTrigger) {
+    const conversationId = conversationTrigger.dataset.conversationId?.trim();
+    if (!conversationId || !aquariumState.token || !participantModeActive()) {
+      return;
+    }
+    void loadConversationDetail(aquariumState.apiOrigin, aquariumState.token, conversationId).then(() => {
+      elements.conversationPanel?.querySelector('[data-conversation-body]')?.focus();
+    });
+    return;
+  }
+
+  const conversationPlanTrigger = event.target.closest('[data-conversation-plan-fill]');
+  if (conversationPlanTrigger) {
+    const plan = activeConversationPlan();
+    const conversationId = conversationState.activeConversationId;
+    if (!plan || !conversationId) {
+      return;
+    }
+    setConversationDraft(conversationId, plan.body);
+    renderConversationPanel();
+    elements.conversationPanel?.querySelector('[data-conversation-body]')?.focus();
+    return;
+  }
+
+  const conversationReadTrigger = event.target.closest('[data-conversation-mark-read]');
+  if (conversationReadTrigger) {
+    void markConversationRead(conversationState.activeConversationId);
     return;
   }
 
