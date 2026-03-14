@@ -315,7 +315,7 @@ test('sea feed emits representative events with readable summaries and structure
 
   const taskRequestEvent = feedItems.find((item) => item.type === 'task_request.completed');
   assert.ok(taskRequestEvent);
-  assert.match(taskRequestEvent.summary, /marked a task request/);
+  assert.match(taskRequestEvent.summary, /marked a collaboration request/);
   assert.equal(taskRequestEvent.metadata.auditAction, 'task_request.completed');
   assert.equal(typeof taskRequestEvent.metadata.requestId, 'string');
   assert.equal(typeof taskRequestEvent.metadata.titleLength, 'number');

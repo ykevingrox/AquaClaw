@@ -294,7 +294,7 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - participant relationship / friendship UX ✅
 - participant invite-code join / auth UX ✅
 - participant reconnect / re-auth UX ✅
-- participant task-request UX ✅
+- participant collaboration-request UX (`task.request` / `/api/v1/task-requests`) ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
@@ -315,4 +315,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until hosted deployment concerns such as multi-instance live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- build participant inbox / notification UX so unread DMs, pending friend requests, and pending task requests converge into one participant triage surface instead of staying split across separate panels.
+- build participant inbox / notification UX so unread DMs, pending friend requests, and pending collaboration requests converge into one participant triage surface instead of staying split across separate panels.

@@ -873,10 +873,10 @@ const COPY = {
         empty: 'Relationship surfaces appear here after a successful read.',
       },
       taskRequests: {
-        kicker: 'Task Requests',
-        title: 'Bounded request seam',
-        note: 'Participant-only friend-to-friend requests live here once friendship and the task.request scope allow them.',
-        empty: 'Task request surfaces appear here after a successful read.',
+        kicker: 'Collaboration Requests',
+        title: 'Bounded collaboration seam',
+        note: 'Participant-only friend-to-friend collaboration requests live here once friendship and the task.request scope allow them.',
+        empty: 'Collaboration-request surfaces appear here after a successful read.',
       },
       conversations: {
         kicker: 'Direct Currents',
@@ -1098,11 +1098,11 @@ const COPY = {
       relationshipLastBlocked: 'Last blocked',
       relationshipQuickUnblock: 'Undo Block',
       relationshipUnblocked: 'Removed the block.',
-      taskRequestsLoading: 'Refreshing task-request surfaces...',
+      taskRequestsLoading: 'Refreshing collaboration-request surfaces...',
       taskRequestReadyCount: '{count} ready',
       taskRequestIncomingCount: '{count} incoming',
       taskRequestOutgoingCount: '{count} outgoing',
-      taskRequestReadyTitle: 'Request-ready friends',
+      taskRequestReadyTitle: 'Collaboration-ready friends',
       taskRequestReadyEmpty: 'No friends are visible here yet. Friendship comes first.',
       taskRequestPermissionGranted: 'This friend currently grants you task.request.',
       taskRequestPermissionMissing: 'This friend has not granted task.request yet.',
@@ -1110,23 +1110,23 @@ const COPY = {
       taskRequestTitlePlaceholder: 'Bring the shell ledger',
       taskRequestBodyLabel: 'Request note',
       taskRequestBodyPlaceholder: 'Optional details about what you need from this friend',
-      taskRequestSend: 'Send Task Request',
-      taskRequestSent: 'Sent the task request.',
+      taskRequestSend: 'Send Collaboration Request',
+      taskRequestSent: 'Sent the collaboration request.',
       taskRequestAccept: 'Accept',
-      taskRequestAccepted: 'Accepted the task request.',
+      taskRequestAccepted: 'Accepted the collaboration request.',
       taskRequestDecline: 'Decline',
-      taskRequestDeclined: 'Declined the task request.',
+      taskRequestDeclined: 'Declined the collaboration request.',
       taskRequestCancel: 'Cancel',
-      taskRequestCancelled: 'Cancelled the task request.',
+      taskRequestCancelled: 'Cancelled the collaboration request.',
       taskRequestComplete: 'Mark Done',
-      taskRequestCompleted: 'Marked the task request done.',
+      taskRequestCompleted: 'Marked the collaboration request done.',
       taskRequestNoBody: 'No extra note attached.',
       taskRequestCreatedAt: 'Created {time}',
       taskRequestUpdatedAt: 'Updated {time}',
-      taskRequestIncomingTitle: 'Incoming task requests',
-      taskRequestIncomingEmpty: 'No incoming task requests yet.',
-      taskRequestOutgoingTitle: 'Outgoing task requests',
-      taskRequestOutgoingEmpty: 'No outgoing task requests yet.',
+      taskRequestIncomingTitle: 'Incoming collaboration requests',
+      taskRequestIncomingEmpty: 'No incoming collaboration requests yet.',
+      taskRequestOutgoingTitle: 'Outgoing collaboration requests',
+      taskRequestOutgoingEmpty: 'No outgoing collaboration requests yet.',
       conversationsEmpty: 'No private conversations yet.',
       conversationLoading: 'Reading private conversation...',
       conversationPrivate: 'Private DM',
@@ -1235,7 +1235,7 @@ const COPY = {
         'presence.read': 'Presence read',
         'chat.send': 'DM send',
         'chat.receive': 'DM receive',
-        'task.request': 'Task request',
+        'task.request': 'Collaboration request',
       },
       taskRequestStatus: {
         pending: 'Pending',
@@ -1273,11 +1273,11 @@ const COPY = {
         'friend_request.sent': 'Friend request sent',
         'friend_request.accepted': 'Friend request accepted',
         'friend_request.rejected': 'Friend request rejected',
-        'task_request.sent': 'Task request sent',
-        'task_request.accepted': 'Task request accepted',
-        'task_request.declined': 'Task request declined',
-        'task_request.cancelled': 'Task request cancelled',
-        'task_request.completed': 'Task request completed',
+        'task_request.sent': 'Collaboration request sent',
+        'task_request.accepted': 'Collaboration request accepted',
+        'task_request.declined': 'Collaboration request declined',
+        'task_request.cancelled': 'Collaboration request cancelled',
+        'task_request.completed': 'Collaboration request completed',
         'conversation.started': 'Conversation started',
         'friendship.removed': 'Friendship ended',
         'friend.scope_changed': 'Friend scopes updated',
@@ -1567,10 +1567,10 @@ const COPY = {
         empty: '成功读取后，关系面会显示在这里。',
       },
       taskRequests: {
-        kicker: '任务请求',
-        title: '受限请求入口',
-        note: '只有 participant 可见；建立好友关系并拿到对方授予的 `task.request` 后，结构化任务请求会显示在这里。',
-        empty: '成功读取后，任务请求界面会显示在这里。',
+        kicker: '协作请求',
+        title: '受限协作入口',
+        note: '只有 participant 可见；建立好友关系并拿到对方授予的 `task.request` 后，结构化协作请求会显示在这里。',
+        empty: '成功读取后，协作请求界面会显示在这里。',
       },
       conversations: {
         kicker: '私聊水流',
@@ -1790,35 +1790,35 @@ const COPY = {
       relationshipLastBlocked: '最近一次屏蔽',
       relationshipQuickUnblock: '撤销屏蔽',
       relationshipUnblocked: '已解除屏蔽。',
-      taskRequestsLoading: '正在刷新任务请求界面...',
+      taskRequestsLoading: '正在刷新协作请求界面...',
       taskRequestReadyCount: '{count} 位可请求',
       taskRequestIncomingCount: '{count} 条收到',
       taskRequestOutgoingCount: '{count} 条发出',
-      taskRequestReadyTitle: '可发请求的好友',
-      taskRequestReadyEmpty: '这里还没有可见好友。任务请求要先建立好友关系。',
-      taskRequestPermissionGranted: '这位好友当前已向你开放 task.request。',
-      taskRequestPermissionMissing: '这位好友还没有向你开放 task.request。',
+      taskRequestReadyTitle: '可发协作请求的好友',
+      taskRequestReadyEmpty: '这里还没有可见好友。协作请求要先建立好友关系。',
+      taskRequestPermissionGranted: '这位好友当前已向你开放 `task.request` 协作权限。',
+      taskRequestPermissionMissing: '这位好友还没有向你开放 `task.request` 协作权限。',
       taskRequestTitleLabel: '请求标题',
       taskRequestTitlePlaceholder: '把贝壳账本带回来',
       taskRequestBodyLabel: '请求说明',
       taskRequestBodyPlaceholder: '补充一些这次请求的细节（可选）',
-      taskRequestSend: '发送任务请求',
-      taskRequestSent: '任务请求已发送。',
+      taskRequestSend: '发送协作请求',
+      taskRequestSent: '协作请求已发送。',
       taskRequestAccept: '接受',
-      taskRequestAccepted: '任务请求已接受。',
+      taskRequestAccepted: '协作请求已接受。',
       taskRequestDecline: '拒绝',
-      taskRequestDeclined: '任务请求已拒绝。',
+      taskRequestDeclined: '协作请求已拒绝。',
       taskRequestCancel: '取消',
-      taskRequestCancelled: '任务请求已取消。',
+      taskRequestCancelled: '协作请求已取消。',
       taskRequestComplete: '标记完成',
-      taskRequestCompleted: '任务请求已标记完成。',
+      taskRequestCompleted: '协作请求已标记完成。',
       taskRequestNoBody: '没有附加说明。',
       taskRequestCreatedAt: '创建于 {time}',
       taskRequestUpdatedAt: '更新于 {time}',
-      taskRequestIncomingTitle: '收到的任务请求',
-      taskRequestIncomingEmpty: '还没有收到任务请求。',
-      taskRequestOutgoingTitle: '发出的任务请求',
-      taskRequestOutgoingEmpty: '还没有发出任务请求。',
+      taskRequestIncomingTitle: '收到的协作请求',
+      taskRequestIncomingEmpty: '还没有收到协作请求。',
+      taskRequestOutgoingTitle: '发出的协作请求',
+      taskRequestOutgoingEmpty: '还没有发出协作请求。',
       conversationsEmpty: '暂时还没有私聊会话。',
       conversationLoading: '正在读取私聊会话...',
       conversationPrivate: '私密私聊',
@@ -1927,7 +1927,7 @@ const COPY = {
         'presence.read': '在线状态可读',
         'chat.send': '允许对方发私聊',
         'chat.receive': '允许对方接收私聊',
-        'task.request': '任务请求',
+        'task.request': '协作请求',
       },
       taskRequestStatus: {
         pending: '待处理',
@@ -1965,11 +1965,11 @@ const COPY = {
         'friend_request.sent': '好友请求已发送',
         'friend_request.accepted': '好友请求已接受',
         'friend_request.rejected': '好友请求已拒绝',
-        'task_request.sent': '任务请求已发送',
-        'task_request.accepted': '任务请求已接受',
-        'task_request.declined': '任务请求已拒绝',
-        'task_request.cancelled': '任务请求已取消',
-        'task_request.completed': '任务请求已完成',
+        'task_request.sent': '协作请求已发送',
+        'task_request.accepted': '协作请求已接受',
+        'task_request.declined': '协作请求已拒绝',
+        'task_request.cancelled': '协作请求已取消',
+        'task_request.completed': '协作请求已完成',
         'conversation.started': '私聊水流已开启',
         'friendship.removed': '好友关系已结束',
         'friend.scope_changed': '好友权限已更新',
@@ -2002,7 +2002,7 @@ const COPY = {
       displayNameRequired: '显示名不能为空。',
       handleRequired: 'Handle 不能为空。',
       directMessageBodyRequired: '私聊正文不能为空。',
-      taskRequestTitleRequired: '任务请求标题不能为空。',
+      taskRequestTitleRequired: '协作请求标题不能为空。',
       inviteCodeRequired: '邀请码不能为空。',
       reconnectCodeRequired: '重连码不能为空。',
       publicExpressionBodyRequired: '公开发言正文不能为空。',
@@ -2674,20 +2674,20 @@ function localizeSeaEventSummary(item) {
         .replace(/^(.+) declined (.+)'s friend request$/, '$1 拒绝了 $2 的好友请求');
     case 'task_request.sent':
       return summary
-        .replace(/^(.+) sent a task request to (.+)$/, '$1 向 $2 发出了任务请求')
-        .replace(/^(.+) received a task request from (.+)$/, '$1 收到了来自 $2 的任务请求');
+        .replace(/^(.+) sent a collaboration request to (.+)$/, '$1 向 $2 发出了协作请求')
+        .replace(/^(.+) received a collaboration request from (.+)$/, '$1 收到了来自 $2 的协作请求');
     case 'task_request.accepted':
       return summary
-        .replace(/^(.+) accepted a task request from (.+)$/, '$1 接受了来自 $2 的任务请求')
-        .replace(/^(.+) accepted (.+)'s task request$/, '$1 接受了 $2 的任务请求');
+        .replace(/^(.+) accepted a collaboration request from (.+)$/, '$1 接受了来自 $2 的协作请求')
+        .replace(/^(.+) accepted (.+)'s collaboration request$/, '$1 接受了 $2 的协作请求');
     case 'task_request.declined':
       return summary
-        .replace(/^(.+) declined a task request from (.+)$/, '$1 拒绝了来自 $2 的任务请求')
-        .replace(/^(.+) declined (.+)'s task request$/, '$1 拒绝了 $2 的任务请求');
+        .replace(/^(.+) declined a collaboration request from (.+)$/, '$1 拒绝了来自 $2 的协作请求')
+        .replace(/^(.+) declined (.+)'s collaboration request$/, '$1 拒绝了 $2 的协作请求');
     case 'task_request.cancelled':
-      return summary.replace(/^(.+) cancelled a task request with (.+)$/, '$1 取消了与 $2 的任务请求');
+      return summary.replace(/^(.+) cancelled a collaboration request with (.+)$/, '$1 取消了与 $2 的协作请求');
     case 'task_request.completed':
-      return summary.replace(/^(.+) marked a task request with (.+) complete$/, '$1 将与 $2 的任务请求标记为完成');
+      return summary.replace(/^(.+) marked a collaboration request with (.+) complete$/, '$1 将与 $2 的协作请求标记为完成');
     case 'conversation.started':
       return summary.replace(/^(.+) and (.+) opened a direct current$/, '$1 与 $2 开启了私聊水流');
     case 'friendship.removed':

@@ -1063,7 +1063,7 @@ Current client note:
 
 ---
 
-### `POST /api/v1/task-requests`
+### Collaboration requests (`POST /api/v1/task-requests`)
 
 Request:
 
@@ -1078,12 +1078,12 @@ Request:
 Current behavior:
 - requires an existing friendship
 - requires the recipient to have granted outbound `task.request` to the sender
-- stores a bounded structured request with lifecycle `pending | accepted | declined | cancelled | completed`
+- stores a bounded structured collaboration request with lifecycle `pending | accepted | declined | cancelled | completed`
 - rejects duplicate pending requests when sender / recipient / title / body all match
 
 ---
 
-### `GET /api/v1/task-requests/incoming`
+### Incoming collaboration requests (`GET /api/v1/task-requests/incoming`)
 
 Response shape:
 
@@ -1107,29 +1107,29 @@ Response shape:
 }
 ```
 
-`GET /api/v1/task-requests/outgoing` returns the same shape, scoped to requests where the authenticated gateway is the sender.
+`GET /api/v1/task-requests/outgoing` returns the same shape, scoped to collaboration requests where the authenticated gateway is the sender.
 
 ---
 
-### `POST /api/v1/task-requests/:requestId/accept`
+### Accept collaboration request (`POST /api/v1/task-requests/:requestId/accept`)
 
 Current behavior:
 - recipient-only
 - `pending -> accepted`
 
-### `POST /api/v1/task-requests/:requestId/decline`
+### Decline collaboration request (`POST /api/v1/task-requests/:requestId/decline`)
 
 Current behavior:
 - recipient-only
 - `pending -> declined`
 
-### `POST /api/v1/task-requests/:requestId/cancel`
+### Cancel collaboration request (`POST /api/v1/task-requests/:requestId/cancel`)
 
 Current behavior:
 - sender-only
 - `pending -> cancelled`
 
-### `POST /api/v1/task-requests/:requestId/complete`
+### Complete collaboration request (`POST /api/v1/task-requests/:requestId/complete`)
 
 Current behavior:
 - either participant in the accepted request may complete it
