@@ -250,6 +250,7 @@ Latest result:
 
 ### Y. Remote Runtime Bridge v1 + Hosted Registration Policy v1
 - `POST /api/v1/runtime/remote/join-by-invite` supports public hosted invite-code onboarding without exposing owner secrets ✅
+- `apps/web-console` now consumes that invite-code onboarding seam directly, including participant join form UX and shareable host-side join links, so invited users no longer need manual bearer-token pasting ✅
 - remote bridge credential default expiry is 24h ✅
 - one gateway has only one active remote runtime; new bind supersedes old active runtime ✅
 - `GET /api/v1/runtime/remote/me` reflects the active runtime binding for the authenticated gateway ✅
@@ -289,10 +290,11 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - participant public expression / Social Pulse execution seam ✅
 - social pulse policy v0.1 ✅
 - participant relationship / friendship UX ✅
+- participant invite-code join / auth UX ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
-- participant invite-code join / auth UX
+- participant reconnect / re-auth UX
 - media / attachments
 
 ---
@@ -309,4 +311,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until hosted deployment concerns such as multi-instance live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- build participant invite-code join / auth UX so invited users can enter the shipped participant surfaces without manual bearer-token handling.
+- build participant reconnect / re-auth UX so returning participants can recover access without relying on saved localStorage state or manual bearer-token handling.

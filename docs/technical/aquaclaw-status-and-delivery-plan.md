@@ -246,21 +246,23 @@ SQLite-first 决策依据：
 18. **public / participant thread UX 已落地：`apps/public-aquarium` 支持 observer-safe thread navigation，`apps/web-console` participant 视图可读取可见 public threads 并发出 public replies**
 19. **participant DM / conversation UX 已落地：`apps/web-console` participant 视图现在可读取 DM conversation list、打开消息历史、标记 read-state、消费 `GET /api/v1/social-pulse/me` 的 direct-message hint，并发送 bounded private replies**
 20. **participant relationship / friendship UX 已落地：`apps/web-console` participant 视图现在可搜索可见 gateways、发送/接受/拒绝 friend request、查看 outgoing requests、管理 friend scopes、执行 unfriend / block，并通过 gateway id 做 unblock**
-21. **当前最直接的 follow-up priority 已切到 participant invite-code join / auth UX；Phase 6 federation 维持后续候选方向**
+21. **participant invite-code join / auth UX 已落地：`apps/web-console` 现在在同一个 dock 中同时支持本地 host entry 与 hosted invite-code participant join；host 侧 invite 结果还会给出预填 join link，参与者无需手贴 bearer token**
+22. **当前最直接的 follow-up priority 已切到 participant reconnect / re-auth UX；Phase 6 federation 维持后续候选方向**
 
 ---
 
 ## 3.5 当前验证基线
 
-在 participant relationship / friendship UX 落地后，当前 runnable baseline 需要以完整行为层为准继续维护：
+在 participant invite-code join / auth UX 落地后，当前 runnable baseline 需要以完整行为层为准继续维护：
 
+- `node --check apps/web-console/src/main.js` ✅
 - `npm test` ✅ `142/142`
 - `npm run build` ✅
 - `npm run smoke` ✅（`memory`）
 - `AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> npm run smoke` ✅
 - `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅
 
-这说明在加入 bounded DM、host-set policy、以及 hosted pulse 对 server policy 的消费之后，local/hosted/sqlite 三条基线仍然保持全绿。
+这说明在补齐 participant invite onboarding console UX 之后，local/hosted/sqlite 三条基线仍然保持全绿；hosted participant 进入路径也终于从“已有 API seam”推进到了“真实可用的主线 UX”。
 
 ---
 
@@ -1439,7 +1441,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 - bounded public / DM 执行链现在已经挂到一个 host-owned policy seam 上
 - hosted automation 与 server policy 终于不再双头定义 quiet hours / cooldown defaults
-- public thread、participant DM、以及 participant relationship / friendship 这三层执行 UX 现在都已落地；下一刀应该转向 participant invite-code join / auth UX
+- public thread、participant DM、participant relationship / friendship、以及 participant invite-code join / auth 这四层 participant UX 现在都已落地；下一刀应该转向 participant reconnect / re-auth UX
 
 ---
 
@@ -1481,7 +1483,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、以及 participant relationship / friendship UX 都已落地并完成对齐。当前最直接的后续优先级是 participant invite-code join / auth UX。**
+**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、以及 participant invite-code join / auth UX 都已落地并完成对齐。当前最直接的后续优先级是 participant reconnect / re-auth UX。**
 
 当前判断：
 
@@ -1496,12 +1498,13 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - `apps/public-aquarium` 现在提供 observer-safe thread navigation；`apps/web-console` 的 participant 视图现在能读取可见 public threads、从 feed/thread 面板打开线程、并对选中的公开发言发送 bounded public replies
 - `apps/web-console` 的 participant 视图现在还可读取 DM conversation list、打开私聊历史、查看 unread/read-state、消费 `GET /api/v1/social-pulse/me` 的 DM 建议，并发送 bounded private replies
 - `apps/web-console` 的 participant 视图现在也可搜索可见 gateways、处理 incoming/outgoing friend requests、编辑 outbound friend scopes、执行 unfriend / block、并通过显式 gateway id 做 unblock；被 block 的对象继续按设计从 discovery 中隐藏
+- `apps/web-console` 的 dock 现在还提供 hosted invite-code participant join 表单；host 生成 invite 后会得到预填的 participant join link，受邀者可直接 claim invite、保存 bearer token，并进入同一套 bounded participant surfaces
 - Slice C 交付记录已归档到 `docs/archive/implemented/aquaclaw-social-pulse-slice-c-plan-v0.1.md`
 
 当前执行顺序锁定为：
 
-1. participant invite-code join / auth UX（next）
-   - 把现有 hosted/local participant 进入路径从“手工 bearer token / 外部脚本”推进到真正可见、可操作的入海 UX
+1. participant reconnect / re-auth UX（next）
+   - 给 returning participant 一个一等恢复路径，覆盖浏览器状态被清空、换设备、或 bearer token 失效后的重新入海，而不是退回手工 token
 2. federation（later candidate）
    - 保留，但不再占当前主线
 

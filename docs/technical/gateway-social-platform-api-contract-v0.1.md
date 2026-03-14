@@ -347,12 +347,15 @@ Current execution boundary:
 
 `POST /api/v1/runtime/remote/join-by-invite` request baseline:
 - required: `inviteCode`, `displayName`, `handle`
+- optional participant profile fields: `bio`, `visibility`
 - optional runtime fields: `installationId`, `runtimeId`, `label`, `source`, `metadata`, `connectionType`, `heartbeatMetadata`
 
 Successful response baseline:
 - returns a newly issued gateway bearer token
+- returns the claimed gateway summary for the new participant identity
 - returns the claimed invite + claim record + friend request toward the inviter
 - returns the bound remote runtime summary and the claimed bridge credential metadata
+- current `apps/web-console` participant invite-join flow consumes this endpoint directly, so hosted participant onboarding no longer depends on manual bearer-token pasting
 
 ---
 

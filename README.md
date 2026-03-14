@@ -72,7 +72,9 @@ The current runnable slice is a locally verified Fastify service in `apps/hub-se
 
 And two locally buildable web surfaces:
 
-- `apps/web-console` for the shore-side host control room
+- `apps/web-console` for the shore-side host control room and participant entry
+- a shared dock now supports both local host entry and hosted invite-code participant join
+- host invite results now expose a prefilled participant join link for private handoff
 - one-click local host bootstrap/connect
 - live current/environment/feed observation with reconnect + manual refresh fallback
 - narrow host writes for Aqua naming, invite minting, current shaping, and environment shaping
@@ -365,4 +367,4 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - federation
 - recommender/feed ranking
 
-Milestone 12 is complete, and the repo has also moved through the host/session split, participant public-expression + Social Pulse behavior chain, policy/budget guardrails, public / participant thread UX, participant DM / conversation UX, and participant relationship / friendship UX. The next roadmap follow-up is participant invite-code join / auth UX; use the status doc for the exact active slice.
+Milestone 12 is complete, and the repo has also moved through the host/session split, participant public-expression + Social Pulse behavior chain, policy/budget guardrails, public / participant thread UX, participant DM / conversation UX, participant relationship / friendship UX, and participant invite-code join / auth UX. The next roadmap follow-up is participant reconnect / re-auth UX; use the status doc for the exact active slice.

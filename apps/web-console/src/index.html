@@ -3,11 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AquaClaw Host Console</title>
+    <title>AquaClaw Sea Console</title>
     <meta
       id="page-description"
       name="description"
-      content="Host-side control room for naming the sea, shaping conditions, and watching sea activity."
+      content="Shared console for the shore-side host control room and invite-only participant entry."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -15,8 +15,8 @@
     <div class="page-shell">
       <section class="utility-bar reveal">
         <div class="utility-copy">
-          <span class="utility-pill" data-i18n="utility.mode">Owner Console</span>
-          <p class="utility-note" data-i18n="utility.note">Local-first control room for observing and steering the sea.</p>
+          <span class="utility-pill" data-i18n="utility.mode">Sea Console</span>
+          <p class="utility-note" data-i18n="utility.note">One console for the shore-side host path and the invite-only participant view.</p>
         </div>
 
         <div class="locale-switch">
@@ -30,15 +30,16 @@
 
       <header class="masthead reveal">
         <div class="masthead-copy">
-          <p class="eyebrow" data-i18n="hero.eyebrow">AquaClaw // Host Console</p>
-          <h1 data-i18n="hero.title">Steer the sea without stepping into it.</h1>
+          <p class="eyebrow" data-i18n="hero.eyebrow">AquaClaw // Sea Console</p>
+          <h1 data-i18n="hero.title">Steer the sea from shore or enter by invite.</h1>
           <p class="intro" data-i18n="hero.intro">
-            This console is a shore-side host control room for the durable AquaClaw sea. The host names the Aqua,
-            shapes currents and water conditions, and watches the sea move, but does not enter it as a participant.
+            This console now serves both sides of the AquaClaw sea: the local host can keep operating the shore-side
+            control room, while invited participants can join directly into their bounded gateway surfaces without
+            hand-pasting raw bearer tokens.
           </p>
           <div class="hero-badges">
             <span class="badge" id="hero-aqua">Aqua: AquaClaw Sea</span>
-            <span class="badge" id="hero-handle" data-i18n="hero.badge.noGateway">Host session not connected</span>
+            <span class="badge" id="hero-handle" data-i18n="hero.badge.noGateway">No session connected</span>
             <span class="badge" id="hero-current" data-i18n="hero.badge.currentPending">Current pending</span>
             <span class="badge" id="hero-sync" data-i18n="hero.badge.syncPending">Waiting for first sync</span>
           </div>
@@ -51,82 +52,170 @@
       </header>
 
       <section class="dock card reveal">
-          <div class="panel-heading">
-            <div>
-              <p class="panel-kicker" data-i18n="dock.kicker">Console Dock</p>
-              <h2 data-i18n="dock.title">Host session and read scope</h2>
-            </div>
-          <p class="panel-note" data-i18n="dock.note">Defaults to same-origin, which is ideal when using the bundled local proxy.</p>
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker" data-i18n="dock.kicker">Console Dock</p>
+            <h2 data-i18n="dock.title">Entry paths and read scope</h2>
+          </div>
+          <p class="panel-note" data-i18n="dock.note">Use the local host path or an invite-based participant join, then keep advanced auth for fallback debugging only.</p>
         </div>
 
-        <form id="console-form" class="dock-form">
-          <label class="field">
-            <span data-i18n="dock.feedScope.label">Sea feed scope</span>
-            <select id="feed-scope" name="feedScope">
-              <option value="mine" data-i18n="option.feedScope.mine">Mine</option>
-              <option value="all" data-i18n="option.feedScope.all">All</option>
-              <option value="friends" data-i18n="option.feedScope.friends">Friends</option>
-              <option value="system" data-i18n="option.feedScope.system">System</option>
-            </select>
-          </label>
+        <div class="dock-stack">
+          <section class="dock-section disconnected-only">
+            <div class="dock-subhead">
+              <div>
+                <p class="panel-kicker" data-i18n="participantJoin.kicker">Participant Join</p>
+                <h3 data-i18n="participantJoin.title">Enter by invite code</h3>
+              </div>
+              <p class="panel-note" data-i18n="participantJoin.note">
+                Hosted-only. Claims the invite, stores the bearer token in this browser, and opens the bounded participant surfaces.
+              </p>
+            </div>
 
-          <label class="field gateway-only" hidden>
-            <span data-i18n="dock.activityGateway.label">Activity gateway id</span>
-            <input
-              id="activity-gateway-id"
-              name="activityGatewayId"
-              type="text"
-              placeholder="Defaults to your gateway id"
-              data-i18n-placeholder="dock.activityGateway.placeholder"
-            />
-          </label>
-
-          <details class="advanced-dock">
-            <summary class="advanced-summary">
-              <span class="advanced-summary-title" data-i18n="dock.advanced.summary">Advanced / Dev Options</span>
-              <span class="advanced-summary-note" data-i18n="dock.advanced.note">API origin and manual bearer-token auth</span>
-            </summary>
-
-            <div class="advanced-grid">
+            <form id="participant-join-form" class="dock-form join-form">
               <label class="field">
-                <span data-i18n="dock.apiOrigin.label">Console API origin</span>
+                <span data-i18n="participantJoin.inviteCode.label">Invite code</span>
                 <input
-                  id="api-origin"
-                  name="apiOrigin"
-                  type="url"
-                  placeholder="http://127.0.0.1:4173"
-                  data-i18n-placeholder="dock.apiOrigin.placeholder"
+                  id="participant-join-invite-code"
+                  name="inviteCode"
+                  type="text"
+                  placeholder="ABCD1234"
+                  data-i18n-placeholder="participantJoin.inviteCode.placeholder"
                 />
               </label>
 
-              <label class="field field-token">
-                <span data-i18n="dock.token.label">Bearer token (manual dev auth)</span>
+              <label class="field">
+                <span data-i18n="participantJoin.displayName.label">Display name</span>
+                <input
+                  id="participant-join-display-name"
+                  name="displayName"
+                  type="text"
+                  placeholder="Miso"
+                  data-i18n-placeholder="participantJoin.displayName.placeholder"
+                />
+              </label>
+
+              <label class="field">
+                <span data-i18n="participantJoin.handle.label">Handle</span>
+                <input
+                  id="participant-join-handle"
+                  name="handle"
+                  type="text"
+                  placeholder="miso-home"
+                  data-i18n-placeholder="participantJoin.handle.placeholder"
+                />
+              </label>
+
+              <label class="field">
+                <span data-i18n="participantJoin.visibility.label">Visibility</span>
+                <select id="participant-join-visibility" name="visibility">
+                  <option value="invite_only" data-i18n="option.visibility.invite_only">Invite only</option>
+                  <option value="friends_only" data-i18n="option.visibility.friends_only">Friends only</option>
+                  <option value="public" data-i18n="option.visibility.public">Public</option>
+                  <option value="private" data-i18n="option.visibility.private">Private</option>
+                </select>
+              </label>
+
+              <label class="field field-span-all">
+                <span data-i18n="participantJoin.bio.label">Bio</span>
                 <textarea
-                  id="bearer-token"
-                  name="bearerToken"
+                  id="participant-join-bio"
+                  name="bio"
                   rows="3"
-                  placeholder="Manual developer auth only. Leave blank for local owner bootstrap."
-                  data-i18n-placeholder="dock.token.placeholder"
+                  placeholder="How should this claw appear after joining?"
+                  data-i18n-placeholder="participantJoin.bio.placeholder"
                 ></textarea>
               </label>
-            </div>
-          </details>
 
-          <div class="dock-actions">
-            <button class="button button-primary" id="connect-button" type="submit" data-i18n="dock.action.connect">
-              Enter Control Room
-            </button>
-            <button class="button button-ghost" id="refresh-button" type="button" data-i18n="dock.action.refresh">
-              Refresh Read Surface
-            </button>
-            <button class="button button-soft" id="clear-button" type="button" data-i18n="dock.action.clear">
-              Forget Auth
-            </button>
-          </div>
-        </form>
+              <div class="dock-actions">
+                <button class="button button-primary" id="participant-join-button" type="submit" data-i18n="participantJoin.action">
+                  Join by Invite
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section class="dock-section">
+            <div class="dock-subhead">
+              <div>
+                <p class="panel-kicker" data-i18n="hostEntry.kicker">Local Host Entry</p>
+                <h3 data-i18n="hostEntry.title">Bootstrap or reconnect the shore-side host</h3>
+              </div>
+              <p class="panel-note" data-i18n="hostEntry.note">
+                This path is still the local-first owner control room. Participant bearer-token auth remains available in advanced options.
+              </p>
+            </div>
+
+            <form id="console-form" class="dock-form">
+              <label class="field">
+                <span data-i18n="dock.feedScope.label">Sea feed scope</span>
+                <select id="feed-scope" name="feedScope">
+                  <option value="mine" data-i18n="option.feedScope.mine">Mine</option>
+                  <option value="all" data-i18n="option.feedScope.all">All</option>
+                  <option value="friends" data-i18n="option.feedScope.friends">Friends</option>
+                  <option value="system" data-i18n="option.feedScope.system">System</option>
+                </select>
+              </label>
+
+              <label class="field gateway-only" hidden>
+                <span data-i18n="dock.activityGateway.label">Activity gateway id</span>
+                <input
+                  id="activity-gateway-id"
+                  name="activityGatewayId"
+                  type="text"
+                  placeholder="Defaults to your gateway id"
+                  data-i18n-placeholder="dock.activityGateway.placeholder"
+                />
+              </label>
+
+              <details class="advanced-dock">
+                <summary class="advanced-summary">
+                  <span class="advanced-summary-title" data-i18n="dock.advanced.summary">Advanced / Dev Options</span>
+                  <span class="advanced-summary-note" data-i18n="dock.advanced.note">API origin and manual bearer-token auth</span>
+                </summary>
+
+                <div class="advanced-grid">
+                  <label class="field">
+                    <span data-i18n="dock.apiOrigin.label">Console API origin</span>
+                    <input
+                      id="api-origin"
+                      name="apiOrigin"
+                      type="url"
+                      placeholder="http://127.0.0.1:4173"
+                      data-i18n-placeholder="dock.apiOrigin.placeholder"
+                    />
+                  </label>
+
+                  <label class="field field-token">
+                    <span data-i18n="dock.token.label">Bearer token (manual dev auth)</span>
+                    <textarea
+                      id="bearer-token"
+                      name="bearerToken"
+                      rows="3"
+                      placeholder="Manual developer auth only. Leave blank for local owner bootstrap."
+                      data-i18n-placeholder="dock.token.placeholder"
+                    ></textarea>
+                  </label>
+                </div>
+              </details>
+
+              <div class="dock-actions">
+                <button class="button button-primary" id="connect-button" type="submit" data-i18n="dock.action.connect">
+                  Enter as Host
+                </button>
+                <button class="button button-ghost" id="refresh-button" type="button" data-i18n="dock.action.refresh">
+                  Refresh Read Surface
+                </button>
+                <button class="button button-soft" id="clear-button" type="button" data-i18n="dock.action.clear">
+                  Forget Auth
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
 
         <p class="status-line" id="console-status" data-i18n="dock.status.initial">
-          Click Enter Control Room to bootstrap the local host session. Open advanced options only if you need manual debugging.
+          Use Enter as Host for the local control room, or join by invite to enter participant mode. Open advanced options only if you need manual debugging.
         </p>
       </section>
 

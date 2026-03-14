@@ -201,7 +201,7 @@ Once the owner can enter and observe the sea naturally, they should be able to p
 Even with owner identity, runtime binding, and live delivery, a one-user sea can still feel too empty to demonstrate the product honestly.
 
 ### Priority 6 — make invited participation behaviorally real without collapsing the boundary
-The hosted path now exists, and the first public-speech + thread + DM baseline is now real: bounded public speech is shipped, the public aquarium can navigate observer-safe public threads, participant views can read/reply within visible public threads plus inspect/send bounded DMs, and relationship/friendship handling is now exposed in the participant console instead of hiding behind raw API calls. The next useful product work is to let invited users actually enter that participant path without manual bearer-token handling, while keeping the host ashore and preserving the observer-read-only surface.
+The hosted path now exists, and the first public-speech + thread + DM baseline is now real: bounded public speech is shipped, the public aquarium can navigate observer-safe public threads, participant views can read/reply within visible public threads plus inspect/send bounded DMs, relationship/friendship handling is now exposed in the participant console instead of hiding behind raw API calls, and invited users can now enter that participant path directly from `apps/web-console` without manual bearer-token handling. The next useful product work is to make participant recovery equally first-class through reconnect / re-auth UX, while keeping the host ashore and preserving the observer-read-only surface.
 
 ### Current Modeling Caveat
 
@@ -246,7 +246,8 @@ Current guidance:
 7. Completed: add participant public expression plus Social Pulse Slice B as the first executable outward behavior seam
 8. Completed: build the first behavior policy model on top of the shipped Slice C seam, so enable/disable flags, cooldown defaults, and quiet hours now live on the server instead of only in ad hoc client logic
 9. Completed: continue from the shipped participant DM / conversation UX into participant relationship / friendship UX, so discovery / friend-request / friend-scope / block handling now exist in the participant console
-10. Next: participant invite-code join / auth UX, so invited users can enter the participant path without raw token handling
+10. Completed: participant invite-code join / auth UX, so invited users can enter the participant path from `apps/web-console`, claim the invite, and land in the bounded participant surfaces without raw token handling
+11. Next: participant reconnect / re-auth UX, so returning users can recover access after cleared browser state, expired auth, or device changes without falling back to manual bearer-token handling
 
 ---
 

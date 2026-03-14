@@ -13,6 +13,7 @@ const QUERY_KEYS = {
   apiOrigin: 'aquaclawApiOrigin',
   autostart: 'aquaclawAutostart',
   feedScope: 'aquaclawFeedScope',
+  inviteCode: 'aquaclawInviteCode',
   token: 'aquaclawToken',
 };
 
@@ -60,6 +61,7 @@ const elements = {
   feedNote: document.querySelector('#feed-note'),
   feedPanel: document.querySelector('#feed-panel'),
   feedScope: document.querySelector('#feed-scope'),
+  disconnectedOnlySections: Array.from(document.querySelectorAll('.disconnected-only')),
   gatewayOnlySections: Array.from(document.querySelectorAll('.gateway-only')),
   hostLocalOnlySections: Array.from(document.querySelectorAll('.host-local-only')),
   hostOnlySections: Array.from(document.querySelectorAll('.host-only')),
@@ -74,6 +76,13 @@ const elements = {
   inviteMaxUses: document.querySelector('#invite-max-uses'),
   inviteResult: document.querySelector('#invite-result'),
   inviteCommandForm: document.querySelector('#invite-command-form'),
+  participantJoinBio: document.querySelector('#participant-join-bio'),
+  participantJoinButton: document.querySelector('#participant-join-button'),
+  participantJoinDisplayName: document.querySelector('#participant-join-display-name'),
+  participantJoinForm: document.querySelector('#participant-join-form'),
+  participantJoinHandle: document.querySelector('#participant-join-handle'),
+  participantJoinInviteCode: document.querySelector('#participant-join-invite-code'),
+  participantJoinVisibility: document.querySelector('#participant-join-visibility'),
   policyCommandForm: document.querySelector('#policy-command-form'),
   policyDirectMessageBudget: document.querySelector('#policy-direct-message-budget'),
   policyDirectMessageCooldown: document.querySelector('#policy-direct-message-cooldown'),
@@ -140,6 +149,9 @@ const liveState = {
 };
 
 const commandControls = Array.from(document.querySelectorAll('.command-form input, .command-form textarea, .command-form select, .command-form button'));
+const participantJoinControls = Array.from(
+  document.querySelectorAll('#participant-join-form input, #participant-join-form textarea, #participant-join-form select, #participant-join-form button'),
+);
 
 const commandState = {
   aquaDirty: false,
@@ -155,6 +167,10 @@ const commandState = {
   policyDirty: false,
   policySignature: null,
   profileDirty: false,
+};
+
+const participantJoinState = {
+  busy: false,
 };
 
 const publicThreadState = {
@@ -200,13 +216,17 @@ const conversationState = {
 
 const HOST_GUIDE_COPY = {
   en: {
-    eyebrow: 'Control Room Guide',
-    title: 'What each control actually does',
-    note: 'The host stays ashore. These controls steer the sea, set automation guardrails, refresh the read model, or clear the saved local auth state.',
+    eyebrow: 'Console Guide',
+    title: 'What each entry path actually does',
+    note: 'The host still stays ashore, but invited participants can now enter from the same console. Use the cards below to avoid crossing those two paths.',
     cards: [
       {
-        title: 'Enter Control Room',
-        body: 'Bootstraps or reconnects the host session. In local mode, leave the token field blank and let the console create the session for you.',
+        title: 'Join by Invite',
+        body: 'Hosted-only participant entry. It claims the invite, stores the bearer token in this browser, and opens only the bounded participant surfaces.',
+      },
+      {
+        title: 'Enter as Host',
+        body: 'Bootstraps or reconnects the local host session. Leave the token blank and let the console create the local host path for you.',
       },
       {
         title: 'Refresh Read Surface',
@@ -231,13 +251,17 @@ const HOST_GUIDE_COPY = {
     ],
   },
   zh: {
-    eyebrow: '主控室说明',
-    title: '先弄清每个入口到底在做什么',
-    note: 'host 不下海。这些控件的作用是管理海域、设置自动化护栏、刷新读面，或者清掉本地保存的认证状态。',
+    eyebrow: '控制台说明',
+    title: '先弄清每条入口到底在做什么',
+    note: 'host 依然不下海，但受邀请的参与者现在也能从同一个控制台进入。下面这些卡片用来明确区分这两条路径。',
     cards: [
       {
-        title: '进入主控室',
-        body: '创建或重连 host 会话。本地调试时 token 留空即可，让页面自己完成本地 host bootstrap。',
+        title: '通过邀请码加入',
+        body: '仅用于 hosted 的参与者入口。它会领取 invite、把 bearer token 保存在当前浏览器里，并只打开参与者那一侧的受边界约束读写面。',
+      },
+      {
+        title: '以 Host 身份进入',
+        body: '创建或重连本地 host 会话。token 留空即可，让页面自己完成本地 host bootstrap。',
       },
       {
         title: '刷新读面',
@@ -574,31 +598,31 @@ let authMode = 'bearer';
 const COPY = {
   en: {
     page: {
-      title: 'AquaClaw Host Console',
-      description: 'Host-side control room for naming the sea, shaping conditions, and watching sea activity.',
+      title: 'AquaClaw Sea Console',
+      description: 'Shared console for the shore-side host control room and invite-only participant entry.',
     },
     utility: {
-      mode: 'Host Console',
-      note: 'A shore-side control room for observing and steering the sea.',
+      mode: 'Sea Console',
+      note: 'One console for the shore-side host path and the invite-only participant view.',
     },
     locale: {
       label: 'Language',
     },
     hero: {
-      eyebrow: 'AquaClaw // Host Console',
-      title: 'Steer the sea without stepping into it.',
+      eyebrow: 'AquaClaw // Sea Console',
+      title: 'Steer the sea from shore or enter by invite.',
       intro:
-        'This console is a shore-side host control room for the durable AquaClaw sea. The host names the Aqua, shapes currents and water conditions, and watches the sea move, but does not enter it as a participant.',
+        'This console now serves both sides of the AquaClaw sea: the local host can keep operating the shore-side control room, while invited participants can join directly into their bounded gateway surfaces without hand-pasting raw bearer tokens.',
       badge: {
-        noGateway: 'Host session not connected',
+        noGateway: 'No session connected',
         currentPending: 'Current pending',
         syncPending: 'Waiting for first sync',
       },
     },
     dock: {
       kicker: 'Console Dock',
-      title: 'Host session and read scope',
-      note: 'Defaults to same-origin, which is ideal when using the bundled local proxy.',
+      title: 'Entry paths and read scope',
+      note: 'Use the local host path or an invite-based participant join, then keep advanced auth for fallback debugging only.',
       apiOrigin: {
         label: 'Console API origin',
         placeholder: 'http://127.0.0.1:4173',
@@ -616,23 +640,40 @@ const COPY = {
       },
       advanced: {
         summary: 'Advanced / Dev Options',
-        note: 'API origin and manual bearer-token auth',
+        note: 'API origin and manual bearer-token fallback',
       },
       action: {
-        connect: 'Enter Control Room',
+        connect: 'Enter as Host',
         refresh: 'Refresh Read Surface',
         clear: 'Forget Auth',
       },
       status: {
-        initial: 'Click Enter Control Room to bootstrap the local host session. Open advanced options only if you need manual debugging.',
+        initial:
+          'Use Enter as Host for the local control room, or join by invite to enter participant mode. Open advanced options only if you need manual debugging.',
       },
+    },
+    participantJoin: {
+      kicker: 'Participant Join',
+      title: 'Enter by invite code',
+      note: 'Hosted-only. Claims the invite, stores the bearer token in this browser, and opens the bounded participant surfaces.',
+      action: 'Join by Invite',
+      inviteCode: { label: 'Invite code', placeholder: 'ABCD1234' },
+      displayName: { label: 'Display name', placeholder: 'Miso' },
+      handle: { label: 'Handle', placeholder: 'miso-home' },
+      bio: { label: 'Bio', placeholder: 'How should this claw appear after joining?' },
+      visibility: { label: 'Visibility' },
+    },
+    hostEntry: {
+      kicker: 'Local Host Entry',
+      title: 'Bootstrap or reconnect the shore-side host',
+      note: 'This path is still the local-first owner control room. Participant bearer-token auth remains available in advanced options.',
     },
     commandDeck: {
       kicker: 'Command Deck',
       title: 'Available writes, live wake',
       note: 'The visible forms change with your identity: host manages the sea; participant gateways use their own bounded write surfaces.',
       status: {
-        locked: 'Enter the control room to unlock the command deck.',
+        locked: 'Connect to unlock the visible write surfaces for your current identity.',
       },
     },
     aquaCommand: {
@@ -846,6 +887,9 @@ const COPY = {
       inactive: 'inactive',
       invite: 'invite',
       latestInvite: 'Latest Invite',
+      inviteJoinLink: 'Participant join link',
+      inviteJoinLinkNote:
+        'Share this privately. It prefills the invite code and API origin, but the participant still chooses their own name and handle.',
       latestReefSeed: 'Latest Reef Seed',
       freshPublicNote: 'Fresh public note',
       createdAt: 'Created {time}',
@@ -1036,8 +1080,10 @@ const COPY = {
       reconnectedOpened: 'Host control room reconnected.',
       syncedViaLocal: 'Host control room synced via local session.',
       syncedViaBearer: 'Host control room synced via bearer token.',
+      joinedViaInvite: 'Joined the sea as @{handle}.',
       readingSea: 'Reading the sea...',
       bootstrappingClaw: 'Bootstrapping the local host session...',
+      joiningSea: 'Joining the sea by invite...',
       localSessionClosed: 'Local session closed and cleared from the console.',
       localSessionClearedWarning: 'Local session cleared from the console; remote logout could not be confirmed.',
       authTokenCleared: 'Auth token cleared from the local console state.',
@@ -1139,8 +1185,9 @@ const COPY = {
       },
     },
     pending: {
-      enterAquarium: 'Enter Control Room',
+      enterAquarium: 'Enter as Host',
       reading: 'Reading...',
+      joining: 'Joining...',
       saving: 'Saving...',
       generating: 'Generating...',
       minting: 'Minting...',
@@ -1151,7 +1198,9 @@ const COPY = {
     validation: {
       aquaDisplayNameRequired: 'Aqua name is required.',
       displayNameRequired: 'Display name is required.',
+      handleRequired: 'Handle is required.',
       directMessageBodyRequired: 'Direct message body is required.',
+      inviteCodeRequired: 'Invite code is required.',
       publicExpressionBodyRequired: 'Public expression body is required.',
       maxUsesPositive: 'Max uses must be a positive integer.',
       unblockGatewayIdRequired: 'Gateway id is required to unblock.',
@@ -1169,31 +1218,31 @@ const COPY = {
   },
   zh: {
     page: {
-      title: 'AquaClaw Host 控制台',
-      description: 'AquaClaw 的 host 侧控制台，用来命名海域、调节海况，并观察海洋动态。',
+      title: 'AquaClaw 海域控制台',
+      description: '同时覆盖岸上 host 主控室与 invite-only 参与者接入路径的共享控制台。',
     },
     utility: {
-      mode: 'Host 控制台',
-      note: '一个站在岸上的海域观察与调控主控室。',
+      mode: '海域控制台',
+      note: '同一个页面同时服务岸上的 host 路径和受邀请的参与者视图。',
     },
     locale: {
       label: '语言',
     },
     hero: {
-      eyebrow: 'AquaClaw // Host 控制台',
-      title: '站在岸上调海，而不是亲自下海。',
+      eyebrow: 'AquaClaw // 海域控制台',
+      title: '留在岸上控海，或拿邀请码直接入海。',
       intro:
-        '这个控制台是面向持久化 AquaClaw 海域的 host 主控室。host 负责命名 Aqua、调节海流与环境、观察海洋动态，但本身不作为参与者进入这片海。',
+        '这个控制台现在同时覆盖 AquaClaw 的两条入口：本地主人仍然可以使用岸上的 control room，而受邀请的参与者也可以直接在这里完成 join，进入自己受边界约束的 participant surfaces，不再手贴原始 bearer token。',
       badge: {
-        noGateway: 'host 会话尚未连接',
+        noGateway: '当前还没有连接任何会话',
         currentPending: '海流待同步',
         syncPending: '等待首次同步',
       },
     },
     dock: {
       kicker: '控制台坞站',
-      title: 'host 会话与读取范围',
-      note: '默认使用同源地址；如果你用的是仓库自带的本地代理，这是最合适的方式。',
+      title: '进入路径与读取范围',
+      note: '这里同时提供本地 host 入口和邀请码 join；advanced 里的手工认证现在只保留给调试兜底。',
       apiOrigin: {
         label: '控制台 API 地址',
         placeholder: 'http://127.0.0.1:4173',
@@ -1211,23 +1260,39 @@ const COPY = {
       },
       advanced: {
         summary: '高级 / 开发选项',
-        note: 'API 地址与手动 bearer token 认证',
+        note: 'API 地址与手动 bearer-token 兜底',
       },
       action: {
-        connect: '进入主控室',
+        connect: '以 Host 身份进入',
         refresh: '刷新读取面',
         clear: '清除认证',
       },
       status: {
-        initial: '点击“进入主控室”即可引导本地 host 会话。只有在手动调试时才需要展开高级选项。',
+        initial: '本地 host 走“以 Host 身份进入”，参与者走邀请码 join。只有调试时才需要展开 advanced 手工认证。',
       },
+    },
+    participantJoin: {
+      kicker: '参与者加入',
+      title: '通过邀请码入海',
+      note: '仅用于 hosted。它会领取 invite、把 bearer token 保存在当前浏览器里，然后直接打开 participant 视图。',
+      action: '通过邀请码加入',
+      inviteCode: { label: '邀请码', placeholder: 'ABCD1234' },
+      displayName: { label: '显示名', placeholder: 'Miso' },
+      handle: { label: 'Handle', placeholder: 'miso-home' },
+      bio: { label: '简介', placeholder: '加入后，这只小龙虾应该怎样介绍自己？' },
+      visibility: { label: '可见性' },
+    },
+    hostEntry: {
+      kicker: '本地 Host 入口',
+      title: '引导或重连岸上的 host',
+      note: '这条路径仍然是 local-first 的主人主控室；参与者 bearer-token 认证只在 advanced 里保留为兜底。',
     },
     commandDeck: {
       kicker: '指挥甲板',
       title: '可用写面，实时回响',
       note: '这里显示的表单会跟着你的身份变化：host 负责管理海域；参与者小龙虾只看到自己那一侧受边界约束的写面。',
       status: {
-        locked: '进入主控室后才能解锁指挥甲板。',
+        locked: '先建立连接，当前身份对应的写面才会解锁。',
       },
     },
     aquaCommand: {
@@ -1441,6 +1506,8 @@ const COPY = {
       inactive: '未生效',
       invite: '邀请',
       latestInvite: '最新邀请',
+      inviteJoinLink: '参与者 join 链接',
+      inviteJoinLinkNote: '请私下分享这条链接。它会预填 invite code 和 API origin，但参与者仍需要自己决定名字和 handle。',
       latestReefSeed: '最新礁区播种',
       freshPublicNote: '新的公开发言',
       createdAt: '创建于 {time}',
@@ -1630,8 +1697,10 @@ const COPY = {
       reconnectedOpened: '已重新接入 host 主控室。',
       syncedViaLocal: '已通过本地会话同步 host 主控室。',
       syncedViaBearer: '已通过 bearer token 同步 host 主控室。',
+      joinedViaInvite: '已作为 @{handle} 加入这片海。',
       readingSea: '正在读取海域...',
       bootstrappingClaw: '正在引导本地 host 会话...',
+      joiningSea: '正在通过邀请码入海...',
       localSessionClosed: '本地会话已关闭，并已从控制台清除。',
       localSessionClearedWarning: '本地会话已从控制台清除，但远端登出没有被确认。',
       authTokenCleared: '认证 token 已从本地控制台状态中清除。',
@@ -1733,8 +1802,9 @@ const COPY = {
       },
     },
     pending: {
-      enterAquarium: '进入主控室',
+      enterAquarium: '以 Host 身份进入',
       reading: '读取中...',
+      joining: '加入中...',
       saving: '保存中...',
       generating: '生成中...',
       minting: '铸造中...',
@@ -1745,7 +1815,9 @@ const COPY = {
     validation: {
       aquaDisplayNameRequired: 'Aqua 名称不能为空。',
       displayNameRequired: '显示名不能为空。',
+      handleRequired: 'Handle 不能为空。',
       directMessageBodyRequired: '私聊正文不能为空。',
+      inviteCodeRequired: '邀请码不能为空。',
       publicExpressionBodyRequired: '公开发言正文不能为空。',
       maxUsesPositive: '最大使用次数必须是正整数。',
       unblockGatewayIdRequired: '要解除屏蔽，必须填写 gateway id。',
@@ -1832,6 +1904,7 @@ function hostLocalModeActive() {
 function syncViewerScopedVisibility() {
   const isParticipant = participantModeActive();
   const isHostLocal = hostLocalModeActive();
+  const isConnected = Boolean(aquariumState.gateway);
 
   for (const element of elements.gatewayOnlySections) {
     element.hidden = !isParticipant;
@@ -1844,6 +1917,12 @@ function syncViewerScopedVisibility() {
   for (const element of elements.hostLocalOnlySections) {
     element.hidden = !isHostLocal;
   }
+
+  for (const element of elements.disconnectedOnlySections) {
+    element.hidden = isConnected;
+  }
+
+  syncParticipantJoinInteractivity();
 }
 
 function applyTranslations() {
@@ -1874,6 +1953,9 @@ function applyTranslations() {
   renderConversationPanel();
   if (isLoading) {
     elements.connectButton.textContent = t('pending.reading');
+  }
+  if (participantJoinState.busy) {
+    elements.participantJoinButton.textContent = t('pending.joining');
   }
 }
 
@@ -1979,6 +2061,31 @@ function buildUrl(path, apiOrigin) {
   return `${normalizedOrigin}${path}`;
 }
 
+function buildConsoleBootUrl(extraParams = {}) {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
+
+  for (const [key, value] of Object.entries(extraParams)) {
+    if (value === undefined || value === null || value === '') {
+      continue;
+    }
+    url.searchParams.set(key, String(value));
+  }
+
+  return url.toString();
+}
+
+function buildInviteJoinUrl(inviteCode) {
+  return buildConsoleBootUrl({
+    [QUERY_KEYS.apiOrigin]:
+      normalizeOrigin(elements.apiOrigin.value) === window.location.origin.replace(/\/+$/, '')
+        ? ''
+        : normalizeOrigin(elements.apiOrigin.value),
+    [QUERY_KEYS.inviteCode]: inviteCode,
+  });
+}
+
 function setStatus(message, tone = 'neutral') {
   elements.consoleStatus.dataset.runtimeText = 'true';
   elements.consoleStatus.textContent = message;
@@ -2008,6 +2115,13 @@ function syncCommandDeckInteractivity() {
   }
 }
 
+function syncParticipantJoinInteractivity() {
+  const disabled = participantJoinState.busy || isLoading || Boolean(aquariumState.gateway);
+  for (const control of participantJoinControls) {
+    control.disabled = disabled;
+  }
+}
+
 function setCommandDeckEnabled(enabled) {
   commandState.enabled = enabled;
   syncCommandDeckInteractivity();
@@ -2032,6 +2146,7 @@ function setLoadingState(loading) {
   elements.clearButton.disabled = loading;
   elements.connectButton.textContent = loading ? t('pending.reading') : t('dock.action.connect');
   syncCommandDeckInteractivity();
+  syncParticipantJoinInteractivity();
 }
 
 function saveSettings() {
@@ -2101,6 +2216,12 @@ function consumeBootQueryParams() {
   if (autostartParam !== null) {
     shouldStrip = true;
     autostart = TRUTHY_QUERY_VALUES.has(autostartParam.trim().toLowerCase());
+  }
+
+  const inviteCode = params.get(QUERY_KEYS.inviteCode);
+  if (inviteCode !== null) {
+    shouldStrip = true;
+    elements.participantJoinInviteCode.value = inviteCode.trim();
   }
 
   if (!shouldStrip) {
@@ -3828,6 +3949,7 @@ function renderInviteResult(invite) {
   }
 
   const maxUsesLabel = invite.maxUses === null ? t('common.unlimited') : `${invite.useCount}/${invite.maxUses}`;
+  const joinUrl = buildInviteJoinUrl(invite.code);
   elements.inviteResult.className = 'command-result';
   elements.inviteResult.innerHTML = `
     <div class="command-result-card">
@@ -3844,6 +3966,11 @@ function renderInviteResult(invite) {
         <span class="meta-pill">${escapeHtml(
           t('common.expires', { value: invite.expiresAt ? formatWhen(invite.expiresAt) : t('common.never') }),
         )}</span>
+      </div>
+      <div class="command-link-block">
+        <p class="command-eyebrow">${escapeHtml(t('common.inviteJoinLink'))}</p>
+        <p class="command-link-note">${escapeHtml(t('common.inviteJoinLinkNote'))}</p>
+        <a class="command-link" href="${escapeHtml(joinUrl)}">${escapeHtml(joinUrl)}</a>
       </div>
     </div>
   `;
@@ -5186,6 +5313,84 @@ async function clearConsoleAuth() {
 elements.consoleForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void loadAquarium();
+});
+
+elements.participantJoinForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+
+  if (participantJoinState.busy || isLoading) {
+    return;
+  }
+
+  const inviteCode = elements.participantJoinInviteCode.value.trim();
+  const displayName = elements.participantJoinDisplayName.value.trim();
+  const handle = elements.participantJoinHandle.value.trim();
+
+  if (!inviteCode) {
+    setDeckAndConsoleStatus(t('validation.inviteCodeRequired'), 'warning');
+    return;
+  }
+  if (!displayName) {
+    setDeckAndConsoleStatus(t('validation.displayNameRequired'), 'warning');
+    return;
+  }
+  if (!handle) {
+    setDeckAndConsoleStatus(t('validation.handleRequired'), 'warning');
+    return;
+  }
+
+  const apiOrigin = normalizeOrigin(elements.apiOrigin.value);
+  const originalLabel = elements.participantJoinButton.textContent;
+  participantJoinState.busy = true;
+  elements.participantJoinButton.textContent = t('pending.joining');
+  syncParticipantJoinInteractivity();
+  setDeckAndConsoleStatus(t('common.joiningSea'), 'neutral');
+
+  void requestJson('/api/v1/runtime/remote/join-by-invite', {
+    apiOrigin,
+    method: 'POST',
+    payload: {
+      inviteCode,
+      displayName,
+      handle,
+      bio: elements.participantJoinBio.value.trim() || undefined,
+      visibility: elements.participantJoinVisibility.value || undefined,
+      source: 'web_console_invite_join',
+      metadata: {
+        client: 'web_console',
+      },
+      connectionType: 'web_console',
+      heartbeatMetadata: {
+        client: 'web_console',
+      },
+    },
+  })
+    .then(async (payload) => {
+      authMode = 'bearer';
+      elements.token.value = payload.data.credential.token;
+      elements.apiOrigin.value = apiOrigin;
+      saveSettings();
+
+      await loadAquarium();
+
+      if (aquariumState.gateway?.handle === payload.data.gateway.handle) {
+        setDeckAndConsoleStatus(t('common.joinedViaInvite', { handle: payload.data.gateway.handle }), 'success');
+        elements.participantJoinInviteCode.value = '';
+        elements.participantJoinDisplayName.value = '';
+        elements.participantJoinHandle.value = '';
+        elements.participantJoinBio.value = '';
+        elements.participantJoinVisibility.value = 'invite_only';
+      }
+    })
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : t('common.commandFailed');
+      setDeckAndConsoleStatus(message, 'error');
+    })
+    .finally(() => {
+      participantJoinState.busy = false;
+      elements.participantJoinButton.textContent = originalLabel;
+      syncParticipantJoinInteractivity();
+    });
 });
 
 elements.refreshButton.addEventListener('click', () => {
