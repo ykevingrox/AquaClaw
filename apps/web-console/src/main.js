@@ -76,6 +76,7 @@ const elements = {
   inviteMaxUses: document.querySelector('#invite-max-uses'),
   inviteResult: document.querySelector('#invite-result'),
   inviteCommandForm: document.querySelector('#invite-command-form'),
+  inboxPanel: document.querySelector('#inbox-panel'),
   participantJoinBio: document.querySelector('#participant-join-bio'),
   participantJoinButton: document.querySelector('#participant-join-button'),
   participantJoinDisplayName: document.querySelector('#participant-join-display-name'),
@@ -190,6 +191,11 @@ const participantReconnectState = {
 const participantRecoveryState = {
   credential: null,
   error: null,
+};
+
+const inboxState = {
+  error: null,
+  isLoading: false,
 };
 
 const publicThreadState = {
@@ -866,6 +872,12 @@ const COPY = {
         note: 'Read visible threads, then choose a note if you want to answer publicly.',
         empty: 'Visible public threads appear here after a successful read.',
       },
+      inbox: {
+        kicker: 'Inbox',
+        title: 'Participant triage surface',
+        note: 'Unread DMs, pending friend requests, and collaboration requests converge here so triage no longer lives in three separate panels.',
+        empty: 'Participant inbox items appear here after a successful read.',
+      },
       relationships: {
         kicker: 'Relationships',
         title: 'Friend graph seam',
@@ -1046,6 +1058,23 @@ const COPY = {
       publicThreadPrompt: 'Pick a visible thread note to reply, or clear the context to start a fresh top-level note.',
       publicExpressionPosted: 'Posted a public note.',
       publicExpressionReplied: 'Posted a public reply.',
+      inboxLoading: 'Refreshing inbox surfaces...',
+      inboxAttentionTitle: 'Needs attention',
+      inboxAttentionCount: '{count} need attention',
+      inboxAttentionEmpty: 'Nothing needs attention right now.',
+      inboxActiveTitle: 'Active collaborations',
+      inboxActiveCount: '{count} active',
+      inboxActiveEmpty: 'No active collaborations are waiting here.',
+      inboxWaitingTitle: 'Waiting on others',
+      inboxWaitingCount: '{count} waiting',
+      inboxWaitingEmpty: 'Nothing is waiting on other claws right now.',
+      inboxCaughtUp: 'The participant inbox is caught up for now.',
+      inboxTypeDirectMessage: 'Unread DM',
+      inboxTypeFriendRequest: 'Friend request',
+      inboxTypeCollaborationRequest: 'Collaboration request',
+      inboxConversationSummary: 'Unread private messages are waiting in this current.',
+      inboxViewRelationships: 'View Relationships',
+      inboxViewCollaborations: 'View Collaborations',
       relationshipsLoading: 'Refreshing relationship surfaces...',
       relationshipVisibleCount: '{count} visible',
       relationshipIncomingCount: '{count} incoming',
@@ -1560,6 +1589,12 @@ const COPY = {
         note: '先把可见线程读清楚，再决定是否公开回应其中一条。',
         empty: '成功读取后，可见公开线程会显示在这里。',
       },
+      inbox: {
+        kicker: '收件面',
+        title: '参与者待处理入口',
+        note: '未读私聊、待处理好友请求、协作请求会先汇总到这里，不再分散在三块独立面板里。',
+        empty: '成功读取后，参与者收件面会显示在这里。',
+      },
       relationships: {
         kicker: '关系',
         title: '好友关系入口',
@@ -1739,6 +1774,23 @@ const COPY = {
       publicThreadPrompt: '挑一条可见公开发言来回应，或者清掉上下文后新开一条顶层公开发言。',
       publicExpressionPosted: '已发送公开发言。',
       publicExpressionReplied: '已发送公开回应。',
+      inboxLoading: '正在刷新收件面...',
+      inboxAttentionTitle: '需要处理',
+      inboxAttentionCount: '{count} 条待处理',
+      inboxAttentionEmpty: '现在没有需要立刻处理的事项。',
+      inboxActiveTitle: '进行中的协作',
+      inboxActiveCount: '{count} 条进行中',
+      inboxActiveEmpty: '这里还没有进行中的协作。',
+      inboxWaitingTitle: '等待对方',
+      inboxWaitingCount: '{count} 条等待中',
+      inboxWaitingEmpty: '现在没有在等待对方处理的事项。',
+      inboxCaughtUp: '参与者收件面当前已经清空。',
+      inboxTypeDirectMessage: '未读私聊',
+      inboxTypeFriendRequest: '好友请求',
+      inboxTypeCollaborationRequest: '协作请求',
+      inboxConversationSummary: '这条私聊水流里有未读消息等待处理。',
+      inboxViewRelationships: '查看关系面',
+      inboxViewCollaborations: '查看协作面',
       relationshipsLoading: '正在刷新关系面...',
       relationshipVisibleCount: '可见 {count} 个',
       relationshipIncomingCount: '收到 {count} 条',
@@ -2138,6 +2190,8 @@ function applyTranslations() {
   renderFormHelpBlocks();
   renderPublicExpressionComposer();
   renderPublicThreads();
+  renderRelationshipPanel();
+  renderInboxPanel();
   renderTaskRequestPanel();
   renderConversationPanel();
   if (isLoading) {
@@ -2294,6 +2348,14 @@ function setCommandStatus(message, tone = 'neutral') {
 function setDeckAndConsoleStatus(message, tone = 'neutral') {
   setStatus(message, tone);
   setCommandStatus(message, tone);
+}
+
+function focusPanelSurface(panelElement) {
+  const card = panelElement?.closest('.card');
+  if (!(card instanceof HTMLElement)) {
+    return;
+  }
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderAquaBadge() {
@@ -3337,6 +3399,407 @@ function resetTaskRequestState() {
   renderTaskRequestPanel();
 }
 
+function resetInboxState() {
+  inboxState.error = null;
+  inboxState.isLoading = false;
+  renderInboxPanel();
+}
+
+function sortInboxItemsByNewest(items) {
+  return items.slice().sort((left, right) => String(right.sortAt ?? '').localeCompare(String(left.sortAt ?? '')));
+}
+
+function conversationUnreadCount(conversation) {
+  return Math.max(0, Number(conversation?.readState?.unreadCount ?? 0));
+}
+
+function conversationLatestAt(conversation) {
+  return conversation?.readState?.latestMessageAt ?? conversation?.updatedAt ?? conversation?.createdAt ?? null;
+}
+
+function buildInboxAttentionItems() {
+  const conversationItems = conversationState.items
+    .filter((conversation) => conversationUnreadCount(conversation) > 0)
+    .map((conversation) => ({
+      kind: 'conversation',
+      sortAt: conversationLatestAt(conversation),
+      conversation,
+    }));
+  const friendRequestItems = relationshipState.incomingRequests.map((request) => ({
+    kind: 'incoming_friend_request',
+    sortAt: request.createdAt,
+    request,
+  }));
+  const collaborationItems = taskRequestState.incomingRequests
+    .filter((request) => request.status === 'pending')
+    .map((request) => ({
+      kind: 'incoming_task_request',
+      sortAt: request.updatedAt ?? request.createdAt,
+      request,
+    }));
+
+  return sortInboxItemsByNewest([...conversationItems, ...friendRequestItems, ...collaborationItems]);
+}
+
+function buildInboxActiveItems() {
+  const incoming = taskRequestState.incomingRequests
+    .filter((request) => request.status === 'accepted')
+    .map((request) => ({
+      kind: 'active_task_request',
+      direction: 'incoming',
+      sortAt: request.updatedAt ?? request.createdAt,
+      request,
+    }));
+  const outgoing = taskRequestState.outgoingRequests
+    .filter((request) => request.status === 'accepted')
+    .map((request) => ({
+      kind: 'active_task_request',
+      direction: 'outgoing',
+      sortAt: request.updatedAt ?? request.createdAt,
+      request,
+    }));
+
+  return sortInboxItemsByNewest([...incoming, ...outgoing]);
+}
+
+function buildInboxWaitingItems() {
+  const friendRequestItems = relationshipState.outgoingRequests.map((request) => ({
+    kind: 'outgoing_friend_request',
+    sortAt: request.createdAt,
+    request,
+  }));
+  const collaborationItems = taskRequestState.outgoingRequests
+    .filter((request) => request.status === 'pending')
+    .map((request) => ({
+      kind: 'outgoing_task_request',
+      sortAt: request.updatedAt ?? request.createdAt,
+      request,
+    }));
+
+  return sortInboxItemsByNewest([...friendRequestItems, ...collaborationItems]);
+}
+
+function renderInboxItemCard(item) {
+  if (item.kind === 'conversation') {
+    const conversation = item.conversation;
+    const peer = conversation.peer ?? null;
+    const unreadCount = conversationUnreadCount(conversation);
+    const latestAt = conversationLatestAt(conversation);
+
+    return `
+      <article class="relationship-card inbox-item-card">
+        <div class="relationship-card-head">
+          <div>
+            <div class="meta-pill-row">
+              <span class="type-pill">${escapeHtml(t('common.inboxTypeDirectMessage'))}</span>
+              <span class="meta-pill">${escapeHtml(t('common.conversationUnreadCount', { count: unreadCount }))}</span>
+              <span class="meta-pill">${escapeHtml(labelizeToken(peer?.status ?? 'offline', 'status'))}</span>
+            </div>
+            <p class="stack-title">${escapeHtml(peer?.displayName ?? peer?.handle ?? t('common.unknown'))}</p>
+            <p class="identity-handle">@${escapeHtml(peer?.handle ?? 'unknown')}</p>
+          </div>
+        </div>
+        <p class="thread-note-summary">${escapeHtml(t('common.inboxConversationSummary'))}</p>
+        <p class="thread-note-meta">${escapeHtml(t('common.conversationLatestAt', { time: formatWhen(latestAt) }))}</p>
+        <div class="relationship-actions">
+          <button class="button button-primary" type="button" data-conversation-id="${escapeHtml(conversation.id)}">
+            ${escapeHtml(t('common.conversationOpen'))}
+          </button>
+          <button
+            class="button button-ghost"
+            type="button"
+            data-inbox-mark-conversation-read-id="${escapeHtml(conversation.id)}"
+            ${conversationState.isMutating || unreadCount < 1 ? 'disabled' : ''}
+          >
+            ${escapeHtml(t('common.conversationMarkRead'))}
+          </button>
+        </div>
+      </article>
+    `;
+  }
+
+  if (item.kind === 'incoming_friend_request') {
+    const request = item.request;
+    const gateway = request.fromGateway ?? null;
+    const disabled = relationshipState.isMutating ? ' disabled' : '';
+
+    return `
+      <article class="relationship-card inbox-item-card">
+        <div class="relationship-card-head">
+          <div>
+            <div class="meta-pill-row">
+              <span class="type-pill">${escapeHtml(t('common.inboxTypeFriendRequest'))}</span>
+              <span class="meta-pill">${escapeHtml(t('common.relationshipStatusIncoming'))}</span>
+              ${gateway?.status ? `<span class="meta-pill">${escapeHtml(labelizeToken(gateway.status, 'status'))}</span>` : ''}
+            </div>
+            <p class="stack-title">${escapeHtml(gateway?.displayName ?? gateway?.handle ?? t('common.unknown'))}</p>
+            <p class="identity-handle">@${escapeHtml(gateway?.handle ?? 'unknown')}</p>
+          </div>
+        </div>
+        <p class="thread-note-summary">${escapeHtml(request.message || t('common.relationshipNoMessage'))}</p>
+        <p class="thread-note-meta">${escapeHtml(t('common.createdAt', { time: formatWhen(request.createdAt) }))}</p>
+        <div class="relationship-actions">
+          <button class="button button-primary" type="button" data-relationship-accept-id="${escapeHtml(request.id)}"${disabled}>
+            ${escapeHtml(t('common.relationshipRequestAccept'))}
+          </button>
+          <button class="button button-ghost" type="button" data-relationship-reject-id="${escapeHtml(request.id)}"${disabled}>
+            ${escapeHtml(t('common.relationshipRequestReject'))}
+          </button>
+        </div>
+      </article>
+    `;
+  }
+
+  if (item.kind === 'incoming_task_request') {
+    const request = item.request;
+    const peer = request.fromGateway ?? null;
+    const conversationId = relationshipConversationIdForGateway(peer?.id ?? null);
+    const disabled = taskRequestState.isMutating ? ' disabled' : '';
+
+    return `
+      <article class="relationship-card inbox-item-card">
+        <div class="relationship-card-head">
+          <div>
+            <div class="meta-pill-row">
+              <span class="type-pill">${escapeHtml(t('common.inboxTypeCollaborationRequest'))}</span>
+              <span class="meta-pill">${escapeHtml(translateToken(request.status, 'taskRequestStatus'))}</span>
+              ${peer?.status ? `<span class="meta-pill">${escapeHtml(labelizeToken(peer.status, 'status'))}</span>` : ''}
+            </div>
+            <p class="stack-title">${escapeHtml(request.title)}</p>
+            <p class="identity-handle">@${escapeHtml(peer?.handle ?? 'unknown')}</p>
+          </div>
+        </div>
+        <p class="thread-note-summary">${escapeHtml(previewText(request.body || t('common.taskRequestNoBody'), 180))}</p>
+        <p class="thread-note-meta">${escapeHtml(
+          `${t('common.taskRequestCreatedAt', { time: formatWhen(request.createdAt) })} · ${t('common.taskRequestUpdatedAt', { time: formatWhen(request.updatedAt) })}`,
+        )}</p>
+        <div class="relationship-actions">
+          <button class="button button-primary" type="button" data-task-request-accept-id="${escapeHtml(request.id)}"${disabled}>
+            ${escapeHtml(t('common.taskRequestAccept'))}
+          </button>
+          <button class="button button-ghost" type="button" data-task-request-decline-id="${escapeHtml(request.id)}"${disabled}>
+            ${escapeHtml(t('common.taskRequestDecline'))}
+          </button>
+          ${
+            conversationId
+              ? `
+                <button class="button button-ghost" type="button" data-conversation-id="${escapeHtml(conversationId)}">
+                  ${escapeHtml(t('common.conversationOpen'))}
+                </button>
+              `
+              : ''
+          }
+        </div>
+      </article>
+    `;
+  }
+
+  if (item.kind === 'active_task_request') {
+    const request = item.request;
+    const peer = item.direction === 'incoming' ? request.fromGateway : request.toGateway;
+    const conversationId = relationshipConversationIdForGateway(peer?.id ?? null);
+    const disabled = taskRequestState.isMutating ? ' disabled' : '';
+
+    return `
+      <article class="relationship-card inbox-item-card">
+        <div class="relationship-card-head">
+          <div>
+            <div class="meta-pill-row">
+              <span class="type-pill">${escapeHtml(t('common.inboxTypeCollaborationRequest'))}</span>
+              <span class="meta-pill">${escapeHtml(translateToken(request.status, 'taskRequestStatus'))}</span>
+              ${peer?.status ? `<span class="meta-pill">${escapeHtml(labelizeToken(peer.status, 'status'))}</span>` : ''}
+            </div>
+            <p class="stack-title">${escapeHtml(request.title)}</p>
+            <p class="identity-handle">@${escapeHtml(peer?.handle ?? 'unknown')}</p>
+          </div>
+        </div>
+        <p class="thread-note-summary">${escapeHtml(previewText(request.body || t('common.taskRequestNoBody'), 180))}</p>
+        <p class="thread-note-meta">${escapeHtml(t('common.taskRequestUpdatedAt', { time: formatWhen(request.updatedAt) }))}</p>
+        <div class="relationship-actions">
+          <button class="button button-primary" type="button" data-task-request-complete-id="${escapeHtml(request.id)}"${disabled}>
+            ${escapeHtml(t('common.taskRequestComplete'))}
+          </button>
+          ${
+            conversationId
+              ? `
+                <button class="button button-ghost" type="button" data-conversation-id="${escapeHtml(conversationId)}">
+                  ${escapeHtml(t('common.conversationOpen'))}
+                </button>
+              `
+              : `
+                <button class="button button-ghost" type="button" data-focus-panel="taskRequestPanel">
+                  ${escapeHtml(t('common.inboxViewCollaborations'))}
+                </button>
+              `
+          }
+        </div>
+      </article>
+    `;
+  }
+
+  if (item.kind === 'outgoing_task_request') {
+    const request = item.request;
+    const peer = request.toGateway ?? null;
+    const conversationId = relationshipConversationIdForGateway(peer?.id ?? null);
+    const disabled = taskRequestState.isMutating ? ' disabled' : '';
+
+    return `
+      <article class="relationship-card inbox-item-card">
+        <div class="relationship-card-head">
+          <div>
+            <div class="meta-pill-row">
+              <span class="type-pill">${escapeHtml(t('common.inboxTypeCollaborationRequest'))}</span>
+              <span class="meta-pill">${escapeHtml(t('common.relationshipStatusOutgoing'))}</span>
+              ${peer?.status ? `<span class="meta-pill">${escapeHtml(labelizeToken(peer.status, 'status'))}</span>` : ''}
+            </div>
+            <p class="stack-title">${escapeHtml(request.title)}</p>
+            <p class="identity-handle">@${escapeHtml(peer?.handle ?? 'unknown')}</p>
+          </div>
+        </div>
+        <p class="thread-note-summary">${escapeHtml(previewText(request.body || t('common.taskRequestNoBody'), 180))}</p>
+        <p class="thread-note-meta">${escapeHtml(t('common.taskRequestUpdatedAt', { time: formatWhen(request.updatedAt) }))}</p>
+        <div class="relationship-actions">
+          <button class="button button-ghost" type="button" data-task-request-cancel-id="${escapeHtml(request.id)}"${disabled}>
+            ${escapeHtml(t('common.taskRequestCancel'))}
+          </button>
+          ${
+            conversationId
+              ? `
+                <button class="button button-ghost" type="button" data-conversation-id="${escapeHtml(conversationId)}">
+                  ${escapeHtml(t('common.conversationOpen'))}
+                </button>
+              `
+              : ''
+          }
+        </div>
+      </article>
+    `;
+  }
+
+  const request = item.request;
+  const gateway = request.toGateway ?? null;
+
+  return `
+    <article class="relationship-card inbox-item-card">
+      <div class="relationship-card-head">
+        <div>
+          <div class="meta-pill-row">
+            <span class="type-pill">${escapeHtml(t('common.inboxTypeFriendRequest'))}</span>
+            <span class="meta-pill">${escapeHtml(t('common.relationshipStatusOutgoing'))}</span>
+            ${gateway?.status ? `<span class="meta-pill">${escapeHtml(labelizeToken(gateway.status, 'status'))}</span>` : ''}
+          </div>
+          <p class="stack-title">${escapeHtml(gateway?.displayName ?? gateway?.handle ?? t('common.unknown'))}</p>
+          <p class="identity-handle">@${escapeHtml(gateway?.handle ?? 'unknown')}</p>
+        </div>
+      </div>
+      <p class="thread-note-summary">${escapeHtml(request.message || t('common.relationshipOutgoingNote'))}</p>
+      <p class="thread-note-meta">${escapeHtml(t('common.createdAt', { time: formatWhen(request.createdAt) }))}</p>
+      <div class="relationship-actions">
+        <button class="button button-ghost" type="button" data-focus-panel="relationshipPanel">
+          ${escapeHtml(t('common.inboxViewRelationships'))}
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function renderInboxPanel() {
+  if (!elements.inboxPanel) {
+    return;
+  }
+
+  if (!participantModeActive()) {
+    renderEmpty(elements.inboxPanel, t('panel.inbox.empty'));
+    return;
+  }
+
+  const attentionItems = buildInboxAttentionItems();
+  const activeItems = buildInboxActiveItems();
+  const waitingItems = buildInboxWaitingItems();
+  const totalCount = attentionItems.length + activeItems.length + waitingItems.length;
+  const overviewNote = inboxState.isLoading ? t('common.inboxLoading') : totalCount < 1 ? t('common.inboxCaughtUp') : t('panel.inbox.note');
+  const attentionMarkup = attentionItems.length
+    ? attentionItems.map((item) => renderInboxItemCard(item)).join('')
+    : `<div class="empty-state relationship-empty">${escapeHtml(t('common.inboxAttentionEmpty'))}</div>`;
+  const activeMarkup = activeItems.length
+    ? activeItems.map((item) => renderInboxItemCard(item)).join('')
+    : `<div class="empty-state relationship-empty">${escapeHtml(t('common.inboxActiveEmpty'))}</div>`;
+  const waitingMarkup = waitingItems.length
+    ? waitingItems.map((item) => renderInboxItemCard(item)).join('')
+    : `<div class="empty-state relationship-empty">${escapeHtml(t('common.inboxWaitingEmpty'))}</div>`;
+
+  elements.inboxPanel.className = 'panel-body';
+  elements.inboxPanel.innerHTML = `
+    <div class="inbox-shell">
+      <article class="relationship-card relationship-overview-card inbox-overview-card">
+        <div class="relationship-card-head">
+          <div>
+            <p class="command-eyebrow">${escapeHtml(t('panel.inbox.kicker'))}</p>
+            <h3>${escapeHtml(t('panel.inbox.title'))}</h3>
+          </div>
+          <div class="meta-pill-row">
+            <span class="meta-pill">${escapeHtml(t('common.inboxAttentionCount', { count: attentionItems.length }))}</span>
+            <span class="meta-pill">${escapeHtml(t('common.inboxActiveCount', { count: activeItems.length }))}</span>
+            <span class="meta-pill">${escapeHtml(t('common.inboxWaitingCount', { count: waitingItems.length }))}</span>
+          </div>
+        </div>
+        <p class="thread-note-summary">${escapeHtml(overviewNote)}</p>
+        ${
+          inboxState.error
+            ? `<div class="error-state"><p>${escapeHtml(inboxState.error)}</p></div>`
+            : ''
+        }
+        <div class="inbox-summary-grid">
+          <article class="inbox-summary-card">
+            <span class="command-eyebrow">${escapeHtml(t('common.inboxAttentionTitle'))}</span>
+            <strong>${escapeHtml(String(attentionItems.length))}</strong>
+          </article>
+          <article class="inbox-summary-card">
+            <span class="command-eyebrow">${escapeHtml(t('common.inboxActiveTitle'))}</span>
+            <strong>${escapeHtml(String(activeItems.length))}</strong>
+          </article>
+          <article class="inbox-summary-card">
+            <span class="command-eyebrow">${escapeHtml(t('common.inboxWaitingTitle'))}</span>
+            <strong>${escapeHtml(String(waitingItems.length))}</strong>
+          </article>
+        </div>
+      </article>
+
+      <div class="inbox-section-grid">
+        <article class="relationship-card relationship-section-card">
+          <div class="relationship-card-head">
+            <div>
+              <p class="command-eyebrow">${escapeHtml(t('common.inboxAttentionTitle'))}</p>
+              <h3>${escapeHtml(t('common.inboxAttentionCount', { count: attentionItems.length }))}</h3>
+            </div>
+          </div>
+          <div class="relationship-card-stack">${attentionMarkup}</div>
+        </article>
+
+        <article class="relationship-card relationship-section-card">
+          <div class="relationship-card-head">
+            <div>
+              <p class="command-eyebrow">${escapeHtml(t('common.inboxActiveTitle'))}</p>
+              <h3>${escapeHtml(t('common.inboxActiveCount', { count: activeItems.length }))}</h3>
+            </div>
+          </div>
+          <div class="relationship-card-stack">${activeMarkup}</div>
+        </article>
+
+        <article class="relationship-card relationship-section-card">
+          <div class="relationship-card-head">
+            <div>
+              <p class="command-eyebrow">${escapeHtml(t('common.inboxWaitingTitle'))}</p>
+              <h3>${escapeHtml(t('common.inboxWaitingCount', { count: waitingItems.length }))}</h3>
+            </div>
+          </div>
+          <div class="relationship-card-stack">${waitingMarkup}</div>
+        </article>
+      </div>
+    </div>
+  `;
+}
+
 function renderTaskRequestComposerCard(friend) {
   const draft = taskRequestDraftForGateway(friend.id);
   const permissionKnown = Array.isArray(relationshipInboundScopesForGateway(friend.id));
@@ -3514,6 +3977,7 @@ function renderTaskRequestPanel() {
       </div>
     </div>
   `;
+  renderInboxPanel();
 }
 
 function renderRelationshipDiscoveryCard(gateway) {
@@ -3869,6 +4333,7 @@ function renderRelationshipPanel() {
       </div>
     </div>
   `;
+  renderInboxPanel();
 }
 
 async function runRelationshipMutation(execute, successMessage) {
@@ -3994,6 +4459,7 @@ function renderConversationPanel() {
 
   if (!conversationState.items.length) {
     renderEmpty(elements.conversationPanel, t('common.conversationsEmpty'));
+    renderInboxPanel();
     return;
   }
 
@@ -4150,6 +4616,7 @@ function renderConversationPanel() {
       <div class="conversation-detail-column">${detailMarkup}</div>
     </div>
   `;
+  renderInboxPanel();
 }
 
 async function loadConversationDetail(apiOrigin, token, conversationId) {
@@ -5168,6 +5635,7 @@ function stopLiveStream({ preserveCursor = true } = {}) {
 function resetAquariumSurface() {
   setCommandDeckEnabled(false);
   resetCommandDeck();
+  resetInboxState();
   resetRelationshipState();
   resetTaskRequestState();
   resetConversationState();
@@ -5179,6 +5647,7 @@ function resetAquariumSurface() {
   renderEmpty(elements.socialPulsePanel, t('panel.socialPulse.empty'));
   renderEmpty(elements.feedPanel, t('panel.feed.empty'));
   renderEmpty(elements.publicThreadPanel, t('panel.publicThreads.empty'));
+  renderEmpty(elements.inboxPanel, t('panel.inbox.empty'));
   renderEmpty(elements.relationshipPanel, t('panel.relationships.empty'));
   renderEmpty(elements.taskRequestPanel, t('panel.taskRequests.empty'));
   renderEmpty(elements.conversationPanel, t('panel.conversations.empty'));
@@ -5208,8 +5677,11 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
   const isHostViewer = gateway.kind === 'host';
   syncViewerScopedVisibility();
   if (isParticipantGateway) {
+    inboxState.isLoading = true;
+    inboxState.error = null;
     relationshipState.isLoading = true;
     relationshipState.error = null;
+    renderInboxPanel();
     renderRelationshipPanel();
     taskRequestState.isLoading = true;
     taskRequestState.error = null;
@@ -5299,6 +5771,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     runtimeResult,
   ] =
     results;
+  const inboxErrors = [];
   const syncedAt = new Date().toISOString();
   aquariumState.lastSyncedAt = syncedAt;
   if (aquaResult.status === 'fulfilled') {
@@ -5381,6 +5854,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
   renderParticipantRecoveryResult();
 
   if (!isParticipantGateway) {
+    resetInboxState();
     resetConversationState();
     renderEmpty(elements.conversationPanel, t('panel.conversations.empty'));
   } else if (conversationsResult.status === 'fulfilled') {
@@ -5389,6 +5863,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     renderConversationPanel();
     await loadConversationDetail(apiOrigin, token, conversationState.activeConversationId);
   } else {
+    inboxErrors.push(conversationsResult.reason.message);
     conversationState.activeConversationId = null;
     conversationState.error = null;
     conversationState.isLoading = false;
@@ -5403,6 +5878,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     resetTaskRequestState();
     renderEmpty(elements.relationshipPanel, t('panel.relationships.empty'));
     renderEmpty(elements.taskRequestPanel, t('panel.taskRequests.empty'));
+    renderEmpty(elements.inboxPanel, t('panel.inbox.empty'));
   } else {
     const relationshipErrors = [];
     const taskRequestErrors = [];
@@ -5512,6 +5988,10 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     taskRequestState.error = taskRequestErrors[0] ?? null;
     taskRequestState.isLoading = false;
     renderTaskRequestPanel();
+
+    inboxState.error = inboxErrors[0] ?? relationshipErrors[0] ?? taskRequestErrors[0] ?? null;
+    inboxState.isLoading = false;
+    renderInboxPanel();
   }
 
   if (!isHostViewer) {
@@ -6704,6 +7184,16 @@ document.addEventListener('click', (event) => {
     return;
   }
 
+  const focusPanelTrigger = event.target.closest('[data-focus-panel]');
+  if (focusPanelTrigger) {
+    const panelKey = focusPanelTrigger.getAttribute('data-focus-panel')?.trim();
+    const panelElement = panelKey ? elements[panelKey] : null;
+    if (panelElement) {
+      focusPanelSurface(panelElement);
+    }
+    return;
+  }
+
   const taskRequestAcceptTrigger = event.target.closest('[data-task-request-accept-id]');
   if (taskRequestAcceptTrigger) {
     const requestId = taskRequestAcceptTrigger.getAttribute('data-task-request-accept-id')?.trim();
@@ -6922,8 +7412,16 @@ document.addEventListener('click', (event) => {
       return;
     }
     void loadConversationDetail(aquariumState.apiOrigin, aquariumState.token, conversationId).then(() => {
+      focusPanelSurface(elements.conversationPanel);
       elements.conversationPanel?.querySelector('[data-conversation-body]')?.focus();
     });
+    return;
+  }
+
+  const inboxConversationReadTrigger = event.target.closest('[data-inbox-mark-conversation-read-id]');
+  if (inboxConversationReadTrigger) {
+    const conversationId = inboxConversationReadTrigger.getAttribute('data-inbox-mark-conversation-read-id')?.trim();
+    void markConversationRead(conversationId);
     return;
   }
 

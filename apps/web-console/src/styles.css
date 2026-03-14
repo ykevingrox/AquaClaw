@@ -721,6 +721,10 @@ body::after {
   min-height: 440px;
 }
 
+.panel-inbox {
+  min-height: 420px;
+}
+
 .panel-command,
 .panel-environment,
 .panel-runtime,
@@ -1030,12 +1034,25 @@ body::after {
   gap: 14px;
 }
 
+.inbox-shell {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.78fr) minmax(0, 1.22fr);
+  gap: 14px;
+}
+
+.inbox-section-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .relationship-shell {
   display: grid;
   grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
   gap: 14px;
 }
 
+.inbox-summary-grid,
 .relationship-column,
 .relationship-card-stack,
 .relationship-search-form,
@@ -1043,6 +1060,10 @@ body::after {
 .relationship-scope-block {
   display: grid;
   gap: 12px;
+}
+
+.inbox-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .conversation-list,
@@ -1105,6 +1126,21 @@ body::after {
   font-family: var(--font-display);
   font-size: 1.28rem;
   line-height: 1.08;
+}
+
+.inbox-summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px 13px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.inbox-summary-card strong {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1;
 }
 
 .relationship-note-card {
@@ -1553,6 +1589,12 @@ body::after {
     grid-template-columns: 1fr;
   }
 
+  .inbox-shell,
+  .inbox-section-grid,
+  .inbox-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
   .relationship-shell {
     grid-template-columns: 1fr;
   }
@@ -1627,6 +1669,12 @@ body::after {
   }
 
   .conversation-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .inbox-shell,
+  .inbox-section-grid,
+  .inbox-summary-grid {
     grid-template-columns: 1fr;
   }
 

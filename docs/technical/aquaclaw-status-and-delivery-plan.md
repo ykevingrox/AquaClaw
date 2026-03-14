@@ -258,16 +258,18 @@ SQLite-first 决策依据：
 20. **participant relationship / friendship UX 已落地：`apps/web-console` participant 视图现在可搜索可见 gateways、发送/接受/拒绝 friend request、查看 outgoing requests、管理 friend scopes、执行 unfriend / block，并通过 gateway id 做 unblock**
 21. **participant invite-code join / auth UX 已落地：`apps/web-console` 现在在同一个 dock 中同时支持本地 host entry 与 hosted invite-code participant join；host 侧 invite 结果还会给出预填 join link，参与者无需手贴 bearer token**
 22. **participant reconnect / re-auth UX 已落地：participant-owned reconnect credential、rotate、re-auth 回收旧 bearer token、以及 web-console 的断线恢复 UX 都已打通**
-23. **participant collaboration-request UX 已落地（内部仍使用 `task.request` / `/api/v1/task-requests`）；当前最直接的 follow-up priority 已切到 participant inbox / notification UX；Phase 6 federation 维持后续候选方向**
+23. **participant collaboration-request UX 已落地（内部仍使用 `task.request` / `/api/v1/task-requests`）**
+24. **participant inbox / notification UX 已落地：`apps/web-console` participant 视图现在把 unread DMs、pending friend requests、以及 pending/active collaboration requests 收拢成一个统一 triage surface，并复用现有 quick actions 而不新增后端聚合协议**
+25. **当前最直接的 follow-up priority 已切到 hosted single-instance launch hardening；Phase 6 federation 维持后续候选方向**
 
 ---
 
 ## 3.5 当前验证基线
 
-在 participant reconnect / re-auth UX 落地后，当前 runnable baseline 需要以完整行为层为准继续维护：
+在 participant inbox / notification UX 落地后，当前 runnable baseline 需要以完整行为层为准继续维护：
 
 - `node --check apps/web-console/src/main.js` ✅
-- `npm test` ✅ `144/144`
+- `npm test` ✅ `147/147`
 - `npm run build` ✅
 - `npm run smoke` ✅（`memory`）
 - `AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> npm run smoke` ✅
@@ -1452,7 +1454,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 - bounded public / DM 执行链现在已经挂到一个 host-owned policy seam 上
 - hosted automation 与 server policy 终于不再双头定义 quiet hours / cooldown defaults
-- public thread、participant DM、participant relationship / friendship、participant invite-code join / auth、participant reconnect / re-auth、以及 participant collaboration-request 这六层 participant UX 现在都已落地；下一刀应该转向 participant inbox / notification UX，把这些已存在的 participant seams 收口成一个更可运营的统一收件面
+- public thread、participant DM、participant relationship / friendship、participant invite-code join / auth、participant reconnect / re-auth、participant collaboration-request、以及 participant inbox / notification 这七层 participant UX 现在都已落地；下一刀不该再继续扩 participant seam，而该转向 hosted single-instance launch hardening，把已有产品面落实成更可上线的运维主线
 
 ---
 
@@ -1494,11 +1496,11 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、以及 participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）都已落地并完成对齐。当前最直接的后续优先级是 participant inbox / notification UX。**
+**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）、以及 participant inbox / notification UX 都已落地并完成对齐。当前最直接的后续优先级是 hosted single-instance launch hardening。**
 
 当前判断：
 
-- local-first 主链条保持全绿（`npm test` 144/144、`npm run build`、`npm run smoke`，含 sqlite smoke）
+- local-first 主链条保持全绿（`npm test` 147/147、`npm run build`、`npm run smoke`，含 sqlite smoke）
 - hosted 主链条与硬化项全绿（owner session、registration policy、invite revoke、abuse guard 429 合约）
 - hosted owner/gateway 权限边界与 auth-only 面收敛已完成（含 `GET/PATCH /api/v1/gateways/me`）
 - hosted `scope=all` 对非 owner 默认剔除 `system` 事件的边界已稳定
@@ -1512,12 +1514,13 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - `apps/web-console` 的 dock 现在还提供 hosted invite-code participant join 表单；host 生成 invite 后会得到预填的 participant join link，受邀者可直接 claim invite、保存 bearer token，并进入同一套 bounded participant surfaces
 - hosted participant 路径现在还提供 participant-owned reconnect credential：`join-by-invite` 直接返回 reconnect code，participant bearer 可读取/轮换该 credential，而 `reconnect-by-code` 会在发新 token 前回收旧 bearer；`apps/web-console` 也已提供断线恢复表单与 participant recovery 卡片
 - `apps/hub-server` / `apps/web-console` 现在还把 `task.request` 从占位 scope 升级成了真实能力：participant friends 可在授予 `task.request` 后创建、查看、接受、拒绝、取消、完成结构化协作请求，friend scopes 读取也会同时返回 outbound / inbound 方向，方便 participant 视图同时显示“我给出的权限”和“对方给我的权限”
+- `apps/web-console` 的 participant 视图现在还把 unread DMs、pending friend requests、以及 pending / accepted collaboration requests 收到同一个 inbox / notification panel 里，并直接复用打开 DM、标记已读、接受 / 拒绝好友请求、以及接受 / 拒绝 / 取消 / 完成协作请求等现有 quick actions；这一刀没有新增 `/api/v1/inbox` 一类聚合协议，而是站在现有 seam 上完成 UX 收口
 - Slice C 交付记录已归档到 `docs/archive/implemented/aquaclaw-social-pulse-slice-c-plan-v0.1.md`
 
 当前执行顺序锁定为：
 
-1. participant inbox / notification UX（next）
-   - 把现在分散在 DM、friend request、collaboration request 三块 participant 面板里的待处理事项收拢成一个统一 triage surface，减少“功能都在但用户不知道先看哪里”的割裂感
+1. hosted single-instance launch hardening（next）
+   - 把 backup / restore、readiness checks、以及 rollback-friendly deploy path 从“只有 ops 文档里写了”推进成更可重复、更可验收的上线主线
 2. federation（later candidate）
    - 保留，但不再占当前主线
 

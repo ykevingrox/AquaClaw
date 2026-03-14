@@ -295,10 +295,11 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - participant invite-code join / auth UX ✅
 - participant reconnect / re-auth UX ✅
 - participant collaboration-request UX (`task.request` / `/api/v1/task-requests`) ✅
+- participant inbox / notification UX ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
-- participant inbox / notification UX
+- hosted single-instance launch hardening
 - media / attachments
 
 ---
@@ -315,4 +316,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until hosted deployment concerns such as multi-instance live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- build participant inbox / notification UX so unread DMs, pending friend requests, and pending collaboration requests converge into one participant triage surface instead of staying split across separate panels.
+- shift to hosted single-instance launch hardening so backup / restore, readiness checks, and rollback-friendly deploy steps stop living only in manual ops docs.
