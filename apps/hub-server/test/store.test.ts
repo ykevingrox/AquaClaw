@@ -283,6 +283,194 @@ test('GatewayStore social pulse policy can suppress proactive DMs while preservi
   assert.equal(evaluation.meta.policy.directMessagesEnabled, false);
 });
 
+test('GatewayStore social pulse policy can exhaust public-expression budget and downgrade to memory_only', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = registerGateway(store, { displayName: 'Pulse Surface Alpha', handle: 'pulse-surface-alpha' });
+  const beta = registerGateway(store, { displayName: 'Pulse Surface Beta', handle: 'pulse-surface-beta' });
+
+  store.setCurrent({
+    key: 'budget-public-water',
+    label: 'Budget Public Water',
+    summary: 'The sea is lively enough to support outward public speech.',
+    tone: 'playful',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+    actorGatewayId: alpha.id,
+  });
+  store.setEnvironment({
+    waterTemperatureC: 19,
+    clarity: 'clear',
+    tideDirection: 'crosswind',
+    surfaceState: 'surging',
+    phenomenon: 'warm_bloom',
+    actorGatewayId: alpha.id,
+  });
+
+  store.createPublicExpression({
+    gatewayId: beta.id,
+    body: 'The surface is bright enough to answer tonight.',
+    metadata: {
+      automationOrigin: 'social_pulse',
+    },
+  });
+
+  const baseline = store.evaluateGatewaySocialPulse(alpha.id);
+  assert.equal(baseline.item.decision.action, 'public_expression');
+
+  store.updateSocialPulsePolicy({
+    hostId: host.id,
+    publicExpressionBudgetPer24h: 1,
+  });
+
+  const evaluation = store.evaluateGatewaySocialPulse(alpha.id);
+  assert.equal(evaluation.item.decision.action, 'memory_only');
+  assert.equal(evaluation.item.decision.reason, 'policy_public_expression_budget_exhausted');
+  assert.equal(evaluation.item.decision.publicExpressionPlan, null);
+  assert.equal(evaluation.meta.policy.publicExpressionBudgetPer24h, 1);
+  assert.equal(evaluation.meta.policyState.publicExpressionBudget.used, 1);
+  assert.equal(evaluation.meta.policyState.publicExpressionBudget.remaining, 0);
+});
+
+test('GatewayStore social pulse policy can exhaust direct-message budget and downgrade to memory_only', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = registerGateway(store, { displayName: 'Budget DM Alpha', handle: 'budget-dm-alpha' });
+  const beta = registerGateway(store, { displayName: 'Budget DM Beta', handle: 'budget-dm-beta' });
+
+  const request = store.createFriendRequest({
+    fromGatewayId: alpha.id,
+    toGatewayId: beta.id,
+  });
+  const accepted = store.acceptFriendRequest(request.id, beta.id);
+
+  store.heartbeatPresence(beta.id);
+  store.setCurrent({
+    key: 'budget-dm-water',
+    label: 'Budget DM Water',
+    summary: 'The sea is lively enough to support a DM reply.',
+    tone: 'playful',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+    actorGatewayId: alpha.id,
+  });
+  store.setEnvironment({
+    waterTemperatureC: 19,
+    clarity: 'clear',
+    tideDirection: 'crosswind',
+    surfaceState: 'surging',
+    phenomenon: 'warm_bloom',
+    actorGatewayId: alpha.id,
+  });
+  store.createMessage({
+    conversationId: accepted.conversation.id,
+    senderGatewayId: beta.id,
+    body: 'This automated DM already spent today’s message budget.',
+    origin: 'social_pulse',
+  });
+
+  const baseline = store.evaluateGatewaySocialPulse(alpha.id);
+  assert.equal(baseline.item.decision.action, 'friend_dm_reply');
+
+  store.updateSocialPulsePolicy({
+    hostId: host.id,
+    directMessageBudgetPer24h: 1,
+  });
+
+  const evaluation = store.evaluateGatewaySocialPulse(alpha.id);
+  assert.equal(evaluation.item.decision.action, 'memory_only');
+  assert.equal(evaluation.item.decision.reason, 'policy_direct_messages_budget_exhausted');
+  assert.equal(evaluation.item.decision.directMessagePlan, null);
+  assert.equal(evaluation.meta.policy.directMessageBudgetPer24h, 1);
+  assert.equal(evaluation.meta.policyState.directMessageBudget.used, 1);
+  assert.equal(evaluation.meta.policyState.directMessageBudget.remaining, 0);
+});
+
+test('GatewayStore social pulse action budgets count only automation-origin writes and block further automated writes', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = registerGateway(store, { displayName: 'Budget Manual Alpha', handle: 'budget-manual-alpha' });
+  const beta = registerGateway(store, { displayName: 'Budget Manual Beta', handle: 'budget-manual-beta' });
+
+  const request = store.createFriendRequest({
+    fromGatewayId: alpha.id,
+    toGatewayId: beta.id,
+  });
+  const accepted = store.acceptFriendRequest(request.id, beta.id);
+
+  store.updateSocialPulsePolicy({
+    hostId: host.id,
+    publicExpressionBudgetPer24h: 1,
+    directMessageBudgetPer24h: 1,
+  });
+
+  store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'Manual public expression should not consume automation budget.',
+  });
+  store.createMessage({
+    conversationId: accepted.conversation.id,
+    senderGatewayId: alpha.id,
+    body: 'Manual DM should not consume automation budget.',
+  });
+
+  let state = store.evaluateSocialPulse({ hostId: host.id }).meta.policyState;
+  assert.equal(state.publicExpressionBudget.used, 0);
+  assert.equal(state.directMessageBudget.used, 0);
+
+  store.createPublicExpression({
+    gatewayId: beta.id,
+    body: 'First automated public expression consumes the budget.',
+    metadata: {
+      automationOrigin: 'social_pulse',
+    },
+  });
+  store.createMessage({
+    conversationId: accepted.conversation.id,
+    senderGatewayId: beta.id,
+    body: 'First automated DM consumes the budget.',
+    origin: 'social_pulse',
+  });
+
+  state = store.evaluateSocialPulse({ hostId: host.id }).meta.policyState;
+  assert.equal(state.publicExpressionBudget.used, 1);
+  assert.equal(state.publicExpressionBudget.remaining, 0);
+  assert.equal(state.directMessageBudget.used, 1);
+  assert.equal(state.directMessageBudget.remaining, 0);
+
+  store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'Manual public expression still works after automation budget is full.',
+  });
+  store.createMessage({
+    conversationId: accepted.conversation.id,
+    senderGatewayId: alpha.id,
+    body: 'Manual DM still works after automation budget is full.',
+  });
+
+  assert.throws(
+    () =>
+      store.createPublicExpression({
+        gatewayId: alpha.id,
+        body: 'Second automated public expression should be blocked.',
+        metadata: {
+          automationOrigin: 'social_pulse',
+        },
+      }),
+    /social pulse public expression budget exhausted/,
+  );
+  assert.throws(
+    () =>
+      store.createMessage({
+        conversationId: accepted.conversation.id,
+        senderGatewayId: alpha.id,
+        body: 'Second automated DM should be blocked.',
+        origin: 'social_pulse',
+      }),
+    /social pulse direct message budget exhausted/,
+  );
+});
+
 test('GatewayStore public expression seam creates threaded public speech and observer-safe feed projections', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Surface Alpha', handle: 'surface-alpha-store' });

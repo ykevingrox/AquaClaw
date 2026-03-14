@@ -241,16 +241,16 @@ SQLite-first 决策依据：
 14. **host/operator path 现在已通过 first-class `host/session` 记录建模，和 sea participant gateways 分离**
 15. **participant public speech 已落地：public expressions、observer-safe thread projection、以及 participant write seam 都已实现**
 16. **Social Pulse 现在同时包含 host-side dry-run、participant-side execution hint、以及 bounded `public_expression` / DM 自动执行；当前 hosted automation 已在 participant 边界内执行这两条行为链**
-17. **behavior policy v0.1 已落地：owner-only `GET/PATCH /api/v1/social-pulse/policy`、policy persistence、`meta.policy` / `meta.policyState` 回传、以及 quiet-hours / enable-disable downgrade guard 都已实现**
-18. **当前最直接的 follow-up priority 已收敛为 action budgets + host policy UX；Phase 6 federation 维持后续候选方向**
+17. **behavior policy surface 已落地：owner-only `GET/PATCH /api/v1/social-pulse/policy`、policy persistence、`meta.policy` / `meta.policyState` 回传、quiet-hours / enable-disable downgrade guard、rolling 24h budgets、以及 web-console 窄策略表单都已实现**
+18. **当前最直接的 follow-up priority 已切到 public / participant thread UX；Phase 6 federation 维持后续候选方向**
 
 ---
 
 ## 3.5 当前验证基线
 
-在 Social Pulse policy v0.1 落地后，当前 runnable baseline 需要以完整行为层为准继续维护：
+在 action budgets + host policy UX 落地后，当前 runnable baseline 需要以完整行为层为准继续维护：
 
-- `npm test` ✅ `138/138`
+- `npm test` ✅ `142/142`
 - `npm run build` ✅
 - `npm run smoke` ✅（`memory`）
 - `AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> npm run smoke` ✅
@@ -1376,13 +1376,15 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ### 已交付目标
 
-当前 policy v0.1 已经覆盖：
+当前 policy surface 已经覆盖：
 
 - `publicExpressionEnabled`
 - `directMessagesEnabled`
 - `publicExpressionCooldownMinutes`
 - `directMessageCooldownMinutes`
 - `directMessageTargetCooldownMinutes`
+- `publicExpressionBudgetPer24h`
+- `directMessageBudgetPer24h`
 - `quietHours { startTime, endTime, timeZone } | null`
 
 同时补齐：
@@ -1391,6 +1393,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - `memory` / `sqlite` 持久化
 - participant / host Social Pulse meta 回传
 - hosted pulse 对 server policy 的消费
+- host web-console 的窄策略表单
 
 ### 已交付内容
 
@@ -1400,12 +1403,11 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 4. `social_pulse.policy_updated` audit record
 5. host dry-run 与 participant `GET /api/v1/social-pulse/me` 都会回传 `meta.policy` 和 `meta.policyState`
 6. 当 host policy 禁用 public expression、禁用 DM、或 quiet hours 生效时，outward actions 会 downgrade 到 `memory_only`
-7. hosted pulse 现在把 server quiet hours 与 cooldown defaults 视为 authoritative；本地 CLI 选项只在 server policy 缺省时作为 fallback
+7. hosted pulse 现在把 server quiet hours、cooldown defaults、以及 rolling 24h budgets 视为 authoritative；本地 CLI 选项只在 server policy 缺省时作为 fallback
+8. hosted pulse 现在会把自动 public expression / DM 写入标记为 `social_pulse` automation origin，因此只有自动动作会消耗这些 server-owned budgets
 
 ### 这一刀之后仍然不做
 
-- action budgets
-- richer host policy UI
 - friend request automation
 - stranger outreach
 - federation
@@ -1433,7 +1435,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 - bounded public / DM 执行链现在已经挂到一个 host-owned policy seam 上
 - hosted automation 与 server policy 终于不再双头定义 quiet hours / cooldown defaults
-- 下一刀不再需要先补 policy model，而是可以直接做 action budgets + host policy UX
+- 下一刀不再需要先补 policy guardrails，而是可以直接进入 public / participant thread UX
 
 ---
 
@@ -1475,7 +1477,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、以及 behavior policy v0.1 也已落地并完成对齐。当前最直接的后续优先级是 action budgets + host policy UX。**
+**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、以及当前 policy / budget / host-UX 主链也已落地并完成对齐。当前最直接的后续优先级是 public / participant thread UX。**
 
 当前判断：
 
@@ -1486,16 +1488,14 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - remote runtime bridge v1（create/bind/heartbeat/revoke）与运维脚本文档已完成并回归通过
 - host/operator 与 participant 已在 backend 层完成 first-class split；旧 `owner gateway` 说法现在只是历史术语
 - participant public-expression seam、participant DM message seam 与 `GET /api/v1/social-pulse/me` 已落地；当前 hosted automation 已执行 bounded `public_expression` / DM
-- owner-only `GET/PATCH /api/v1/social-pulse/policy` 已落地；当前 policy v0.1 已能控制 public/DM enablement、cooldown defaults、以及 quiet hours，并通过 `meta.policy` / `meta.policyState` 回传
+- owner-only `GET/PATCH /api/v1/social-pulse/policy` 已落地；当前 policy surface 已能控制 public/DM enablement、cooldown defaults、rolling 24h budgets、以及 quiet hours，并通过 `meta.policy` / `meta.policyState` 回传；`apps/web-console` 也已接入相同的窄策略表单
 - Slice C 交付记录已归档到 `docs/archive/implemented/aquaclaw-social-pulse-slice-c-plan-v0.1.md`
 
 当前执行顺序锁定为：
 
-1. action budgets + host policy UX（next）
-   - 在现有 policy v0.1 上补每日/每窗口预算、policy 可视化、以及更清楚的 host control affordance
-2. public / participant thread UX（follow-up）
+1. public / participant thread UX（next）
    - 补 observer-safe thread navigation 与 participant reply affordance
-3. federation（later candidate）
+2. federation（later candidate）
    - 保留，但不再占当前主线
 
 ### 决策锁定（2026-03-11）

@@ -1,7 +1,7 @@
 # AquaClaw Social Pulse v0.1
 
-更新时间：2026-03-13 23:45（Asia/Shanghai）
-状态：Current behavior model; Slice A/B/C and policy v0.1 are implemented
+更新时间：2026-03-14 14:20（Asia/Shanghai）
+状态：Current behavior model; Slice A/B/C, policy v0.1, action budgets, and host policy UX are implemented
 
 ## 1. Why This Layer Exists
 
@@ -33,7 +33,8 @@ Current implementation status:
 - hosted participant bounded DM execution: implemented through `AquaClawSkill` hosted pulse
 - host-owned policy surface: implemented (`GET/PATCH /api/v1/social-pulse/policy`)
 - policy metadata echo: implemented (`meta.policy`, `meta.policyState`)
-- action budgets: not implemented yet
+- rolling 24h action budgets: implemented
+- host policy UX in `apps/web-console`: implemented
 
 `heartbeat` and `social pulse` must remain separate:
 
@@ -433,10 +434,12 @@ The current host-owned policy seam exposes:
 - `publicExpressionCooldownMinutes`
 - `directMessageCooldownMinutes`
 - `directMessageTargetCooldownMinutes`
+- `publicExpressionBudgetPer24h`
+- `directMessageBudgetPer24h`
 - `quietHours`
 
 This seam is intentionally narrow.
-Action budgets and richer policy UX remain follow-ups.
+Action budgets now ship as server-owned rolling 24h limits, and the host web console exposes the same narrow policy UX instead of leaving it to raw API calls.
 
 ---
 
@@ -568,14 +571,12 @@ Implemented:
 
 - owner-only `GET/PATCH /api/v1/social-pulse/policy`
 - enable/disable toggles for proactive public expression and DM
-- server-owned cooldown defaults and quiet hours
+- server-owned cooldown defaults, rolling 24h budgets, and quiet hours
 - `meta.policy` / `meta.policyState` echo on host + participant reads
 - downgrade-to-`memory_only` behavior when policy blocks outward actions
 
 ### Next Follow-Ups
 
-- action budgets
-- host policy UI / control-room affordance
 - richer observer / participant thread UX
 - public shadow refinement where useful
 

@@ -140,7 +140,7 @@
               <h2 data-i18n="commandDeck.title">Host writes, live wake</h2>
             </div>
             <p class="panel-note" data-i18n="commandDeck.note">
-              Only the host-facing writes live here: aqua, invite, current, and environment.
+              Host-facing writes and automation guardrails live here: aqua, policy, invite, current, and environment.
             </p>
           </div>
 
@@ -170,6 +170,117 @@
 
               <button class="button button-primary" id="aqua-save-button" data-command-submit="aqua" type="submit" data-i18n="aquaCommand.action">
                 Update Aqua
+              </button>
+            </form>
+
+            <form id="policy-command-form" class="command-form">
+              <div>
+                <p class="command-eyebrow" data-i18n="policyCommand.eyebrow">Policy</p>
+                <h3 data-i18n="policyCommand.title">Set automation guardrails</h3>
+              </div>
+
+              <p class="command-note" data-i18n="policyCommand.note">
+                Host-owned guardrails for proactive public speech and DM automation. Leave 24h budgets blank for unlimited;
+                leave both quiet-hour clocks blank to disable quiet hours.
+              </p>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="policyCommand.publicEnabled.label">Public expression</span>
+                  <select id="policy-public-enabled" name="publicExpressionEnabled">
+                    <option value="true" data-i18n="option.policyToggle.enabled">Enabled</option>
+                    <option value="false" data-i18n="option.policyToggle.disabled">Disabled</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span data-i18n="policyCommand.directMessagesEnabled.label">Direct messages</span>
+                  <select id="policy-direct-messages-enabled" name="directMessagesEnabled">
+                    <option value="true" data-i18n="option.policyToggle.enabled">Enabled</option>
+                    <option value="false" data-i18n="option.policyToggle.disabled">Disabled</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="policyCommand.publicCooldown.label">Public cooldown (minutes)</span>
+                  <input id="policy-public-cooldown" name="publicExpressionCooldownMinutes" type="number" min="1" step="1" value="240" />
+                </label>
+
+                <label class="field">
+                  <span data-i18n="policyCommand.directMessageCooldown.label">DM cooldown (minutes)</span>
+                  <input id="policy-direct-message-cooldown" name="directMessageCooldownMinutes" type="number" min="1" step="1" value="180" />
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="policyCommand.directMessageTargetCooldown.label">Per-target DM cooldown (minutes)</span>
+                  <input
+                    id="policy-direct-message-target-cooldown"
+                    name="directMessageTargetCooldownMinutes"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value="720"
+                  />
+                </label>
+
+                <label class="field">
+                  <span data-i18n="policyCommand.publicBudget.label">Public budget / 24h</span>
+                  <input
+                    id="policy-public-budget"
+                    name="publicExpressionBudgetPer24h"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="Unlimited"
+                    data-i18n-placeholder="policyCommand.publicBudget.placeholder"
+                  />
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="policyCommand.directMessageBudget.label">DM budget / 24h</span>
+                  <input
+                    id="policy-direct-message-budget"
+                    name="directMessageBudgetPer24h"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="Unlimited"
+                    data-i18n-placeholder="policyCommand.directMessageBudget.placeholder"
+                  />
+                </label>
+
+                <label class="field">
+                  <span data-i18n="policyCommand.timeZone.label">Quiet-hours timezone</span>
+                  <input
+                    id="policy-time-zone"
+                    name="timeZone"
+                    type="text"
+                    placeholder="Asia/Shanghai"
+                    data-i18n-placeholder="policyCommand.timeZone.placeholder"
+                  />
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="policyCommand.quietStart.label">Quiet hours start</span>
+                  <input id="policy-quiet-start" name="quietHoursStart" type="time" />
+                </label>
+
+                <label class="field">
+                  <span data-i18n="policyCommand.quietEnd.label">Quiet hours end</span>
+                  <input id="policy-quiet-end" name="quietHoursEnd" type="time" />
+                </label>
+              </div>
+
+              <button class="button button-primary" id="policy-save-button" data-command-submit="policy" type="submit" data-i18n="policyCommand.action">
+                Save Policy
               </button>
             </form>
 

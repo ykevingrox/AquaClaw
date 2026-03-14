@@ -267,6 +267,8 @@ test('local owner can patch and read social pulse policy while gateway tokens ca
     payload: {
       directMessagesEnabled: false,
       publicExpressionCooldownMinutes: 300,
+      publicExpressionBudgetPer24h: 4,
+      directMessageBudgetPer24h: 2,
       quietHours: {
         startTime: '23:00',
         endTime: '07:00',
@@ -277,6 +279,8 @@ test('local owner can patch and read social pulse policy while gateway tokens ca
   assert.equal(update.statusCode, 200);
   assert.equal(update.json().data.policy.directMessagesEnabled, false);
   assert.equal(update.json().data.policy.publicExpressionCooldownMinutes, 300);
+  assert.equal(update.json().data.policy.publicExpressionBudgetPer24h, 4);
+  assert.equal(update.json().data.policy.directMessageBudgetPer24h, 2);
   assert.equal(update.json().data.policy.quietHours.timeZone, 'Asia/Shanghai');
 
   const read = await app.inject({
@@ -288,6 +292,8 @@ test('local owner can patch and read social pulse policy while gateway tokens ca
   });
   assert.equal(read.statusCode, 200);
   assert.equal(read.json().data.policy.directMessagesEnabled, false);
+  assert.equal(read.json().data.policy.publicExpressionBudgetPer24h, 4);
+  assert.equal(read.json().data.policy.directMessageBudgetPer24h, 2);
   assert.equal(read.json().data.policy.quietHours.startTime, '23:00');
 
   const forbidden = await app.inject({
@@ -674,6 +680,153 @@ test('participant social pulse respects host-set DM policy and downgrades to mem
   assert.equal(participantPulse.json().data.item.decision.reason, 'policy_direct_messages_disabled');
   assert.equal(participantPulse.json().data.item.decision.directMessagePlan, null);
   assert.equal(participantPulse.json().data.meta.policy.directMessagesEnabled, false);
+
+  await app.close();
+});
+
+test('participant social pulse respects host-set DM budget and downgrades to memory_only once automation budget is consumed', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const alpha = await registerGateway(app, {
+    displayName: 'Budget DM Alpha',
+    handle: 'budget-dm-alpha-app',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Budget DM Beta',
+    handle: 'budget-dm-beta-app',
+  });
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      toGatewayId: beta.gateway.id,
+    },
+  });
+  assert.equal(friendRequest.statusCode, 201);
+  const requestId = friendRequest.json().data.request.id as string;
+
+  const accepted = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${requestId}/accept`,
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+  });
+  assert.equal(accepted.statusCode, 200);
+  const conversationId = accepted.json().data.conversation.id as string;
+
+  const betaPresence = await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      sessionId: 'budget-dm-beta-session',
+      connectionType: 'gateway_ws',
+    },
+  });
+  assert.equal(betaPresence.statusCode, 200);
+
+  const current = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      key: 'budget-dm-current',
+      label: 'Budget DM Current',
+      summary: 'The sea would normally support a direct reply.',
+      tone: 'playful',
+      ...buildActiveCurrentWindow(),
+    },
+  });
+  assert.equal(current.statusCode, 201);
+
+  const environment = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      waterTemperatureC: 19,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'warm_bloom',
+    },
+  });
+  assert.equal(environment.statusCode, 201);
+
+  const baseline = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(baseline.statusCode, 200);
+  assert.equal(baseline.json().data.item.decision.action, 'friend_dm_open');
+
+  const updatePolicy = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/social-pulse/policy',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      directMessageBudgetPer24h: 1,
+    },
+  });
+  assert.equal(updatePolicy.statusCode, 200);
+
+  const automatedMessage = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      body: 'This automated DM spends the only remaining budget slot.',
+      origin: 'social_pulse',
+    },
+  });
+  assert.equal(automatedMessage.statusCode, 201);
+
+  const participantPulse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(participantPulse.statusCode, 200);
+  assert.equal(participantPulse.json().data.item.decision.action, 'memory_only');
+  assert.equal(participantPulse.json().data.item.decision.reason, 'policy_direct_messages_budget_exhausted');
+  assert.equal(participantPulse.json().data.item.decision.directMessagePlan, null);
+  assert.equal(participantPulse.json().data.meta.policy.directMessageBudgetPer24h, 1);
+  assert.equal(participantPulse.json().data.meta.policyState.directMessageBudget.used, 1);
+  assert.equal(participantPulse.json().data.meta.policyState.directMessageBudget.remaining, 0);
+
+  const secondAutomatedMessage = await app.inject({
+    method: 'POST',
+    url: `/api/v1/conversations/${conversationId}/messages`,
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      body: 'A second automated DM should now be blocked.',
+      origin: 'social_pulse',
+    },
+  });
+  assert.equal(secondAutomatedMessage.statusCode, 409);
+  assert.equal(secondAutomatedMessage.json().error.code, 'policy_guard');
 
   await app.close();
 });

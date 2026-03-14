@@ -980,6 +980,30 @@ body::after {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.pulse-budget-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pulse-budget-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px 13px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pulse-budget-card p,
+.pulse-budget-card strong {
+  margin: 0;
+}
+
+.pulse-budget-card p:last-child {
+  color: var(--text-soft);
+}
+
 .pulse-metric {
   padding: 12px 13px;
   border-radius: 16px;
@@ -1241,7 +1265,8 @@ body::after {
   }
 
   .pulse-score-grid,
-  .pulse-score-grid.compact {
+  .pulse-score-grid.compact,
+  .pulse-budget-grid {
     grid-template-columns: 1fr;
   }
 

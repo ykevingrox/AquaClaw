@@ -268,6 +268,7 @@ export interface ScenePage {
 }
 
 export type SocialPulseAction = 'none' | 'memory_only' | 'public_expression' | 'friend_dm_open' | 'friend_dm_reply';
+export type SocialPulseAutomationOrigin = 'social_pulse';
 
 export interface SocialPulseTraits {
   sociability: number;
@@ -288,15 +289,27 @@ export interface SocialPulsePolicyRecord {
   publicExpressionCooldownMinutes: number;
   directMessageCooldownMinutes: number;
   directMessageTargetCooldownMinutes: number;
+  publicExpressionBudgetPer24h: number | null;
+  directMessageBudgetPer24h: number | null;
   quietHours: SocialPulsePolicyQuietHours | null;
   updatedAt: string | null;
   updatedByHostId: string | null;
+}
+
+export interface SocialPulseBudgetState {
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  windowHours: number;
+  windowStartedAt: string;
 }
 
 export interface SocialPulsePolicyState {
   quietHoursActive: boolean;
   quietHoursLocalClock: string | null;
   quietHoursTimeZone: string | null;
+  publicExpressionBudget: SocialPulseBudgetState;
+  directMessageBudget: SocialPulseBudgetState;
 }
 
 export interface SocialPulseCandidate {
@@ -666,6 +679,8 @@ export interface UpdateSocialPulsePolicyInput {
   publicExpressionCooldownMinutes?: number;
   directMessageCooldownMinutes?: number;
   directMessageTargetCooldownMinutes?: number;
+  publicExpressionBudgetPer24h?: number | null;
+  directMessageBudgetPer24h?: number | null;
   quietHours?: SocialPulsePolicyQuietHours | null;
 }
 
@@ -747,6 +762,7 @@ interface CreateMessageInput {
   conversationId: string;
   senderGatewayId: string;
   body: string;
+  origin?: SocialPulseAutomationOrigin;
 }
 
 export interface CreatePublicExpressionInput {
@@ -1009,12 +1025,17 @@ const HOST_VIEWER_PREFIX = 'host-viewer:';
 const SOCIAL_PULSE_DM_THRESHOLD = 0.68;
 const SOCIAL_PULSE_PUBLIC_THRESHOLD = 0.54;
 const SOCIAL_PULSE_MEMORY_THRESHOLD = 0.34;
+const SOCIAL_PULSE_BUDGET_WINDOW_HOURS = 24;
+const SOCIAL_PULSE_BUDGET_WINDOW_MS = SOCIAL_PULSE_BUDGET_WINDOW_HOURS * 60 * 60 * 1000;
+const SOCIAL_PULSE_AUTOMATION_ORIGIN: SocialPulseAutomationOrigin = 'social_pulse';
 const DEFAULT_SOCIAL_PULSE_POLICY: SocialPulsePolicyRecord = {
   publicExpressionEnabled: true,
   directMessagesEnabled: true,
   publicExpressionCooldownMinutes: 240,
   directMessageCooldownMinutes: 180,
   directMessageTargetCooldownMinutes: 720,
+  publicExpressionBudgetPer24h: null,
+  directMessageBudgetPer24h: null,
   quietHours: null,
   updatedAt: null,
   updatedByHostId: null,
@@ -1142,17 +1163,44 @@ function assertValidQuietHoursTimeZone(value: string) {
   }
 }
 
-function cloneSocialPulsePolicy(policy: SocialPulsePolicyRecord): SocialPulsePolicyRecord {
+function isSocialPulseAutomationOrigin(value: unknown): value is SocialPulseAutomationOrigin {
+  return value === SOCIAL_PULSE_AUTOMATION_ORIGIN;
+}
+
+function normalizeSocialPulsePolicy(policy: Partial<SocialPulsePolicyRecord> | null | undefined): SocialPulsePolicyRecord {
+  const merged = {
+    ...DEFAULT_SOCIAL_PULSE_POLICY,
+    ...(policy ?? {}),
+  };
+
   return {
-    ...policy,
-    quietHours: policy.quietHours ? { ...policy.quietHours } : null,
+    ...merged,
+    publicExpressionBudgetPer24h:
+      typeof merged.publicExpressionBudgetPer24h === 'number' ? merged.publicExpressionBudgetPer24h : null,
+    directMessageBudgetPer24h:
+      typeof merged.directMessageBudgetPer24h === 'number' ? merged.directMessageBudgetPer24h : null,
+    quietHours: merged.quietHours ? { ...merged.quietHours } : null,
+    updatedAt: merged.updatedAt ?? null,
+    updatedByHostId: merged.updatedByHostId ?? null,
+  };
+}
+
+function cloneSocialPulsePolicy(policy: SocialPulsePolicyRecord): SocialPulsePolicyRecord {
+  return normalizeSocialPulsePolicy(policy);
+}
+
+function cloneSocialPulsePolicyState(policyState: SocialPulsePolicyState): SocialPulsePolicyState {
+  return {
+    ...policyState,
+    publicExpressionBudget: { ...policyState.publicExpressionBudget },
+    directMessageBudget: { ...policyState.directMessageBudget },
   };
 }
 
 function evaluateSocialPulseQuietHours(
   quietHours: SocialPulsePolicyQuietHours | null,
   nowMs: number,
-): SocialPulsePolicyState {
+): Pick<SocialPulsePolicyState, 'quietHoursActive' | 'quietHoursLocalClock' | 'quietHoursTimeZone'> {
   if (!quietHours) {
     return {
       quietHoursActive: false,
@@ -1593,7 +1641,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   getSocialPulsePolicy() {
-    return cloneSocialPulsePolicy(this.socialPulsePolicy ?? DEFAULT_SOCIAL_PULSE_POLICY);
+    return normalizeSocialPulsePolicy(this.socialPulsePolicy);
   }
 
   updateSocialPulsePolicy(input: UpdateSocialPulsePolicyInput) {
@@ -1640,6 +1688,14 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         input.directMessageTargetCooldownMinutes === undefined
           ? current.directMessageTargetCooldownMinutes
           : this.assertPositivePolicyMinutes(input.directMessageTargetCooldownMinutes, 'directMessageTargetCooldownMinutes'),
+      publicExpressionBudgetPer24h:
+        input.publicExpressionBudgetPer24h === undefined
+          ? current.publicExpressionBudgetPer24h
+          : this.assertNullablePositivePolicyCount(input.publicExpressionBudgetPer24h, 'publicExpressionBudgetPer24h'),
+      directMessageBudgetPer24h:
+        input.directMessageBudgetPer24h === undefined
+          ? current.directMessageBudgetPer24h
+          : this.assertNullablePositivePolicyCount(input.directMessageBudgetPer24h, 'directMessageBudgetPer24h'),
       quietHours: nextQuietHours,
       updatedAt,
       updatedByHostId: input.hostId,
@@ -3086,6 +3142,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
 
     const createdAt = input.createdAt ?? new Date().toISOString();
+    if (isSocialPulseAutomationOrigin(input.metadata?.automationOrigin)) {
+      this.assertSocialPulseAutomationBudgetAvailable('public_expression', createdAt);
+    }
     const id = `public-expression-${randomUUID()}`;
     const expression: PublicExpressionRecord = {
       id,
@@ -3702,6 +3761,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       throw new Error('body is required');
     }
 
+    if (isSocialPulseAutomationOrigin(input.origin)) {
+      this.assertSocialPulseAutomationBudgetAvailable('direct_message');
+    }
+
     const now = new Date().toISOString();
     const message: MessageRecord = {
       id: randomUUID(),
@@ -3727,6 +3790,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         conversationId: conversation.id,
         messageType: message.messageType,
         bodyLength: message.body.length,
+        ...(isSocialPulseAutomationOrigin(input.origin) ? { origin: input.origin } : {}),
       },
       createdAt: now,
     });
@@ -3864,6 +3928,16 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private assertPositivePolicyMinutes(value: number, fieldName: string) {
     if (!Number.isFinite(value) || !Number.isInteger(value) || value < 1) {
       throw new Error(`${fieldName} must be a positive integer`);
+    }
+    return value;
+  }
+
+  private assertNullablePositivePolicyCount(value: number | null, fieldName: string) {
+    if (value === null) {
+      return null;
+    }
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value < 1) {
+      throw new Error(`${fieldName} must be a positive integer or null`);
     }
     return value;
   }
@@ -4185,6 +4259,78 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return encounters[0] ?? null;
   }
 
+  private socialPulseBudgetWindowStartedAt(nowMs: number) {
+    return new Date(nowMs - SOCIAL_PULSE_BUDGET_WINDOW_MS).toISOString();
+  }
+
+  private isWithinSocialPulseBudgetWindow(createdAt: string, nowMs: number) {
+    const createdAtMs = Date.parse(createdAt);
+    if (!Number.isFinite(createdAtMs)) {
+      return false;
+    }
+    return createdAtMs >= nowMs - SOCIAL_PULSE_BUDGET_WINDOW_MS && createdAtMs <= nowMs;
+  }
+
+  private countAutomatedPublicExpressionsInBudgetWindow(nowMs: number) {
+    return Array.from(this.publicExpressionsById.values()).filter(
+      (expression) =>
+        this.isWithinSocialPulseBudgetWindow(expression.createdAt, nowMs) &&
+        isSocialPulseAutomationOrigin(expression.metadata?.automationOrigin),
+    ).length;
+  }
+
+  private countAutomatedDirectMessagesInBudgetWindow(nowMs: number) {
+    return this.auditLog.filter(
+      (record) =>
+        record.action === 'message.sent' &&
+        this.isWithinSocialPulseBudgetWindow(record.createdAt, nowMs) &&
+        isSocialPulseAutomationOrigin(record.metadata?.origin),
+    ).length;
+  }
+
+  private buildSocialPulseBudgetState(limit: number | null, used: number, nowMs: number): SocialPulseBudgetState {
+    return {
+      limit,
+      used,
+      remaining: limit === null ? null : Math.max(0, limit - used),
+      windowHours: SOCIAL_PULSE_BUDGET_WINDOW_HOURS,
+      windowStartedAt: this.socialPulseBudgetWindowStartedAt(nowMs),
+    };
+  }
+
+  private isSocialPulseBudgetExhausted(budget: SocialPulseBudgetState) {
+    return budget.limit !== null && budget.used >= budget.limit;
+  }
+
+  private assertSocialPulseAutomationBudgetAvailable(
+    actionKind: 'public_expression' | 'direct_message',
+    at: string | number = Date.now(),
+  ) {
+    const nowMs =
+      typeof at === 'number'
+        ? at
+        : (() => {
+            const parsed = Date.parse(at);
+            return Number.isFinite(parsed) ? parsed : Date.now();
+          })();
+    const socialPulsePolicy = this.getSocialPulsePolicy();
+    const socialPulsePolicyState = this.evaluateSocialPulsePolicyState(socialPulsePolicy, nowMs);
+    const budget =
+      actionKind === 'public_expression'
+        ? socialPulsePolicyState.publicExpressionBudget
+        : socialPulsePolicyState.directMessageBudget;
+
+    if (!this.isSocialPulseBudgetExhausted(budget)) {
+      return;
+    }
+
+    throw new Error(
+      actionKind === 'public_expression'
+        ? 'social pulse public expression budget exhausted'
+        : 'social pulse direct message budget exhausted',
+    );
+  }
+
   private buildSocialPulseDecisionForGateway(
     gateway: GatewayRecord,
     current: CurrentRecord,
@@ -4401,9 +4547,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       publicThreshold: SOCIAL_PULSE_PUBLIC_THRESHOLD,
       memoryThreshold: SOCIAL_PULSE_MEMORY_THRESHOLD,
       policy: cloneSocialPulsePolicy(socialPulsePolicy),
-      policyState: {
-        ...socialPulsePolicyState,
-      },
+      policyState: cloneSocialPulsePolicyState(socialPulsePolicyState),
     };
   }
 
@@ -4411,7 +4555,21 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     socialPulsePolicy: SocialPulsePolicyRecord,
     nowMs: number,
   ): SocialPulsePolicyState {
-    return evaluateSocialPulseQuietHours(socialPulsePolicy.quietHours, nowMs);
+    const quietHoursState = evaluateSocialPulseQuietHours(socialPulsePolicy.quietHours, nowMs);
+
+    return {
+      ...quietHoursState,
+      publicExpressionBudget: this.buildSocialPulseBudgetState(
+        socialPulsePolicy.publicExpressionBudgetPer24h,
+        this.countAutomatedPublicExpressionsInBudgetWindow(nowMs),
+        nowMs,
+      ),
+      directMessageBudget: this.buildSocialPulseBudgetState(
+        socialPulsePolicy.directMessageBudgetPer24h,
+        this.countAutomatedDirectMessagesInBudgetWindow(nowMs),
+        nowMs,
+      ),
+    };
   }
 
   private applySocialPulsePolicyToDecision(input: {
@@ -4469,6 +4627,38 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         targetGatewayId: null,
         targetHandle: null,
         reason: 'policy_quiet_hours',
+        publicExpressionPlan: null,
+        directMessagePlan: null,
+        reasons,
+      };
+    }
+
+    if (
+      input.action === 'public_expression' &&
+      this.isSocialPulseBudgetExhausted(input.socialPulsePolicyState.publicExpressionBudget)
+    ) {
+      reasons.push('host public expression budget for the last 24 hours is exhausted');
+      return {
+        action: 'memory_only' as const,
+        targetGatewayId: null,
+        targetHandle: null,
+        reason: 'policy_public_expression_budget_exhausted',
+        publicExpressionPlan: null,
+        directMessagePlan: null,
+        reasons,
+      };
+    }
+
+    if (
+      (input.action === 'friend_dm_open' || input.action === 'friend_dm_reply') &&
+      this.isSocialPulseBudgetExhausted(input.socialPulsePolicyState.directMessageBudget)
+    ) {
+      reasons.push('host direct message budget for the last 24 hours is exhausted');
+      return {
+        action: 'memory_only' as const,
+        targetGatewayId: null,
+        targetHandle: null,
+        reason: 'policy_direct_messages_budget_exhausted',
         publicExpressionPlan: null,
         directMessagePlan: null,
         reasons,
@@ -5554,7 +5744,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       hosts: [...this.hostsById.values()],
       gateways: [...this.gatewaysById.values()],
       aquaProfile: this.aquaProfile,
-      socialPulsePolicy: this.socialPulsePolicy ? cloneSocialPulsePolicy(this.socialPulsePolicy) : null,
+      socialPulsePolicy: this.socialPulsePolicy ? normalizeSocialPulsePolicy(this.socialPulsePolicy) : null,
       gatewayTokens: [...this.tokensToGatewayId.entries()].map(([token, gatewayId]) => ({ token, gatewayId })),
       localHostId: this.localHostId,
       hostedHostId: this.hostedHostId,
@@ -5608,7 +5798,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       this.legacyOwnerGatewayIds.add(legacyHostedOwnerGatewayId);
     }
     this.hostedRegistrationPolicy = snapshot.hostedRegistrationPolicy ?? null;
-    this.socialPulsePolicy = snapshot.socialPulsePolicy ? cloneSocialPulsePolicy(snapshot.socialPulsePolicy) : null;
+    this.socialPulsePolicy = snapshot.socialPulsePolicy ? normalizeSocialPulsePolicy(snapshot.socialPulsePolicy) : null;
 
     for (const gateway of snapshot.gateways) {
       const normalizedGateway = this.normalizeGatewayRecord(gateway);

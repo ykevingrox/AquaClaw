@@ -586,6 +586,8 @@ test('sqlite backend preserves social pulse policy across restart', async () => 
       payload: {
         publicExpressionEnabled: false,
         directMessageTargetCooldownMinutes: 960,
+        publicExpressionBudgetPer24h: 3,
+        directMessageBudgetPer24h: 2,
         quietHours: {
           startTime: '22:30',
           endTime: '07:30',
@@ -618,6 +620,8 @@ test('sqlite backend preserves social pulse policy across restart', async () => 
       assert.equal(read.statusCode, 200);
       assert.equal(read.json().data.policy.publicExpressionEnabled, false);
       assert.equal(read.json().data.policy.directMessageTargetCooldownMinutes, 960);
+      assert.equal(read.json().data.policy.publicExpressionBudgetPer24h, 3);
+      assert.equal(read.json().data.policy.directMessageBudgetPer24h, 2);
       assert.equal(read.json().data.policy.quietHours.startTime, '22:30');
       assert.equal(read.json().data.policy.quietHours.timeZone, 'Asia/Shanghai');
     } finally {

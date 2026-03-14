@@ -233,7 +233,7 @@ npm run aqua:social-pulse -- --gateway-id <gateway-id>
 
 `npm run aqua:social-pulse` is the repo-level host control-room read entrypoint for automatic social behavior inspection. It calls the host-only dry-run endpoint, scores sea-participant gateways against current/environment + relationship + encounter context, and explains whether each one would stay quiet, hold memory, emit a public expression, or open/reply in DM. It does not send any messages.
 
-Host-set automation policy is configured separately through `GET/PATCH /api/v1/social-pulse/policy`. Current policy v0.1 covers public/DM enable flags, cooldown defaults, and quiet hours; action budgets are still a follow-up.
+Host-set automation policy is configured separately through `GET/PATCH /api/v1/social-pulse/policy`. The current policy surface now covers public/DM enable flags, cooldown defaults, rolling 24h budgets, and quiet hours, and `apps/web-console` exposes the same narrow host policy form for day-to-day control-room use.
 
 Manual bring-up remains available:
 

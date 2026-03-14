@@ -73,6 +73,8 @@ interface UpdateSocialPulsePolicyBody {
   publicExpressionCooldownMinutes?: number;
   directMessageCooldownMinutes?: number;
   directMessageTargetCooldownMinutes?: number;
+  publicExpressionBudgetPer24h?: number | null;
+  directMessageBudgetPer24h?: number | null;
   quietHours?: {
     startTime?: string;
     endTime?: string;
@@ -203,6 +205,7 @@ interface FriendScopesParams {
 
 interface CreateMessageBody {
   body?: string;
+  origin?: string;
 }
 
 interface CreatePublicExpressionBody {
@@ -718,6 +721,8 @@ function toSocialPulsePolicySummary(policy: SocialPulsePolicyRecord) {
     publicExpressionCooldownMinutes: policy.publicExpressionCooldownMinutes,
     directMessageCooldownMinutes: policy.directMessageCooldownMinutes,
     directMessageTargetCooldownMinutes: policy.directMessageTargetCooldownMinutes,
+    publicExpressionBudgetPer24h: policy.publicExpressionBudgetPer24h,
+    directMessageBudgetPer24h: policy.directMessageBudgetPer24h,
     quietHours: policy.quietHours
       ? {
           startTime: policy.quietHours.startTime,
@@ -1071,6 +1076,9 @@ function conversationErrorToHttp(message: string) {
   if (message === 'blocked relationship') {
     return { statusCode: 403, code: 'blocked' };
   }
+  if (message === 'social pulse direct message budget exhausted') {
+    return { statusCode: 409, code: 'policy_guard' };
+  }
   return { statusCode: 400, code: 'validation_failed' };
 }
 
@@ -1083,6 +1091,9 @@ function publicExpressionErrorToHttp(message: string) {
   }
   if (message === 'invalid public expression cursor') {
     return { statusCode: 400, code: 'invalid_cursor' };
+  }
+  if (message === 'social pulse public expression budget exhausted') {
+    return { statusCode: 409, code: 'policy_guard' };
   }
   return { statusCode: 400, code: 'validation_failed' };
 }
@@ -3107,6 +3118,8 @@ export function buildApp(options: BuildAppOptions = {}) {
       body.publicExpressionCooldownMinutes !== undefined ||
       body.directMessageCooldownMinutes !== undefined ||
       body.directMessageTargetCooldownMinutes !== undefined ||
+      body.publicExpressionBudgetPer24h !== undefined ||
+      body.directMessageBudgetPer24h !== undefined ||
       body.quietHours !== undefined;
 
     if (!hasPatchField) {
@@ -3153,6 +3166,25 @@ export function buildApp(options: BuildAppOptions = {}) {
       }
     }
 
+    for (const [fieldName, fieldValue] of [
+      ['publicExpressionBudgetPer24h', body.publicExpressionBudgetPer24h],
+      ['directMessageBudgetPer24h', body.directMessageBudgetPer24h],
+    ] as const) {
+      if (
+        fieldValue !== undefined &&
+        fieldValue !== null &&
+        (typeof fieldValue !== 'number' || !Number.isInteger(fieldValue) || fieldValue < 1)
+      ) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'validation_failed',
+            message: `${fieldName} must be a positive integer or null when provided`,
+          },
+        });
+      }
+    }
+
     if (
       body.quietHours !== undefined &&
       body.quietHours !== null &&
@@ -3175,6 +3207,8 @@ export function buildApp(options: BuildAppOptions = {}) {
         publicExpressionCooldownMinutes: body.publicExpressionCooldownMinutes,
         directMessageCooldownMinutes: body.directMessageCooldownMinutes,
         directMessageTargetCooldownMinutes: body.directMessageTargetCooldownMinutes,
+        publicExpressionBudgetPer24h: body.publicExpressionBudgetPer24h,
+        directMessageBudgetPer24h: body.directMessageBudgetPer24h,
         quietHours:
           body.quietHours === undefined
             ? undefined
@@ -4697,11 +4731,22 @@ export function buildApp(options: BuildAppOptions = {}) {
       });
     }
 
+    if (request.body?.origin !== undefined && request.body.origin !== 'social_pulse') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'origin must be social_pulse when provided',
+        },
+      });
+    }
+
     try {
       const message = store.createMessage({
         conversationId: request.params.conversationId,
         senderGatewayId: result.gateway.id,
         body: request.body?.body ?? '',
+        origin: request.body?.origin === 'social_pulse' ? 'social_pulse' : undefined,
       });
       const readState = store.getConversationReadState(request.params.conversationId, result.gateway.id);
       return reply.code(201).send({

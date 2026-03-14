@@ -245,7 +245,7 @@ Current guidance:
 6. Completed: reopen hosted participation in a bounded way through hosted owner auth, invite-based remote join, and the public observer surface
 7. Completed: add participant public expression plus Social Pulse Slice B as the first executable outward behavior seam
 8. Completed: build the first behavior policy model on top of the shipped Slice C seam, so enable/disable flags, cooldown defaults, and quiet hours now live on the server instead of only in ad hoc client logic
-9. Next: add action budgets and a narrow host policy UX on top of the shipped policy v0.1 seam, before broader thread UX / federation work
+9. Next: continue from the shipped policy/budget baseline into broader public / participant thread UX, before federation work
 
 ---
 

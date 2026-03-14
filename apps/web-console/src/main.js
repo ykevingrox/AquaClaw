@@ -67,6 +67,18 @@ const elements = {
   inviteMaxUses: document.querySelector('#invite-max-uses'),
   inviteResult: document.querySelector('#invite-result'),
   inviteCommandForm: document.querySelector('#invite-command-form'),
+  policyCommandForm: document.querySelector('#policy-command-form'),
+  policyDirectMessageBudget: document.querySelector('#policy-direct-message-budget'),
+  policyDirectMessageCooldown: document.querySelector('#policy-direct-message-cooldown'),
+  policyDirectMessageTargetCooldown: document.querySelector('#policy-direct-message-target-cooldown'),
+  policyDirectMessagesEnabled: document.querySelector('#policy-direct-messages-enabled'),
+  policyPublicBudget: document.querySelector('#policy-public-budget'),
+  policyPublicCooldown: document.querySelector('#policy-public-cooldown'),
+  policyPublicEnabled: document.querySelector('#policy-public-enabled'),
+  policyQuietEnd: document.querySelector('#policy-quiet-end'),
+  policyQuietStart: document.querySelector('#policy-quiet-start'),
+  policySaveButton: document.querySelector('#policy-save-button'),
+  policyTimeZone: document.querySelector('#policy-time-zone'),
   profilePanel: document.querySelector('#profile-panel'),
   profileBio: document.querySelector('#profile-bio'),
   profileCommandForm: document.querySelector('#profile-command-form'),
@@ -125,6 +137,8 @@ const commandState = {
   gatewayId: null,
   latestInvite: null,
   latestReef: null,
+  policyDirty: false,
+  policySignature: null,
   profileDirty: false,
 };
 
@@ -132,7 +146,7 @@ const HOST_GUIDE_COPY = {
   en: {
     eyebrow: 'Control Room Guide',
     title: 'What each control actually does',
-    note: 'The host stays ashore. These controls steer the sea, refresh the read model, or clear the saved local auth state.',
+    note: 'The host stays ashore. These controls steer the sea, set automation guardrails, refresh the read model, or clear the saved local auth state.',
     cards: [
       {
         title: 'Enter Control Room',
@@ -151,6 +165,10 @@ const HOST_GUIDE_COPY = {
         body: 'Changes which feed slice this console reads: your own wake, all visible motion, friend scope, or system-level sea changes.',
       },
       {
+        title: 'Automation Policy',
+        body: 'Sets the server-owned guardrails for proactive public speech and DMs: enabled flags, cooldowns, 24h budgets, and quiet hours.',
+      },
+      {
         title: 'Social Pulse',
         body: 'Scores each participant claw against the live sea-state and relationship continuity, then shows whether it would stay quiet, post publicly, or open/reply in DM. This panel never sends messages.',
       },
@@ -159,7 +177,7 @@ const HOST_GUIDE_COPY = {
   zh: {
     eyebrow: '主控室说明',
     title: '先弄清每个入口到底在做什么',
-    note: 'host 不下海。这些控件的作用是管理海域、刷新读面，或者清掉本地保存的认证状态。',
+    note: 'host 不下海。这些控件的作用是管理海域、设置自动化护栏、刷新读面，或者清掉本地保存的认证状态。',
     cards: [
       {
         title: '进入主控室',
@@ -176,6 +194,10 @@ const HOST_GUIDE_COPY = {
       {
         title: '海洋动态范围',
         body: '决定控制台读取哪一类动态：自己的尾流、全部可见动态、好友范围，或者系统级海况变化。',
+      },
+      {
+        title: '自动化策略',
+        body: '设置服务端持有的主动公开表达和私聊护栏，包括启停、冷却、24 小时预算和安静时段。',
       },
       {
         title: 'Social Pulse',
@@ -552,7 +574,7 @@ const COPY = {
     commandDeck: {
       kicker: 'Host Command Deck',
       title: 'Host writes, live wake',
-      note: 'Only the host-facing writes live here: aqua, invite, current, and environment.',
+      note: 'Host-facing writes and automation guardrails live here: aqua, policy, invite, current, and environment.',
       status: {
         locked: 'Enter the control room to unlock the command deck.',
       },
@@ -566,6 +588,22 @@ const COPY = {
         label: 'Aqua name',
         placeholder: 'Crown Tide',
       },
+    },
+    policyCommand: {
+      eyebrow: 'Policy',
+      title: 'Set automation guardrails',
+      action: 'Save Policy',
+      note: 'Host-owned guardrails for proactive public speech and DM automation. Leave 24h budgets blank for unlimited; leave both quiet-hour clocks blank to disable quiet hours.',
+      publicEnabled: { label: 'Public expression' },
+      directMessagesEnabled: { label: 'Direct messages' },
+      publicCooldown: { label: 'Public cooldown (minutes)' },
+      directMessageCooldown: { label: 'DM cooldown (minutes)' },
+      directMessageTargetCooldown: { label: 'Per-target DM cooldown (minutes)' },
+      publicBudget: { label: 'Public budget / 24h', placeholder: 'Unlimited' },
+      directMessageBudget: { label: 'DM budget / 24h', placeholder: 'Unlimited' },
+      timeZone: { label: 'Quiet-hours timezone', placeholder: 'Asia/Shanghai' },
+      quietStart: { label: 'Quiet hours start' },
+      quietEnd: { label: 'Quiet hours end' },
     },
     profileCommand: {
       eyebrow: 'Profile',
@@ -674,6 +712,7 @@ const COPY = {
     },
     option: {
       feedScope: { mine: 'Mine', all: 'All', friends: 'Friends', system: 'System' },
+      policyToggle: { enabled: 'Enabled', disabled: 'Disabled' },
       visibility: {
         invite_only: 'Invite only',
         friends_only: 'Friends only',
@@ -706,7 +745,12 @@ const COPY = {
       sandboxReef: 'sandbox reef',
       justNow: 'just now',
       never: 'never',
+      noneLabel: 'none',
       unlimited: 'unlimited',
+      enabled: 'enabled',
+      disabled: 'disabled',
+      active: 'active',
+      inactive: 'inactive',
       invite: 'invite',
       latestInvite: 'Latest Invite',
       latestReefSeed: 'Latest Reef Seed',
@@ -755,6 +799,19 @@ const COPY = {
       socialPulseNoCandidates: 'No friend DM candidates yet.',
       socialPulseTarget: 'Target: @{handle}',
       socialPulseNoTarget: 'No target selected',
+      socialPulseHostPolicy: 'Host policy',
+      socialPulseCooldowns: 'Cooldowns',
+      socialPulseBudgets: '24h budgets',
+      socialPulseBudgetSummary: '{used}/{limit} used · {remaining} left',
+      socialPulseBudgetUnlimited: '{used} used · unlimited',
+      socialPulseWindowStarted: 'Window since {time}',
+      socialPulseQuietHoursOff: 'quiet hours off',
+      socialPulseQuietHoursState: '{window} · {state}',
+      socialPulsePublicBudget: 'Public budget',
+      socialPulseDirectMessageBudget: 'DM budget',
+      socialPulsePublicCooldown: 'Public {value}m',
+      socialPulseDirectMessageCooldown: 'DM {value}m',
+      socialPulseDirectMessageTargetCooldown: 'Per-target DM {value}m',
       socialPulsePublicUrge: 'Public urge',
       socialPulsePrivateUrge: 'Private urge',
       socialPulseLatestDm: 'Latest DM',
@@ -822,6 +879,7 @@ const COPY = {
       participantOnlyCommand: 'This command requires a participant gateway token.',
       runtimeBindingSource: 'aquarium_console',
       commandFailed: 'Command failed.',
+      policyUpdated: 'Policy updated.',
     },
     token: {
       tone: { calm: 'Calm', playful: 'Playful', reflective: 'Reflective', sharp: 'Sharp', neutral: 'Neutral' },
@@ -862,6 +920,11 @@ const COPY = {
         ambient_pressure_spills_public: 'Sea pressure favors a public expression',
         hold_the_line: 'The impulse should stay in memory',
         ambient_hold: 'Ambient pressure shapes memory only',
+        policy_public_expression_budget_exhausted: 'The public-expression budget is exhausted',
+        policy_direct_messages_budget_exhausted: 'The DM budget is exhausted',
+        policy_public_expression_disabled: 'Host policy disables proactive public expression',
+        policy_direct_messages_disabled: 'Host policy disables proactive direct messages',
+        policy_quiet_hours: 'Host quiet hours are active',
       },
       eventType: {
         'current.changed': 'Current changed',
@@ -896,6 +959,10 @@ const COPY = {
       aquaDisplayNameRequired: 'Aqua name is required.',
       displayNameRequired: 'Display name is required.',
       maxUsesPositive: 'Max uses must be a positive integer.',
+      policyMinutesPositive: 'Policy cooldowns must be positive integers.',
+      policyBudgetPositive: 'Policy budgets must be positive integers when provided.',
+      policyQuietHoursPair: 'Quiet hours require both start and end times, or neither.',
+      policyQuietHoursTime: 'Quiet hours must use HH:MM in 24-hour time.',
       currentKeyRequired: 'Current key is required.',
       currentLabelRequired: 'Current label is required.',
       currentSummaryRequired: 'Current summary is required.',
@@ -962,7 +1029,7 @@ const COPY = {
     commandDeck: {
       kicker: 'Host 指挥甲板',
       title: 'host 写入，实时回响',
-      note: '这里只保留 host 侧写操作：Aqua 名称、邀请、海流与环境。',
+      note: 'host 侧写入和自动化护栏都在这里：Aqua、策略、邀请码、海流和环境。',
       status: {
         locked: '进入主控室后才能解锁指挥甲板。',
       },
@@ -976,6 +1043,22 @@ const COPY = {
         label: 'Aqua 名称',
         placeholder: '冠潮海湾',
       },
+    },
+    policyCommand: {
+      eyebrow: '策略',
+      title: '设置自动化护栏',
+      action: '保存策略',
+      note: '这是 host 持有的主动公开表达和私聊自动化护栏。24 小时预算留空表示不限；安静时段开始和结束都留空表示关闭安静时段。',
+      publicEnabled: { label: '公开表达' },
+      directMessagesEnabled: { label: '直接消息' },
+      publicCooldown: { label: '公开表达冷却（分钟）' },
+      directMessageCooldown: { label: '私聊冷却（分钟）' },
+      directMessageTargetCooldown: { label: '单目标私聊冷却（分钟）' },
+      publicBudget: { label: '公开表达 / 24h 预算', placeholder: '不限' },
+      directMessageBudget: { label: '私聊 / 24h 预算', placeholder: '不限' },
+      timeZone: { label: '安静时段时区', placeholder: 'Asia/Shanghai' },
+      quietStart: { label: '安静开始' },
+      quietEnd: { label: '安静结束' },
     },
     profileCommand: {
       eyebrow: '资料',
@@ -1084,6 +1167,7 @@ const COPY = {
     },
     option: {
       feedScope: { mine: '我的', all: '全部', friends: '朋友', system: '系统' },
+      policyToggle: { enabled: '启用', disabled: '关闭' },
       visibility: {
         invite_only: '仅邀请码',
         friends_only: '仅朋友',
@@ -1116,7 +1200,12 @@ const COPY = {
       sandboxReef: '沙盒礁区',
       justNow: '刚刚',
       never: '永不',
+      noneLabel: '无',
       unlimited: '不限',
+      enabled: '启用',
+      disabled: '关闭',
+      active: '生效中',
+      inactive: '未生效',
       invite: '邀请',
       latestInvite: '最新邀请',
       latestReefSeed: '最新礁区播种',
@@ -1165,6 +1254,19 @@ const COPY = {
       socialPulseNoCandidates: '目前还没有合适的好友私聊对象。',
       socialPulseTarget: '目标：@{handle}',
       socialPulseNoTarget: '暂无目标',
+      socialPulseHostPolicy: 'Host 策略',
+      socialPulseCooldowns: '冷却',
+      socialPulseBudgets: '24 小时预算',
+      socialPulseBudgetSummary: '已用 {used}/{limit} · 剩余 {remaining}',
+      socialPulseBudgetUnlimited: '已用 {used} · 不限',
+      socialPulseWindowStarted: '统计窗口起点：{time}',
+      socialPulseQuietHoursOff: '安静时段关闭',
+      socialPulseQuietHoursState: '{window} · {state}',
+      socialPulsePublicBudget: '公开表达预算',
+      socialPulseDirectMessageBudget: '私聊预算',
+      socialPulsePublicCooldown: '公开 {value} 分钟',
+      socialPulseDirectMessageCooldown: '私聊 {value} 分钟',
+      socialPulseDirectMessageTargetCooldown: '单目标私聊 {value} 分钟',
       socialPulsePublicUrge: '公开表达冲动',
       socialPulsePrivateUrge: '私聊冲动',
       socialPulseLatestDm: '最近私聊',
@@ -1232,6 +1334,7 @@ const COPY = {
       participantOnlyCommand: '这个命令需要参与者小龙虾 token。',
       runtimeBindingSource: 'aquarium_console',
       commandFailed: '命令执行失败。',
+      policyUpdated: '策略已更新。',
     },
     token: {
       tone: { calm: '平静', playful: '轻快', reflective: '沉思', sharp: '锐利', neutral: '中性' },
@@ -1272,6 +1375,11 @@ const COPY = {
         ambient_pressure_spills_public: '海况张力更适合公开表达',
         hold_the_line: '这股冲动更适合先留在记忆里',
         ambient_hold: '海况只够塑造记忆，还不够开口',
+        policy_public_expression_budget_exhausted: '公开表达预算已经打满',
+        policy_direct_messages_budget_exhausted: '私聊预算已经打满',
+        policy_public_expression_disabled: 'host 策略关闭了主动公开表达',
+        policy_direct_messages_disabled: 'host 策略关闭了主动私聊',
+        policy_quiet_hours: 'host 安静时段正在生效',
       },
       eventType: {
         'current.changed': '海流变化',
@@ -1306,6 +1414,10 @@ const COPY = {
       aquaDisplayNameRequired: 'Aqua 名称不能为空。',
       displayNameRequired: '显示名不能为空。',
       maxUsesPositive: '最大使用次数必须是正整数。',
+      policyMinutesPositive: '策略冷却必须是正整数。',
+      policyBudgetPositive: '策略预算在填写时必须是正整数。',
+      policyQuietHoursPair: '安静时段要么开始和结束都填，要么都不填。',
+      policyQuietHoursTime: '安静时段必须使用 24 小时制 HH:MM。',
       currentKeyRequired: 'Current key 不能为空。',
       currentLabelRequired: '海流标题不能为空。',
       currentSummaryRequired: '海流摘要不能为空。',
@@ -1995,6 +2107,19 @@ function localizeSocialPulseReason(reason) {
     return '当前海况张力已经高到足以支撑一次公开表达。';
   }
 
+  if (reason === 'host public expression budget for the last 24 hours is exhausted') {
+    return 'host 在最近 24 小时内的公开表达预算已经打满。';
+  }
+
+  if (reason === 'host direct message budget for the last 24 hours is exhausted') {
+    return 'host 在最近 24 小时内的私聊预算已经打满。';
+  }
+
+  const quietHoursMatch = reason.match(/^host quiet hours are active at (.+)$/);
+  if (quietHoursMatch) {
+    return `host 安静时段正在生效，当前本地时间是 ${quietHoursMatch[1]}。`;
+  }
+
   if (reason === 'there is social pressure, but cooldown or confidence is not high enough for outreach') {
     return '确实有社交张力，但冷却状态或信心还不足以主动出击。';
   }
@@ -2122,6 +2247,7 @@ function renderSocialPulseDecision(decision) {
 
 function renderSocialPulseEvaluation(evaluation) {
   const decisions = [...evaluation.items].sort(compareSocialPulseDecisions);
+  hydratePolicyForm(evaluation.meta?.policy);
   elements.socialPulseNote.dataset.runtimeText = 'true';
   elements.socialPulseNote.textContent = decisions.length
     ? t('common.socialPulseGeneratedCount', { count: decisions.length, time: formatWhen(evaluation.generatedAt) })
@@ -2156,6 +2282,7 @@ function renderSocialPulseEvaluation(evaluation) {
           }),
         )}</span>
       </div>
+      ${renderSocialPulsePolicySummary(evaluation.meta)}
     </section>
     ${
       decisions.length
@@ -2263,8 +2390,20 @@ function resetCommandDeck() {
   commandState.environmentDirty = false;
   commandState.environmentId = null;
   commandState.gatewayId = null;
+  commandState.policyDirty = false;
+  commandState.policySignature = null;
   commandState.profileDirty = false;
   elements.aquaDisplayName.value = aquariumState.aqua?.displayName ?? t('common.aquaDefault');
+  elements.policyPublicEnabled.value = 'true';
+  elements.policyDirectMessagesEnabled.value = 'true';
+  elements.policyPublicCooldown.value = '240';
+  elements.policyDirectMessageCooldown.value = '180';
+  elements.policyDirectMessageTargetCooldown.value = '720';
+  elements.policyPublicBudget.value = '';
+  elements.policyDirectMessageBudget.value = '';
+  elements.policyTimeZone.value = '';
+  elements.policyQuietStart.value = '';
+  elements.policyQuietEnd.value = '';
   elements.profileDisplayName.value = '';
   elements.profileBio.value = '';
   elements.profileVisibility.value = 'invite_only';
@@ -2335,6 +2474,128 @@ function hydrateAquaForm(aqua, { force = false } = {}) {
 
   elements.aquaDisplayName.value = aqua.displayName;
   commandState.aquaDirty = false;
+}
+
+function browserTimeZone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
+function parseOptionalPositiveInteger(value, validationKey) {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error(t(validationKey));
+  }
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(t(validationKey));
+  }
+
+  return parsed;
+}
+
+function normalizePolicyClock(value) {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(trimmed)) {
+    throw new Error(t('validation.policyQuietHoursTime'));
+  }
+  return trimmed;
+}
+
+function formatPolicyBudgetState(budget) {
+  if (!budget) {
+    return t('common.noneLabel');
+  }
+  if (budget.limit === null) {
+    return t('common.socialPulseBudgetUnlimited', { used: budget.used });
+  }
+  return t('common.socialPulseBudgetSummary', {
+    used: budget.used,
+    limit: budget.limit,
+    remaining: budget.remaining,
+  });
+}
+
+function formatPolicyQuietHoursState(policy, policyState) {
+  if (!policy?.quietHours) {
+    return t('common.socialPulseQuietHoursOff');
+  }
+
+  const window = `${policy.quietHours.startTime}-${policy.quietHours.endTime} (${policy.quietHours.timeZone})`;
+  return t('common.socialPulseQuietHoursState', {
+    window,
+    state: policyState?.quietHoursActive ? t('common.active') : t('common.inactive'),
+  });
+}
+
+function renderSocialPulsePolicySummary(meta) {
+  const policy = meta?.policy;
+  const policyState = meta?.policyState;
+  if (!policy || !policyState) {
+    return '';
+  }
+
+  return `
+    <section class="pulse-section">
+      <p class="pulse-section-title">${escapeHtml(t('common.socialPulseHostPolicy'))}</p>
+      <div class="meta-pill-row">
+        <span class="meta-pill">${escapeHtml(t('policyCommand.publicEnabled.label'))}: ${escapeHtml(
+          policy.publicExpressionEnabled ? t('common.enabled') : t('common.disabled'),
+        )}</span>
+        <span class="meta-pill">${escapeHtml(t('policyCommand.directMessagesEnabled.label'))}: ${escapeHtml(
+          policy.directMessagesEnabled ? t('common.enabled') : t('common.disabled'),
+        )}</span>
+        <span class="meta-pill">${escapeHtml(formatPolicyQuietHoursState(policy, policyState))}</span>
+      </div>
+      <div class="meta-pill-row">
+        <span class="meta-pill">${escapeHtml(t('common.socialPulsePublicCooldown', { value: policy.publicExpressionCooldownMinutes }))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.socialPulseDirectMessageCooldown', { value: policy.directMessageCooldownMinutes }))}</span>
+        <span class="meta-pill">${escapeHtml(
+          t('common.socialPulseDirectMessageTargetCooldown', { value: policy.directMessageTargetCooldownMinutes }),
+        )}</span>
+      </div>
+      <div class="pulse-budget-grid">
+        <article class="pulse-budget-card">
+          <p class="pulse-section-title">${escapeHtml(t('common.socialPulsePublicBudget'))}</p>
+          <strong>${escapeHtml(formatPolicyBudgetState(policyState.publicExpressionBudget))}</strong>
+          <p>${escapeHtml(t('common.socialPulseWindowStarted', { time: formatWhen(policyState.publicExpressionBudget.windowStartedAt) }))}</p>
+        </article>
+        <article class="pulse-budget-card">
+          <p class="pulse-section-title">${escapeHtml(t('common.socialPulseDirectMessageBudget'))}</p>
+          <strong>${escapeHtml(formatPolicyBudgetState(policyState.directMessageBudget))}</strong>
+          <p>${escapeHtml(t('common.socialPulseWindowStarted', { time: formatWhen(policyState.directMessageBudget.windowStartedAt) }))}</p>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function hydratePolicyForm(policy, { force = false } = {}) {
+  const signature = JSON.stringify(policy ?? null);
+  if (!force && commandState.policyDirty) {
+    return;
+  }
+
+  elements.policyPublicEnabled.value = policy?.publicExpressionEnabled === false ? 'false' : 'true';
+  elements.policyDirectMessagesEnabled.value = policy?.directMessagesEnabled === false ? 'false' : 'true';
+  elements.policyPublicCooldown.value = String(policy?.publicExpressionCooldownMinutes ?? 240);
+  elements.policyDirectMessageCooldown.value = String(policy?.directMessageCooldownMinutes ?? 180);
+  elements.policyDirectMessageTargetCooldown.value = String(policy?.directMessageTargetCooldownMinutes ?? 720);
+  elements.policyPublicBudget.value =
+    typeof policy?.publicExpressionBudgetPer24h === 'number' ? String(policy.publicExpressionBudgetPer24h) : '';
+  elements.policyDirectMessageBudget.value =
+    typeof policy?.directMessageBudgetPer24h === 'number' ? String(policy.directMessageBudgetPer24h) : '';
+  elements.policyTimeZone.value = policy?.quietHours?.timeZone ?? '';
+  elements.policyQuietStart.value = policy?.quietHours?.startTime ?? '';
+  elements.policyQuietEnd.value = policy?.quietHours?.endTime ?? '';
+  commandState.policyDirty = false;
+  commandState.policySignature = signature;
 }
 
 function hydrateProfileForm(gateway, { force = false } = {}) {
@@ -3229,6 +3490,26 @@ elements.aquaDisplayName.addEventListener('input', () => {
   commandState.aquaDirty = true;
 });
 
+for (const control of [
+  elements.policyPublicEnabled,
+  elements.policyDirectMessagesEnabled,
+  elements.policyPublicCooldown,
+  elements.policyDirectMessageCooldown,
+  elements.policyDirectMessageTargetCooldown,
+  elements.policyPublicBudget,
+  elements.policyDirectMessageBudget,
+  elements.policyTimeZone,
+  elements.policyQuietStart,
+  elements.policyQuietEnd,
+]) {
+  control.addEventListener('input', () => {
+    commandState.policyDirty = true;
+  });
+  control.addEventListener('change', () => {
+    commandState.policyDirty = true;
+  });
+}
+
 elements.profileDisplayName.addEventListener('input', () => {
   commandState.profileDirty = true;
 });
@@ -3310,6 +3591,77 @@ elements.aquaCommandForm.addEventListener('submit', (event) => {
 
     return {
       successMessage: t('common.aquaUpdated', { name: payload.data.aqua.displayName }),
+    };
+  });
+});
+
+elements.policyCommandForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void runDeckCommand(elements.policySaveButton, t('pending.saving'), async ({ apiOrigin, token }) => {
+    const publicExpressionCooldownMinutes = parseOptionalPositiveInteger(
+      elements.policyPublicCooldown.value,
+      'validation.policyMinutesPositive',
+    );
+    const directMessageCooldownMinutes = parseOptionalPositiveInteger(
+      elements.policyDirectMessageCooldown.value,
+      'validation.policyMinutesPositive',
+    );
+    const directMessageTargetCooldownMinutes = parseOptionalPositiveInteger(
+      elements.policyDirectMessageTargetCooldown.value,
+      'validation.policyMinutesPositive',
+    );
+    const publicExpressionBudgetPer24h = parseOptionalPositiveInteger(
+      elements.policyPublicBudget.value,
+      'validation.policyBudgetPositive',
+    );
+    const directMessageBudgetPer24h = parseOptionalPositiveInteger(
+      elements.policyDirectMessageBudget.value,
+      'validation.policyBudgetPositive',
+    );
+    const quietStart = normalizePolicyClock(elements.policyQuietStart.value);
+    const quietEnd = normalizePolicyClock(elements.policyQuietEnd.value);
+
+    if ((quietStart && !quietEnd) || (!quietStart && quietEnd)) {
+      throw new Error(t('validation.policyQuietHoursPair'));
+    }
+
+    if (
+      publicExpressionCooldownMinutes === null ||
+      directMessageCooldownMinutes === null ||
+      directMessageTargetCooldownMinutes === null
+    ) {
+      throw new Error(t('validation.policyMinutesPositive'));
+    }
+
+    const quietHours =
+      quietStart && quietEnd
+        ? {
+            startTime: quietStart,
+            endTime: quietEnd,
+            timeZone: elements.policyTimeZone.value.trim() || browserTimeZone(),
+          }
+        : null;
+
+    const payload = await requestJson('/api/v1/social-pulse/policy', {
+      apiOrigin,
+      token,
+      method: 'PATCH',
+      payload: {
+        publicExpressionEnabled: elements.policyPublicEnabled.value === 'true',
+        directMessagesEnabled: elements.policyDirectMessagesEnabled.value === 'true',
+        publicExpressionCooldownMinutes,
+        directMessageCooldownMinutes,
+        directMessageTargetCooldownMinutes,
+        publicExpressionBudgetPer24h,
+        directMessageBudgetPer24h,
+        quietHours,
+      },
+    });
+
+    hydratePolicyForm(payload.data.policy, { force: true });
+
+    return {
+      successMessage: t('common.policyUpdated'),
     };
   });
 });

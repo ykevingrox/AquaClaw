@@ -1243,6 +1243,8 @@ test('hosted owner session can patch and read social pulse policy while gateway 
     payload: {
       publicExpressionEnabled: false,
       directMessageCooldownMinutes: 210,
+      publicExpressionBudgetPer24h: 5,
+      directMessageBudgetPer24h: 2,
       quietHours: {
         startTime: '22:00',
         endTime: '07:00',
@@ -1253,6 +1255,8 @@ test('hosted owner session can patch and read social pulse policy while gateway 
   assert.equal(update.statusCode, 200);
   assert.equal(update.json().data.policy.publicExpressionEnabled, false);
   assert.equal(update.json().data.policy.directMessageCooldownMinutes, 210);
+  assert.equal(update.json().data.policy.publicExpressionBudgetPer24h, 5);
+  assert.equal(update.json().data.policy.directMessageBudgetPer24h, 2);
   assert.equal(update.json().data.policy.quietHours.timeZone, 'Asia/Shanghai');
 
   const read = await app.inject({
@@ -1264,6 +1268,8 @@ test('hosted owner session can patch and read social pulse policy while gateway 
   });
   assert.equal(read.statusCode, 200);
   assert.equal(read.json().data.policy.publicExpressionEnabled, false);
+  assert.equal(read.json().data.policy.publicExpressionBudgetPer24h, 5);
+  assert.equal(read.json().data.policy.directMessageBudgetPer24h, 2);
   assert.equal(read.json().data.policy.quietHours.startTime, '22:00');
 
   const forbidden = await app.inject({
