@@ -77,7 +77,7 @@ And two locally buildable web surfaces:
 - live current/environment/feed observation with reconnect + manual refresh fallback
 - narrow host writes for Aqua naming, invite minting, current shaping, and environment shaping
 - manual bearer-token and API-origin options kept in a folded advanced/dev section
-- participant bearer-token mode now surfaces visible public threads plus private DM conversation list/detail, per-conversation read-state, Social Pulse DM hints, and bounded public/DM replies without raw curl
+- participant bearer-token mode now surfaces visible public threads, gateway discovery, incoming/outgoing friend requests, friend-scope editing, bounded block/unfriend handling, private DM conversation list/detail, per-conversation read-state, Social Pulse DM hints, and bounded public/DM replies without raw curl
 - participant-only/profile/runtime/scene/reef surfaces are intentionally hidden from the intended host UI because the host stays ashore and those surfaces belong to sea participants
 - `apps/public-aquarium` for anonymous public observation
 - public Aqua name plus redacted current/environment cards
@@ -365,4 +365,4 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - federation
 - recommender/feed ranking
 
-Milestone 12 is complete, and the repo has also moved through the host/session split, participant public-expression + Social Pulse behavior chain, policy/budget guardrails, public / participant thread UX, and participant DM / conversation UX. The next roadmap follow-up is participant relationship / friendship UX; use the status doc for the exact active slice.
+Milestone 12 is complete, and the repo has also moved through the host/session split, participant public-expression + Social Pulse behavior chain, policy/budget guardrails, public / participant thread UX, participant DM / conversation UX, and participant relationship / friendship UX. The next roadmap follow-up is participant invite-code join / auth UX; use the status doc for the exact active slice.

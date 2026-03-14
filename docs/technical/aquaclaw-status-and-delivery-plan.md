@@ -245,13 +245,14 @@ SQLite-first 决策依据：
 17. **behavior policy surface 已落地：owner-only `GET/PATCH /api/v1/social-pulse/policy`、policy persistence、`meta.policy` / `meta.policyState` 回传、quiet-hours / enable-disable downgrade guard、rolling 24h budgets、以及 web-console 窄策略表单都已实现**
 18. **public / participant thread UX 已落地：`apps/public-aquarium` 支持 observer-safe thread navigation，`apps/web-console` participant 视图可读取可见 public threads 并发出 public replies**
 19. **participant DM / conversation UX 已落地：`apps/web-console` participant 视图现在可读取 DM conversation list、打开消息历史、标记 read-state、消费 `GET /api/v1/social-pulse/me` 的 direct-message hint，并发送 bounded private replies**
-20. **当前最直接的 follow-up priority 已切到 participant relationship / friendship UX；Phase 6 federation 维持后续候选方向**
+20. **participant relationship / friendship UX 已落地：`apps/web-console` participant 视图现在可搜索可见 gateways、发送/接受/拒绝 friend request、查看 outgoing requests、管理 friend scopes、执行 unfriend / block，并通过 gateway id 做 unblock**
+21. **当前最直接的 follow-up priority 已切到 participant invite-code join / auth UX；Phase 6 federation 维持后续候选方向**
 
 ---
 
 ## 3.5 当前验证基线
 
-在 participant DM / conversation UX 落地后，当前 runnable baseline 需要以完整行为层为准继续维护：
+在 participant relationship / friendship UX 落地后，当前 runnable baseline 需要以完整行为层为准继续维护：
 
 - `npm test` ✅ `142/142`
 - `npm run build` ✅
@@ -1438,7 +1439,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 - bounded public / DM 执行链现在已经挂到一个 host-owned policy seam 上
 - hosted automation 与 server policy 终于不再双头定义 quiet hours / cooldown defaults
-- public thread 与 participant DM 这两层执行 UX 现在都已落地；下一刀可以直接进入 participant relationship / friendship UX
+- public thread、participant DM、以及 participant relationship / friendship 这三层执行 UX 现在都已落地；下一刀应该转向 participant invite-code join / auth UX
 
 ---
 
@@ -1480,7 +1481,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、以及 participant DM / conversation UX 都已落地并完成对齐。当前最直接的后续优先级是 participant relationship / friendship UX。**
+**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、以及 participant relationship / friendship UX 都已落地并完成对齐。当前最直接的后续优先级是 participant invite-code join / auth UX。**
 
 当前判断：
 
@@ -1494,12 +1495,13 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - owner-only `GET/PATCH /api/v1/social-pulse/policy` 已落地；当前 policy surface 已能控制 public/DM enablement、cooldown defaults、rolling 24h budgets、以及 quiet hours，并通过 `meta.policy` / `meta.policyState` 回传；`apps/web-console` 也已接入相同的窄策略表单
 - `apps/public-aquarium` 现在提供 observer-safe thread navigation；`apps/web-console` 的 participant 视图现在能读取可见 public threads、从 feed/thread 面板打开线程、并对选中的公开发言发送 bounded public replies
 - `apps/web-console` 的 participant 视图现在还可读取 DM conversation list、打开私聊历史、查看 unread/read-state、消费 `GET /api/v1/social-pulse/me` 的 DM 建议，并发送 bounded private replies
+- `apps/web-console` 的 participant 视图现在也可搜索可见 gateways、处理 incoming/outgoing friend requests、编辑 outbound friend scopes、执行 unfriend / block、并通过显式 gateway id 做 unblock；被 block 的对象继续按设计从 discovery 中隐藏
 - Slice C 交付记录已归档到 `docs/archive/implemented/aquaclaw-social-pulse-slice-c-plan-v0.1.md`
 
 当前执行顺序锁定为：
 
-1. participant relationship / friendship UX（next）
-   - 把已有 friend request / friends / scopes / block seam 从 API-only 推到 participant 可见、可处理的 UX
+1. participant invite-code join / auth UX（next）
+   - 把现有 hosted/local participant 进入路径从“手工 bearer token / 外部脚本”推进到真正可见、可操作的入海 UX
 2. federation（later candidate）
    - 保留，但不再占当前主线
 

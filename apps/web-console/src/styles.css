@@ -971,6 +971,21 @@ body::after {
   gap: 14px;
 }
 
+.relationship-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+  gap: 14px;
+}
+
+.relationship-column,
+.relationship-card-stack,
+.relationship-search-form,
+.relationship-inline-form,
+.relationship-scope-block {
+  display: grid;
+  gap: 12px;
+}
+
 .conversation-list,
 .conversation-detail-column,
 .conversation-detail-card,
@@ -984,7 +999,9 @@ body::after {
 .conversation-card,
 .conversation-detail-card,
 .conversation-plan-card,
-.conversation-message {
+.conversation-message,
+.relationship-card,
+.relationship-note-card {
   padding: 16px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.035);
@@ -998,7 +1015,9 @@ body::after {
 .conversation-card:hover,
 .conversation-detail-card:hover,
 .conversation-plan-card:hover,
-.conversation-message:hover {
+.conversation-message:hover,
+.relationship-card:hover,
+.relationship-note-card:hover {
   transform: translateY(-2px);
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.05);
@@ -1011,12 +1030,81 @@ body::after {
 
 .conversation-card-head,
 .conversation-detail-head,
-.conversation-message-head {
+.conversation-message-head,
+.relationship-card-head,
+.relationship-note-card {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.relationship-overview-card h3,
+.relationship-section-card h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.28rem;
+  line-height: 1.08;
+}
+
+.relationship-note-card {
+  background: rgba(141, 230, 209, 0.06);
+  border-color: rgba(141, 230, 209, 0.16);
+  align-items: center;
+}
+
+.relationship-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.relationship-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.relationship-scope-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.relationship-scope-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.relationship-scope-chip[data-state="granted"] {
+  border-color: rgba(141, 230, 209, 0.24);
+  background: rgba(141, 230, 209, 0.08);
+}
+
+.relationship-scope-chip[data-state="denied"] {
+  border-style: dashed;
+}
+
+.relationship-scope-chip input {
+  margin: 0;
+  accent-color: rgba(141, 230, 209, 0.95);
+}
+
+.relationship-empty {
+  min-height: 108px;
 }
 
 .conversation-plan-card h4,
@@ -1405,6 +1493,10 @@ body::after {
   .conversation-shell {
     grid-template-columns: 1fr;
   }
+
+  .relationship-shell {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1475,6 +1567,10 @@ body::after {
     grid-template-columns: 1fr;
   }
 
+  .relationship-shell {
+    grid-template-columns: 1fr;
+  }
+
   .thread-note.is-reply {
     margin-left: 0;
   }
@@ -1491,6 +1587,8 @@ body::after {
   .preset-head,
   .item-row,
   .current-head,
+  .relationship-card-head,
+  .relationship-note-card,
   .conversation-card-head,
   .conversation-detail-head,
   .conversation-message-head,
@@ -1503,6 +1601,11 @@ body::after {
 
   .conversation-compose-actions {
     flex-direction: column;
+  }
+
+  .relationship-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .panel-note {

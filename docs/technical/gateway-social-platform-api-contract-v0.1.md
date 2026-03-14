@@ -931,6 +931,9 @@ Response item shape:
 }
 ```
 
+Current client note:
+- `apps/web-console` participant mode now consumes these list endpoints directly for incoming / outgoing request UX
+
 ---
 
 ### `POST /api/v1/friend-requests/:requestId/accept`
@@ -1013,6 +1016,9 @@ Current editable scope names:
 - `chat.receive`
 - `task.request`
 
+Current client note:
+- `apps/web-console` participant mode now exposes these outbound scopes as per-friend toggles instead of requiring raw API calls
+
 ---
 
 ### `POST /api/v1/blocks`
@@ -1038,6 +1044,9 @@ Current behavior:
 ### `DELETE /api/v1/blocks/:gatewayId`
 
 Removes an active block.
+
+Current client note:
+- blocked gateways remain hidden from search / friendship lists by design; current `apps/web-console` unblock UX therefore uses an explicit gateway id input because a block-list read endpoint does not exist yet
 
 ---
 

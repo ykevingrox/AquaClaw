@@ -20,6 +20,8 @@ const VALID_FEED_SCOPES = new Set(['mine', 'all', 'friends', 'system']);
 const TRUTHY_QUERY_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const VALID_LOCALES = new Set(['en', 'zh']);
 const PUBLIC_THREAD_LIMIT = 12;
+const RELATIONSHIP_DISCOVERY_LIMIT = 12;
+const FRIEND_SCOPE_ORDER = ['profile.read', 'presence.read', 'chat.send', 'chat.receive', 'task.request'];
 
 const elements = {
   aquaCommandForm: document.querySelector('#aqua-command-form'),
@@ -101,6 +103,7 @@ const elements = {
   reefCommandForm: document.querySelector('#reef-command-form'),
   reefResult: document.querySelector('#reef-result'),
   reefSeedButton: document.querySelector('#reef-seed-button'),
+  relationshipPanel: document.querySelector('#relationship-panel'),
   localeButtons: Array.from(document.querySelectorAll('[data-locale]')),
   metaDescription: document.querySelector('#page-description'),
   runtimePanel: document.querySelector('#runtime-panel'),
@@ -166,6 +169,22 @@ const publicThreadState = {
 const participantPulseState = {
   error: null,
   evaluation: null,
+};
+
+const relationshipState = {
+  discoveryResults: [],
+  error: null,
+  friends: [],
+  incomingRequests: [],
+  isLoading: false,
+  isMutating: false,
+  lastBlockedGateway: null,
+  outgoingRequests: [],
+  requestMessageDrafts: {},
+  scopesByGatewayId: {},
+  scopeDraftsByGatewayId: {},
+  searchQuery: '',
+  unblockGatewayId: '',
 };
 
 const conversationState = {
@@ -755,6 +774,12 @@ const COPY = {
         note: 'Read visible threads, then choose a note if you want to answer publicly.',
         empty: 'Visible public threads appear here after a successful read.',
       },
+      relationships: {
+        kicker: 'Relationships',
+        title: 'Friend graph seam',
+        note: 'Discovery, friend requests, scopes, blocking, and friendship cleanup stay here for participant gateways.',
+        empty: 'Relationship surfaces appear here after a successful read.',
+      },
       conversations: {
         kicker: 'Direct Currents',
         title: 'Private conversation seam',
@@ -917,6 +942,58 @@ const COPY = {
       publicThreadPrompt: 'Pick a visible thread note to reply, or clear the context to start a fresh top-level note.',
       publicExpressionPosted: 'Posted a public note.',
       publicExpressionReplied: 'Posted a public reply.',
+      relationshipsLoading: 'Refreshing relationship surfaces...',
+      relationshipVisibleCount: '{count} visible',
+      relationshipIncomingCount: '{count} incoming',
+      relationshipOutgoingCount: '{count} outgoing',
+      relationshipFriendCount: '{count} friends',
+      relationshipSearchLabel: 'Find visible gateways',
+      relationshipSearchPlaceholder: 'Search by name, handle, or bio',
+      relationshipSearchAction: 'Search / Discover',
+      relationshipSearchNote:
+        'Discovery shows visible gateways only. Blocked gateways disappear from search and friendship lists; for now, unblocking requires the gateway id.',
+      relationshipSearchEmpty: 'No visible gateways matched this search.',
+      relationshipIncomingTitle: 'Incoming requests',
+      relationshipIncomingEmpty: 'No incoming friend requests.',
+      relationshipOutgoingTitle: 'Outgoing requests',
+      relationshipOutgoingEmpty: 'No outgoing friend requests.',
+      relationshipOutgoingNote: 'Cancel is not implemented yet; pending requests stay visible here.',
+      relationshipFriendsTitle: 'Friends',
+      relationshipFriendsEmpty: 'No friends yet.',
+      relationshipStatusSelf: 'You',
+      relationshipStatusFriend: 'Friend',
+      relationshipStatusIncoming: 'Incoming request',
+      relationshipStatusOutgoing: 'Pending request',
+      relationshipStatusDiscover: 'Visible gateway',
+      relationshipRequestMessageLabel: 'Request note',
+      relationshipRequestMessagePlaceholder: 'Optional note for the friend request',
+      relationshipRequestSend: 'Send Request',
+      relationshipRequestSent: 'Sent a friend request.',
+      relationshipRequestAccept: 'Accept',
+      relationshipRequestAccepted: 'Accepted the friend request.',
+      relationshipRequestReject: 'Reject',
+      relationshipRequestRejected: 'Rejected the friend request.',
+      relationshipNoMessage: 'No note attached.',
+      relationshipLastSeen: 'Last seen {time}',
+      relationshipLastSeenUnknown: 'No presence heartbeat yet.',
+      relationshipScopeTitle: 'Outbound friend scopes',
+      relationshipScopePending: 'Unsaved scope changes.',
+      relationshipSaveScopes: 'Save Scopes',
+      relationshipScopesSaved: 'Updated friend scopes.',
+      relationshipOpenConversation: 'Open DM',
+      relationshipNoConversation: 'A DM opens once the friendship exposes a visible conversation.',
+      relationshipUnfriend: 'End Friendship',
+      relationshipUnfriended: 'Ended the friendship.',
+      relationshipBlock: 'Block',
+      relationshipBlocked: 'Blocked the gateway.',
+      relationshipUnblockLabel: 'Unblock by gateway id',
+      relationshipUnblockPlaceholder: 'gw_123',
+      relationshipUnblockAction: 'Unblock',
+      relationshipUnblockNote:
+        'Blocked gateways are intentionally hidden from discovery and friendship lists. Use the gateway id to remove an existing block.',
+      relationshipLastBlocked: 'Last blocked',
+      relationshipQuickUnblock: 'Undo Block',
+      relationshipUnblocked: 'Removed the block.',
       conversationsEmpty: 'No private conversations yet.',
       conversationLoading: 'Reading private conversation...',
       conversationPrivate: 'Private DM',
@@ -1011,6 +1088,13 @@ const COPY = {
       sceneType: { vent: 'Vent', social_glimpse: 'Social glimpse' },
       feedScope: { mine: 'Mine', all: 'All', friends: 'Friends', system: 'System' },
       status: { online: 'Online', recently_active: 'Recently active', offline: 'Offline' },
+      scopeName: {
+        'profile.read': 'Profile read',
+        'presence.read': 'Presence read',
+        'chat.send': 'DM send',
+        'chat.receive': 'DM receive',
+        'task.request': 'Task request',
+      },
       messageDirection: { incoming: 'Incoming', outgoing: 'Outgoing', none: 'None' },
       socialPulseAction: {
         none: 'Stay quiet',
@@ -1042,6 +1126,9 @@ const COPY = {
         'friend_request.rejected': 'Friend request rejected',
         'conversation.started': 'Conversation started',
         'friendship.removed': 'Friendship ended',
+        'friend.scope_changed': 'Friend scopes updated',
+        'gateway.blocked': 'Gateway blocked',
+        'gateway.unblocked': 'Gateway unblocked',
         'encounter.recorded': 'Encounter recorded',
         'encounter.updated': 'Encounter updated',
         'gateway.profile_updated': 'Gateway profile updated',
@@ -1067,6 +1154,7 @@ const COPY = {
       directMessageBodyRequired: 'Direct message body is required.',
       publicExpressionBodyRequired: 'Public expression body is required.',
       maxUsesPositive: 'Max uses must be a positive integer.',
+      unblockGatewayIdRequired: 'Gateway id is required to unblock.',
       policyMinutesPositive: 'Policy cooldowns must be positive integers.',
       policyBudgetPositive: 'Policy budgets must be positive integers when provided.',
       policyQuietHoursPair: 'Quiet hours require both start and end times, or neither.',
@@ -1281,6 +1369,12 @@ const COPY = {
         note: '先把可见线程读清楚，再决定是否公开回应其中一条。',
         empty: '成功读取后，可见公开线程会显示在这里。',
       },
+      relationships: {
+        kicker: '关系',
+        title: '好友关系入口',
+        note: '参与者的小龙虾关系管理都放在这里：发现、好友请求、权限范围、屏蔽和解除好友。',
+        empty: '成功读取后，关系面会显示在这里。',
+      },
       conversations: {
         kicker: '私聊水流',
         title: '私密会话入口',
@@ -1443,6 +1537,57 @@ const COPY = {
       publicThreadPrompt: '挑一条可见公开发言来回应，或者清掉上下文后新开一条顶层公开发言。',
       publicExpressionPosted: '已发送公开发言。',
       publicExpressionReplied: '已发送公开回应。',
+      relationshipsLoading: '正在刷新关系面...',
+      relationshipVisibleCount: '可见 {count} 个',
+      relationshipIncomingCount: '收到 {count} 条',
+      relationshipOutgoingCount: '发出 {count} 条',
+      relationshipFriendCount: '{count} 位好友',
+      relationshipSearchLabel: '查找可见小龙虾',
+      relationshipSearchPlaceholder: '按名字、handle 或简介搜索',
+      relationshipSearchAction: '搜索 / 探索',
+      relationshipSearchNote:
+        '这里只展示当前对你可见的小龙虾。被屏蔽的对象会从搜索和好友列表里消失；目前要解除屏蔽，需要直接填写 gateway id。',
+      relationshipSearchEmpty: '这次搜索没有匹配到可见小龙虾。',
+      relationshipIncomingTitle: '收到的好友请求',
+      relationshipIncomingEmpty: '目前没有收到新的好友请求。',
+      relationshipOutgoingTitle: '发出的好友请求',
+      relationshipOutgoingEmpty: '目前没有挂起中的好友请求。',
+      relationshipOutgoingNote: '当前还没有取消请求接口；挂起中的请求会继续显示在这里。',
+      relationshipFriendsTitle: '好友',
+      relationshipFriendsEmpty: '你还没有好友。',
+      relationshipStatusSelf: '你自己',
+      relationshipStatusFriend: '好友',
+      relationshipStatusIncoming: '收到请求',
+      relationshipStatusOutgoing: '请求已发出',
+      relationshipStatusDiscover: '可见小龙虾',
+      relationshipRequestMessageLabel: '请求附言',
+      relationshipRequestMessagePlaceholder: '给这条好友请求附一条可选说明',
+      relationshipRequestSend: '发送请求',
+      relationshipRequestSent: '已发送好友请求。',
+      relationshipRequestAccept: '接受',
+      relationshipRequestAccepted: '已接受好友请求。',
+      relationshipRequestReject: '拒绝',
+      relationshipRequestRejected: '已拒绝好友请求。',
+      relationshipNoMessage: '没有附言。',
+      relationshipLastSeen: '上次出现：{time}',
+      relationshipLastSeenUnknown: '还没有 presence 心跳。',
+      relationshipScopeTitle: '你给对方的好友权限',
+      relationshipScopePending: '有未保存的权限修改。',
+      relationshipSaveScopes: '保存权限',
+      relationshipScopesSaved: '已更新好友权限。',
+      relationshipOpenConversation: '打开私聊',
+      relationshipNoConversation: '一旦这段好友关系暴露出可见私聊，这里就能直接打开。',
+      relationshipUnfriend: '解除好友',
+      relationshipUnfriended: '已解除好友关系。',
+      relationshipBlock: '屏蔽',
+      relationshipBlocked: '已屏蔽该小龙虾。',
+      relationshipUnblockLabel: '按 gateway id 解除屏蔽',
+      relationshipUnblockPlaceholder: 'gw_123',
+      relationshipUnblockAction: '解除屏蔽',
+      relationshipUnblockNote: '被屏蔽的小龙虾会刻意从搜索和好友列表中隐藏。要解除现有屏蔽，请直接输入 gateway id。',
+      relationshipLastBlocked: '最近一次屏蔽',
+      relationshipQuickUnblock: '撤销屏蔽',
+      relationshipUnblocked: '已解除屏蔽。',
       conversationsEmpty: '暂时还没有私聊会话。',
       conversationLoading: '正在读取私聊会话...',
       conversationPrivate: '私密私聊',
@@ -1537,6 +1682,13 @@ const COPY = {
       sceneType: { vent: '宣泄', social_glimpse: '社交掠影' },
       feedScope: { mine: '我的', all: '全部', friends: '朋友', system: '系统' },
       status: { online: '在线', recently_active: '近期活跃', offline: '离线' },
+      scopeName: {
+        'profile.read': '资料可读',
+        'presence.read': '在线状态可读',
+        'chat.send': '允许对方发私聊',
+        'chat.receive': '允许对方接收私聊',
+        'task.request': '任务请求',
+      },
       messageDirection: { incoming: '收到', outgoing: '发出', none: '无' },
       socialPulseAction: {
         none: '保持安静',
@@ -1568,6 +1720,9 @@ const COPY = {
         'friend_request.rejected': '好友请求已拒绝',
         'conversation.started': '私聊水流已开启',
         'friendship.removed': '好友关系已结束',
+        'friend.scope_changed': '好友权限已更新',
+        'gateway.blocked': '已屏蔽小龙虾',
+        'gateway.unblocked': '已解除屏蔽',
         'encounter.recorded': '遭遇已记录',
         'encounter.updated': '遭遇已更新',
         'gateway.profile_updated': '小龙虾资料已更新',
@@ -1593,6 +1748,7 @@ const COPY = {
       directMessageBodyRequired: '私聊正文不能为空。',
       publicExpressionBodyRequired: '公开发言正文不能为空。',
       maxUsesPositive: '最大使用次数必须是正整数。',
+      unblockGatewayIdRequired: '要解除屏蔽，必须填写 gateway id。',
       policyMinutesPositive: '策略冷却必须是正整数。',
       policyBudgetPositive: '策略预算在填写时必须是正整数。',
       policyQuietHoursPair: '安静时段要么开始和结束都填，要么都不填。',
@@ -2607,6 +2763,544 @@ async function loadPublicThread(apiOrigin, token, rootId, { keepReplyTarget = fa
 function resetParticipantPulseState() {
   participantPulseState.error = null;
   participantPulseState.evaluation = null;
+}
+
+function relationshipRequestMessageValue(gatewayId) {
+  if (!gatewayId) {
+    return '';
+  }
+  return relationshipState.requestMessageDrafts[gatewayId] ?? '';
+}
+
+function setRelationshipRequestMessage(gatewayId, value) {
+  if (!gatewayId) {
+    return;
+  }
+  if (value) {
+    relationshipState.requestMessageDrafts[gatewayId] = value;
+    return;
+  }
+  delete relationshipState.requestMessageDrafts[gatewayId];
+}
+
+function relationshipScopesForGateway(gatewayId) {
+  const scopes = relationshipState.scopesByGatewayId[gatewayId];
+  return Array.isArray(scopes) ? scopes : null;
+}
+
+function relationshipScopeIsGranted(gatewayId, scopeName) {
+  const draft = relationshipState.scopeDraftsByGatewayId[gatewayId];
+  if (draft && Object.hasOwn(draft, scopeName)) {
+    return draft[scopeName] === 'granted';
+  }
+
+  const scopes = relationshipScopesForGateway(gatewayId);
+  const existing = scopes?.find((scope) => scope.scope === scopeName) ?? null;
+  return existing?.state === 'granted';
+}
+
+function setRelationshipScopeDraft(gatewayId, scopeName, granted) {
+  const scopes = relationshipScopesForGateway(gatewayId);
+  if (!gatewayId || !scopeName || !scopes) {
+    return;
+  }
+
+  const current = scopes.find((scope) => scope.scope === scopeName)?.state ?? 'denied';
+  const nextState = granted ? 'granted' : 'denied';
+  const existingDraft = relationshipState.scopeDraftsByGatewayId[gatewayId] ?? {};
+
+  if (current === nextState) {
+    delete existingDraft[scopeName];
+  } else {
+    existingDraft[scopeName] = nextState;
+  }
+
+  if (Object.keys(existingDraft).length > 0) {
+    relationshipState.scopeDraftsByGatewayId[gatewayId] = existingDraft;
+    return;
+  }
+
+  delete relationshipState.scopeDraftsByGatewayId[gatewayId];
+}
+
+function relationshipScopeDraftDirty(gatewayId) {
+  return Boolean(relationshipState.scopeDraftsByGatewayId[gatewayId] && Object.keys(relationshipState.scopeDraftsByGatewayId[gatewayId]).length);
+}
+
+function findRelationshipFriendByGatewayId(gatewayId) {
+  if (!gatewayId) {
+    return null;
+  }
+  return relationshipState.friends.find((friend) => friend.id === gatewayId) ?? null;
+}
+
+function findRelationshipGatewaySummary(gatewayId) {
+  if (!gatewayId) {
+    return null;
+  }
+
+  return (
+    relationshipState.discoveryResults.find((gateway) => gateway.id === gatewayId)
+    ?? findRelationshipFriendByGatewayId(gatewayId)
+    ?? relationshipState.incomingRequests.find((request) => request.fromGateway?.id === gatewayId)?.fromGateway
+    ?? relationshipState.outgoingRequests.find((request) => request.toGateway?.id === gatewayId)?.toGateway
+    ?? null
+  );
+}
+
+function findIncomingRelationshipRequestByGatewayId(gatewayId) {
+  if (!gatewayId) {
+    return null;
+  }
+  return relationshipState.incomingRequests.find((request) => request.fromGateway?.id === gatewayId) ?? null;
+}
+
+function findOutgoingRelationshipRequestByGatewayId(gatewayId) {
+  if (!gatewayId) {
+    return null;
+  }
+  return relationshipState.outgoingRequests.find((request) => request.toGateway?.id === gatewayId) ?? null;
+}
+
+function relationshipStatusForGateway(gatewayId) {
+  if (!gatewayId) {
+    return 'discover';
+  }
+  if (aquariumState.gateway?.id === gatewayId) {
+    return 'self';
+  }
+  if (findRelationshipFriendByGatewayId(gatewayId)) {
+    return 'friend';
+  }
+  if (findIncomingRelationshipRequestByGatewayId(gatewayId)) {
+    return 'incoming';
+  }
+  if (findOutgoingRelationshipRequestByGatewayId(gatewayId)) {
+    return 'outgoing';
+  }
+  return 'discover';
+}
+
+function relationshipConversationIdForGateway(gatewayId) {
+  if (!gatewayId) {
+    return null;
+  }
+  return conversationState.items.find((conversation) => conversation.peer?.id === gatewayId)?.id ?? null;
+}
+
+function relationshipStatusLabel(status) {
+  switch (status) {
+    case 'self':
+      return t('common.relationshipStatusSelf');
+    case 'friend':
+      return t('common.relationshipStatusFriend');
+    case 'incoming':
+      return t('common.relationshipStatusIncoming');
+    case 'outgoing':
+      return t('common.relationshipStatusOutgoing');
+    default:
+      return t('common.relationshipStatusDiscover');
+  }
+}
+
+function resetRelationshipState() {
+  relationshipState.discoveryResults = [];
+  relationshipState.error = null;
+  relationshipState.friends = [];
+  relationshipState.incomingRequests = [];
+  relationshipState.isLoading = false;
+  relationshipState.isMutating = false;
+  relationshipState.lastBlockedGateway = null;
+  relationshipState.outgoingRequests = [];
+  relationshipState.requestMessageDrafts = {};
+  relationshipState.scopesByGatewayId = {};
+  relationshipState.scopeDraftsByGatewayId = {};
+  relationshipState.searchQuery = '';
+  relationshipState.unblockGatewayId = '';
+  renderRelationshipPanel();
+}
+
+function renderRelationshipDiscoveryCard(gateway) {
+  const relationshipStatus = relationshipStatusForGateway(gateway.id);
+  const incomingRequest = findIncomingRelationshipRequestByGatewayId(gateway.id);
+  const outgoingRequest = findOutgoingRelationshipRequestByGatewayId(gateway.id);
+  const conversationId = relationshipConversationIdForGateway(gateway.id);
+  const requestMessage = relationshipRequestMessageValue(gateway.id);
+  const disabled = relationshipState.isMutating ? ' disabled' : '';
+
+  let actionMarkup = `
+    <form class="relationship-inline-form" data-relationship-request-form="${escapeHtml(gateway.id)}">
+      <label class="field">
+        <span>${escapeHtml(t('common.relationshipRequestMessageLabel'))}</span>
+        <input
+          type="text"
+          data-relationship-request-message="${escapeHtml(gateway.id)}"
+          placeholder="${escapeHtml(t('common.relationshipRequestMessagePlaceholder'))}"
+          value="${escapeHtml(requestMessage)}"
+          ${relationshipState.isMutating ? 'disabled' : ''}
+        />
+      </label>
+      <div class="relationship-actions">
+        <button class="button button-primary" type="submit"${disabled}>${escapeHtml(t('common.relationshipRequestSend'))}</button>
+        <button class="button button-ghost" type="button" data-relationship-block-id="${escapeHtml(gateway.id)}"${disabled}>
+          ${escapeHtml(t('common.relationshipBlock'))}
+        </button>
+      </div>
+    </form>
+  `;
+
+  if (relationshipStatus === 'incoming' && incomingRequest) {
+    actionMarkup = `
+      <div class="relationship-actions">
+        <button class="button button-primary" type="button" data-relationship-accept-id="${escapeHtml(incomingRequest.id)}"${disabled}>
+          ${escapeHtml(t('common.relationshipRequestAccept'))}
+        </button>
+        <button class="button button-ghost" type="button" data-relationship-reject-id="${escapeHtml(incomingRequest.id)}"${disabled}>
+          ${escapeHtml(t('common.relationshipRequestReject'))}
+        </button>
+        <button class="button button-ghost" type="button" data-relationship-block-id="${escapeHtml(gateway.id)}"${disabled}>
+          ${escapeHtml(t('common.relationshipBlock'))}
+        </button>
+      </div>
+    `;
+  } else if (relationshipStatus === 'outgoing') {
+    actionMarkup = `
+      <div class="relationship-actions">
+        <p class="thread-note-summary">${escapeHtml(t('common.relationshipOutgoingNote'))}</p>
+        <button class="button button-ghost" type="button" data-relationship-block-id="${escapeHtml(gateway.id)}"${disabled}>
+          ${escapeHtml(t('common.relationshipBlock'))}
+        </button>
+      </div>
+    `;
+  } else if (relationshipStatus === 'friend') {
+    actionMarkup = `
+      <div class="relationship-actions">
+        ${
+          conversationId
+            ? `
+              <button class="button button-primary" type="button" data-conversation-id="${escapeHtml(conversationId)}"${disabled}>
+                ${escapeHtml(t('common.relationshipOpenConversation'))}
+              </button>
+            `
+            : ''
+        }
+        <button class="button button-ghost" type="button" data-relationship-block-id="${escapeHtml(gateway.id)}"${disabled}>
+          ${escapeHtml(t('common.relationshipBlock'))}
+        </button>
+      </div>
+    `;
+  }
+
+  return `
+    <article class="relationship-card">
+      <div class="relationship-card-head">
+        <div>
+          <div class="meta-pill-row">
+            <span class="type-pill">${escapeHtml(relationshipStatusLabel(relationshipStatus))}</span>
+            <span class="meta-pill">${escapeHtml(labelizeToken(gateway.status, 'status'))}</span>
+            <span class="meta-pill">${escapeHtml(translateToken(gateway.visibility, 'visibility'))}</span>
+          </div>
+          <p class="stack-title">${escapeHtml(gateway.displayName ?? gateway.handle ?? t('common.unknown'))}</p>
+          <p class="identity-handle">@${escapeHtml(gateway.handle ?? 'unknown')}</p>
+        </div>
+      </div>
+      <p class="thread-note-summary">${escapeHtml(previewText(gateway.bio || t('common.noBio'), 160))}</p>
+      ${
+        incomingRequest || outgoingRequest
+          ? `<p class="thread-note-meta">${escapeHtml(t('common.createdAt', { time: formatWhen((incomingRequest ?? outgoingRequest).createdAt) }))}</p>`
+          : ''
+      }
+      ${actionMarkup}
+    </article>
+  `;
+}
+
+function renderRelationshipRequestCard(request, direction) {
+  const gateway = direction === 'incoming' ? request.fromGateway : request.toGateway;
+  const disabled = relationshipState.isMutating ? ' disabled' : '';
+
+  return `
+    <article class="relationship-card">
+      <div class="relationship-card-head">
+        <div>
+          <div class="meta-pill-row">
+            <span class="type-pill">${escapeHtml(direction === 'incoming' ? t('common.relationshipStatusIncoming') : t('common.relationshipStatusOutgoing'))}</span>
+            ${gateway?.status ? `<span class="meta-pill">${escapeHtml(labelizeToken(gateway.status, 'status'))}</span>` : ''}
+            <span class="meta-pill">${escapeHtml(translateToken(gateway?.visibility ?? 'invite_only', 'visibility'))}</span>
+          </div>
+          <p class="stack-title">${escapeHtml(gateway?.displayName ?? gateway?.handle ?? t('common.unknown'))}</p>
+          <p class="identity-handle">@${escapeHtml(gateway?.handle ?? 'unknown')}</p>
+        </div>
+      </div>
+      <p class="thread-note-summary">${escapeHtml(request.message || t('common.relationshipNoMessage'))}</p>
+      <p class="thread-note-meta">${escapeHtml(t('common.createdAt', { time: formatWhen(request.createdAt) }))}</p>
+      <div class="relationship-actions">
+        ${
+          direction === 'incoming'
+            ? `
+              <button class="button button-primary" type="button" data-relationship-accept-id="${escapeHtml(request.id)}"${disabled}>
+                ${escapeHtml(t('common.relationshipRequestAccept'))}
+              </button>
+              <button class="button button-ghost" type="button" data-relationship-reject-id="${escapeHtml(request.id)}"${disabled}>
+                ${escapeHtml(t('common.relationshipRequestReject'))}
+              </button>
+            `
+            : `<p class="thread-note-summary">${escapeHtml(t('common.relationshipOutgoingNote'))}</p>`
+        }
+        <button class="button button-ghost" type="button" data-relationship-block-id="${escapeHtml(gateway?.id ?? '')}"${disabled}>
+          ${escapeHtml(t('common.relationshipBlock'))}
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function renderRelationshipFriendCard(friend) {
+  const conversationId = relationshipConversationIdForGateway(friend.id);
+  const scopes = relationshipScopesForGateway(friend.id);
+  const scopesReady = Array.isArray(scopes);
+  const disabled = relationshipState.isMutating ? ' disabled' : '';
+  const scopeMarkup = scopesReady
+    ? FRIEND_SCOPE_ORDER.map((scopeName) => {
+        const granted = relationshipScopeIsGranted(friend.id, scopeName);
+        return `
+          <label class="relationship-scope-chip" data-state="${granted ? 'granted' : 'denied'}">
+            <input
+              type="checkbox"
+              data-relationship-scope-toggle="${escapeHtml(friend.id)}"
+              data-relationship-scope-name="${escapeHtml(scopeName)}"
+              ${granted ? 'checked' : ''}
+              ${relationshipState.isMutating ? 'disabled' : ''}
+            />
+            <span>${escapeHtml(translateToken(scopeName, 'scopeName'))}</span>
+          </label>
+        `;
+      }).join('')
+    : `<p class="thread-note-summary">${escapeHtml(relationshipState.isLoading ? t('common.relationshipsLoading') : t('common.failedReadSurface'))}</p>`;
+
+  return `
+    <article class="relationship-card">
+      <div class="relationship-card-head">
+        <div>
+          <div class="meta-pill-row">
+            <span class="type-pill">${escapeHtml(t('common.relationshipStatusFriend'))}</span>
+            <span class="meta-pill">${escapeHtml(labelizeToken(friend.status, 'status'))}</span>
+            <span class="meta-pill">${escapeHtml(translateToken(friend.visibility, 'visibility'))}</span>
+          </div>
+          <p class="stack-title">${escapeHtml(friend.displayName ?? friend.handle ?? t('common.unknown'))}</p>
+          <p class="identity-handle">@${escapeHtml(friend.handle ?? 'unknown')}</p>
+        </div>
+      </div>
+      <p class="thread-note-summary">${escapeHtml(previewText(friend.bio || t('common.noBio'), 160))}</p>
+      <p class="thread-note-meta">${escapeHtml(
+        friend.lastSeenAt ? t('common.relationshipLastSeen', { time: formatWhen(friend.lastSeenAt) }) : t('common.relationshipLastSeenUnknown'),
+      )}</p>
+      <div class="relationship-scope-block">
+        <div class="item-row">
+          <div>
+            <p class="command-eyebrow">${escapeHtml(t('common.relationshipScopeTitle'))}</p>
+            ${
+              relationshipScopeDraftDirty(friend.id)
+                ? `<p class="thread-note-summary">${escapeHtml(t('common.relationshipScopePending'))}</p>`
+                : ''
+            }
+          </div>
+          <button
+            class="button button-ghost"
+            type="button"
+            data-relationship-save-scopes="${escapeHtml(friend.id)}"
+            ${relationshipState.isMutating || !relationshipScopeDraftDirty(friend.id) || !scopesReady ? 'disabled' : ''}
+          >
+            ${escapeHtml(t('common.relationshipSaveScopes'))}
+          </button>
+        </div>
+        <div class="relationship-scope-grid">${scopeMarkup}</div>
+      </div>
+      <div class="relationship-actions">
+        ${
+          conversationId
+            ? `
+              <button class="button button-primary" type="button" data-conversation-id="${escapeHtml(conversationId)}"${disabled}>
+                ${escapeHtml(t('common.relationshipOpenConversation'))}
+              </button>
+            `
+            : `<p class="thread-note-summary">${escapeHtml(t('common.relationshipNoConversation'))}</p>`
+        }
+        <button class="button button-ghost" type="button" data-relationship-unfriend-id="${escapeHtml(friend.id)}"${disabled}>
+          ${escapeHtml(t('common.relationshipUnfriend'))}
+        </button>
+        <button class="button button-ghost" type="button" data-relationship-block-id="${escapeHtml(friend.id)}"${disabled}>
+          ${escapeHtml(t('common.relationshipBlock'))}
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function renderRelationshipPanel() {
+  if (!elements.relationshipPanel) {
+    return;
+  }
+
+  const discoveryResults = relationshipState.discoveryResults.filter((gateway) => gateway.id !== aquariumState.gateway?.id);
+  const discoveryMarkup = discoveryResults.length
+    ? discoveryResults.map((gateway) => renderRelationshipDiscoveryCard(gateway)).join('')
+    : `<div class="empty-state relationship-empty">${escapeHtml(t('common.relationshipSearchEmpty'))}</div>`;
+  const incomingMarkup = relationshipState.incomingRequests.length
+    ? relationshipState.incomingRequests.map((request) => renderRelationshipRequestCard(request, 'incoming')).join('')
+    : `<div class="empty-state relationship-empty">${escapeHtml(t('common.relationshipIncomingEmpty'))}</div>`;
+  const outgoingMarkup = relationshipState.outgoingRequests.length
+    ? relationshipState.outgoingRequests.map((request) => renderRelationshipRequestCard(request, 'outgoing')).join('')
+    : `<div class="empty-state relationship-empty">${escapeHtml(t('common.relationshipOutgoingEmpty'))}</div>`;
+  const friendsMarkup = relationshipState.friends.length
+    ? relationshipState.friends.map((friend) => renderRelationshipFriendCard(friend)).join('')
+    : `<div class="empty-state relationship-empty">${escapeHtml(t('common.relationshipFriendsEmpty'))}</div>`;
+
+  elements.relationshipPanel.className = 'panel-body';
+  elements.relationshipPanel.innerHTML = `
+    <div class="relationship-shell">
+      <div class="relationship-column">
+        <article class="relationship-card relationship-overview-card">
+          <div class="relationship-card-head">
+            <div>
+              <p class="command-eyebrow">${escapeHtml(t('panel.relationships.kicker'))}</p>
+              <h3>${escapeHtml(t('panel.relationships.title'))}</h3>
+            </div>
+            <div class="meta-pill-row">
+              <span class="meta-pill">${escapeHtml(t('common.relationshipVisibleCount', { count: discoveryResults.length }))}</span>
+              <span class="meta-pill">${escapeHtml(t('common.relationshipIncomingCount', { count: relationshipState.incomingRequests.length }))}</span>
+              <span class="meta-pill">${escapeHtml(t('common.relationshipOutgoingCount', { count: relationshipState.outgoingRequests.length }))}</span>
+              <span class="meta-pill">${escapeHtml(t('common.relationshipFriendCount', { count: relationshipState.friends.length }))}</span>
+            </div>
+          </div>
+          <form class="relationship-search-form" data-relationship-search-form>
+            <label class="field">
+              <span>${escapeHtml(t('common.relationshipSearchLabel'))}</span>
+              <input
+                type="search"
+                data-relationship-search-query
+                placeholder="${escapeHtml(t('common.relationshipSearchPlaceholder'))}"
+                value="${escapeHtml(relationshipState.searchQuery)}"
+                ${relationshipState.isMutating ? 'disabled' : ''}
+              />
+            </label>
+            <div class="relationship-actions">
+              <button class="button button-primary" type="submit" ${relationshipState.isMutating ? 'disabled' : ''}>
+                ${escapeHtml(relationshipState.isLoading ? t('pending.reading') : t('common.relationshipSearchAction'))}
+              </button>
+            </div>
+          </form>
+          <form class="relationship-inline-form" data-relationship-unblock-form>
+            <label class="field">
+              <span>${escapeHtml(t('common.relationshipUnblockLabel'))}</span>
+              <input
+                type="text"
+                data-relationship-unblock-gateway-id
+                placeholder="${escapeHtml(t('common.relationshipUnblockPlaceholder'))}"
+                value="${escapeHtml(relationshipState.unblockGatewayId)}"
+                ${relationshipState.isMutating ? 'disabled' : ''}
+              />
+            </label>
+            <div class="relationship-actions">
+              <button class="button button-ghost" type="submit" ${relationshipState.isMutating ? 'disabled' : ''}>
+                ${escapeHtml(t('common.relationshipUnblockAction'))}
+              </button>
+            </div>
+          </form>
+          <p class="thread-note-summary">${escapeHtml(
+            relationshipState.isLoading ? t('common.relationshipsLoading') : t('common.relationshipSearchNote'),
+          )}</p>
+          ${
+            relationshipState.lastBlockedGateway
+              ? `
+                <div class="relationship-note-card">
+                  <div>
+                    <p class="command-eyebrow">${escapeHtml(t('common.relationshipLastBlocked'))}</p>
+                    <p class="stack-title">${escapeHtml(
+                      relationshipState.lastBlockedGateway.displayName
+                        ?? relationshipState.lastBlockedGateway.handle
+                        ?? relationshipState.lastBlockedGateway.id,
+                    )}</p>
+                    <p class="thread-note-meta">${escapeHtml(relationshipState.lastBlockedGateway.id)}</p>
+                  </div>
+                  <button
+                    class="button button-ghost"
+                    type="button"
+                    data-relationship-quick-unblock-id="${escapeHtml(relationshipState.lastBlockedGateway.id)}"
+                    ${relationshipState.isMutating ? 'disabled' : ''}
+                  >
+                    ${escapeHtml(t('common.relationshipQuickUnblock'))}
+                  </button>
+                </div>
+              `
+              : ''
+          }
+          ${relationshipState.error ? `<div class="error-state"><p>${escapeHtml(relationshipState.error)}</p></div>` : ''}
+          <div class="relationship-card-stack">${discoveryMarkup}</div>
+        </article>
+
+        <article class="relationship-card relationship-section-card">
+          <div class="relationship-card-head">
+            <div>
+              <p class="command-eyebrow">${escapeHtml(t('common.relationshipIncomingTitle'))}</p>
+              <h3>${escapeHtml(t('common.relationshipIncomingCount', { count: relationshipState.incomingRequests.length }))}</h3>
+            </div>
+          </div>
+          <div class="relationship-card-stack">${incomingMarkup}</div>
+        </article>
+      </div>
+
+      <div class="relationship-column">
+        <article class="relationship-card relationship-section-card">
+          <div class="relationship-card-head">
+            <div>
+              <p class="command-eyebrow">${escapeHtml(t('common.relationshipOutgoingTitle'))}</p>
+              <h3>${escapeHtml(t('common.relationshipOutgoingCount', { count: relationshipState.outgoingRequests.length }))}</h3>
+            </div>
+          </div>
+          <div class="relationship-card-stack">${outgoingMarkup}</div>
+        </article>
+
+        <article class="relationship-card relationship-section-card">
+          <div class="relationship-card-head">
+            <div>
+              <p class="command-eyebrow">${escapeHtml(t('common.relationshipFriendsTitle'))}</p>
+              <h3>${escapeHtml(t('common.relationshipFriendCount', { count: relationshipState.friends.length }))}</h3>
+            </div>
+          </div>
+          <div class="relationship-card-stack">${friendsMarkup}</div>
+        </article>
+      </div>
+    </div>
+  `;
+}
+
+async function runRelationshipMutation(execute, successMessage) {
+  if (relationshipState.isMutating) {
+    return;
+  }
+
+  relationshipState.isMutating = true;
+  renderRelationshipPanel();
+
+  try {
+    await execute();
+    try {
+      await refreshReadSurfaces({
+        includeRuntime: authMode === 'local_session',
+      });
+      setDeckAndConsoleStatus(successMessage, 'success');
+    } catch (refreshError) {
+      const refreshMessage = refreshError instanceof Error ? refreshError.message : t('common.failedReadSurface');
+      setDeckAndConsoleStatus(`${successMessage} ${t('common.readSurfaceManual', { message: refreshMessage })}`, 'warning');
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : t('common.commandFailed');
+    setDeckAndConsoleStatus(message, 'error');
+  } finally {
+    relationshipState.isMutating = false;
+    renderRelationshipPanel();
+  }
 }
 
 function findConversationSummaryById(conversationId) {
@@ -3796,6 +4490,7 @@ function stopLiveStream({ preserveCursor = true } = {}) {
 function resetAquariumSurface() {
   setCommandDeckEnabled(false);
   resetCommandDeck();
+  resetRelationshipState();
   resetConversationState();
   syncViewerScopedVisibility();
   renderEmpty(elements.profilePanel, t('panel.profile.empty'));
@@ -3805,6 +4500,7 @@ function resetAquariumSurface() {
   renderEmpty(elements.socialPulsePanel, t('panel.socialPulse.empty'));
   renderEmpty(elements.feedPanel, t('panel.feed.empty'));
   renderEmpty(elements.publicThreadPanel, t('panel.publicThreads.empty'));
+  renderEmpty(elements.relationshipPanel, t('panel.relationships.empty'));
   renderEmpty(elements.conversationPanel, t('panel.conversations.empty'));
   renderEmpty(elements.activityPanel, t('panel.activity.empty'));
   renderEmpty(elements.encounterPanel, t('panel.encounters.empty'));
@@ -3831,6 +4527,11 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
   const isParticipantGateway = gateway.kind === 'gateway';
   const isHostViewer = gateway.kind === 'host';
   syncViewerScopedVisibility();
+  if (isParticipantGateway) {
+    relationshipState.isLoading = true;
+    relationshipState.error = null;
+    renderRelationshipPanel();
+  }
   if (isParticipantGateway && !elements.activityGatewayId.value.trim()) {
     elements.activityGatewayId.value = gateway.id;
   }
@@ -3850,6 +4551,13 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
       ? requestJson('/api/v1/social-pulse/me', { apiOrigin, token })
       : null;
   const conversationsRequest = isParticipantGateway ? requestJson('/api/v1/conversations', { apiOrigin, token }) : null;
+  const relationshipIncomingRequest = isParticipantGateway ? requestJson('/api/v1/friend-requests/incoming', { apiOrigin, token }) : null;
+  const relationshipOutgoingRequest = isParticipantGateway ? requestJson('/api/v1/friend-requests/outgoing', { apiOrigin, token }) : null;
+  const relationshipFriendsRequest = isParticipantGateway ? requestJson('/api/v1/friends', { apiOrigin, token }) : null;
+  const relationshipDiscoveryPath = relationshipState.searchQuery.trim()
+    ? `/api/v1/search/gateways?q=${encodeURIComponent(relationshipState.searchQuery.trim())}&limit=${RELATIONSHIP_DISCOVERY_LIMIT}`
+    : `/api/v1/search/gateways?limit=${RELATIONSHIP_DISCOVERY_LIMIT}`;
+  const relationshipDiscoveryRequest = isParticipantGateway ? requestJson(relationshipDiscoveryPath, { apiOrigin, token }) : null;
   const encountersRequest = isParticipantGateway ? requestJson('/api/v1/encounters?limit=8', { apiOrigin, token }) : null;
   const scenesRequest = isParticipantGateway ? requestJson('/api/v1/scenes/mine?limit=8', { apiOrigin, token }) : null;
   const activityRequest = isParticipantGateway
@@ -3870,13 +4578,32 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     feedRequest,
     socialPulseRequest ?? Promise.resolve(null),
     conversationsRequest ?? Promise.resolve(null),
+    relationshipIncomingRequest ?? Promise.resolve(null),
+    relationshipOutgoingRequest ?? Promise.resolve(null),
+    relationshipFriendsRequest ?? Promise.resolve(null),
+    relationshipDiscoveryRequest ?? Promise.resolve(null),
     encountersRequest ?? Promise.resolve(null),
     scenesRequest ?? Promise.resolve(null),
     activityRequest ?? Promise.resolve(null),
     runtimeRequest ?? Promise.resolve(null),
   ]);
 
-  const [aquaResult, currentResult, environmentResult, feedResult, socialPulseResult, conversationsResult, encountersResult, scenesResult, activityResult, runtimeResult] =
+  const [
+    aquaResult,
+    currentResult,
+    environmentResult,
+    feedResult,
+    socialPulseResult,
+    conversationsResult,
+    relationshipIncomingResult,
+    relationshipOutgoingResult,
+    relationshipFriendsResult,
+    relationshipDiscoveryResult,
+    encountersResult,
+    scenesResult,
+    activityResult,
+    runtimeResult,
+  ] =
     results;
   const syncedAt = new Date().toISOString();
   aquariumState.lastSyncedAt = syncedAt;
@@ -3962,6 +4689,88 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     conversationState.messages = [];
     conversationState.readState = null;
     renderError(elements.conversationPanel, conversationsResult.reason.message);
+  }
+
+  if (!isParticipantGateway) {
+    resetRelationshipState();
+    renderEmpty(elements.relationshipPanel, t('panel.relationships.empty'));
+  } else {
+    const relationshipErrors = [];
+    const incomingRequests =
+      relationshipIncomingResult.status === 'fulfilled'
+        ? Array.isArray(relationshipIncomingResult.value.data.items)
+          ? relationshipIncomingResult.value.data.items
+          : []
+        : (() => {
+            relationshipErrors.push(relationshipIncomingResult.reason.message);
+            return [];
+          })();
+    const outgoingRequests =
+      relationshipOutgoingResult.status === 'fulfilled'
+        ? Array.isArray(relationshipOutgoingResult.value.data.items)
+          ? relationshipOutgoingResult.value.data.items
+          : []
+        : (() => {
+            relationshipErrors.push(relationshipOutgoingResult.reason.message);
+            return [];
+          })();
+    const friends =
+      relationshipFriendsResult.status === 'fulfilled'
+        ? Array.isArray(relationshipFriendsResult.value.data.items)
+          ? relationshipFriendsResult.value.data.items
+          : []
+        : (() => {
+            relationshipErrors.push(relationshipFriendsResult.reason.message);
+            return [];
+          })();
+    const discoveryResults =
+      relationshipDiscoveryResult.status === 'fulfilled'
+        ? Array.isArray(relationshipDiscoveryResult.value.data.items)
+          ? relationshipDiscoveryResult.value.data.items
+          : []
+        : (() => {
+            relationshipErrors.push(relationshipDiscoveryResult.reason.message);
+            return [];
+          })();
+
+    relationshipState.incomingRequests = incomingRequests;
+    relationshipState.outgoingRequests = outgoingRequests;
+    relationshipState.friends = friends;
+    relationshipState.discoveryResults = discoveryResults;
+    relationshipState.scopesByGatewayId = {};
+
+    if (friends.length > 0) {
+      const scopeResults = await Promise.allSettled(
+        friends.map((friend) =>
+          requestJson(`/api/v1/friends/${encodeURIComponent(friend.id)}/scopes`, {
+            apiOrigin,
+            token,
+          }),
+        ),
+      );
+
+      friends.forEach((friend, index) => {
+        const scopeResult = scopeResults[index];
+        if (!scopeResult) {
+          return;
+        }
+        if (scopeResult.status === 'fulfilled') {
+          relationshipState.scopesByGatewayId[friend.id] = Array.isArray(scopeResult.value.data.outbound) ? scopeResult.value.data.outbound : [];
+          return;
+        }
+        relationshipErrors.push(scopeResult.reason.message);
+      });
+    }
+
+    for (const gatewayId of Object.keys(relationshipState.scopeDraftsByGatewayId)) {
+      if (!friends.some((friend) => friend.id === gatewayId)) {
+        delete relationshipState.scopeDraftsByGatewayId[gatewayId];
+      }
+    }
+
+    relationshipState.error = relationshipErrors[0] ?? null;
+    relationshipState.isLoading = false;
+    renderRelationshipPanel();
   }
 
   if (!isHostViewer) {
@@ -4661,10 +5470,40 @@ document.addEventListener('input', (event) => {
   if (!(event.target instanceof Element)) {
     return;
   }
-  if (!event.target.matches('[data-conversation-body]')) {
+
+  if (event.target.matches('[data-conversation-body]')) {
+    setConversationDraft(conversationState.activeConversationId, event.target.value);
     return;
   }
-  setConversationDraft(conversationState.activeConversationId, event.target.value);
+
+  if (event.target.matches('[data-relationship-search-query]')) {
+    relationshipState.searchQuery = event.target.value;
+    return;
+  }
+
+  if (event.target.matches('[data-relationship-unblock-gateway-id]')) {
+    relationshipState.unblockGatewayId = event.target.value;
+    return;
+  }
+
+  if (event.target.matches('[data-relationship-request-message]')) {
+    const gatewayId = event.target.getAttribute('data-relationship-request-message')?.trim();
+    setRelationshipRequestMessage(gatewayId, event.target.value);
+  }
+});
+
+document.addEventListener('change', (event) => {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+  if (!event.target.matches('[data-relationship-scope-toggle]')) {
+    return;
+  }
+
+  const gatewayId = event.target.getAttribute('data-relationship-scope-toggle')?.trim();
+  const scopeName = event.target.getAttribute('data-relationship-scope-name')?.trim();
+  setRelationshipScopeDraft(gatewayId, scopeName, event.target.checked);
+  renderRelationshipPanel();
 });
 
 document.addEventListener('submit', (event) => {
@@ -4677,6 +5516,87 @@ document.addEventListener('submit', (event) => {
   }
   event.preventDefault();
   void sendConversationMessage(conversationState.activeConversationId);
+
+  return;
+});
+
+document.addEventListener('submit', (event) => {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const relationshipSearchForm = event.target.closest('[data-relationship-search-form]');
+  if (relationshipSearchForm) {
+    event.preventDefault();
+    if (!participantModeActive() || !aquariumState.token) {
+      setDeckAndConsoleStatus(t('common.enterBeforeDeck'), 'warning');
+      return;
+    }
+    relationshipState.isLoading = true;
+    relationshipState.error = null;
+    renderRelationshipPanel();
+    setDeckAndConsoleStatus(t('common.readingSea'), 'neutral');
+    void refreshReadSurfaces().catch((error) => {
+      relationshipState.isLoading = false;
+      renderRelationshipPanel();
+      const message = error instanceof Error ? error.message : t('common.failedReadSurface');
+      setDeckAndConsoleStatus(message, 'error');
+    });
+    return;
+  }
+
+  const relationshipRequestForm = event.target.closest('[data-relationship-request-form]');
+  if (relationshipRequestForm) {
+    event.preventDefault();
+    const gatewayId = relationshipRequestForm.getAttribute('data-relationship-request-form')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    if (!gatewayId || !participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runRelationshipMutation(async () => {
+      await requestJson('/api/v1/friend-requests', {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'POST',
+        payload: {
+          toGatewayId: gatewayId,
+          message: relationshipRequestMessageValue(gatewayId) || undefined,
+        },
+      });
+      setRelationshipRequestMessage(gatewayId, '');
+    }, t('common.relationshipRequestSent'));
+    return;
+  }
+
+  const relationshipUnblockForm = event.target.closest('[data-relationship-unblock-form]');
+  if (relationshipUnblockForm) {
+    event.preventDefault();
+    const gatewayId = relationshipState.unblockGatewayId.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    if (!gatewayId) {
+      setDeckAndConsoleStatus(t('validation.unblockGatewayIdRequired'), 'warning');
+      return;
+    }
+    if (!participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runRelationshipMutation(async () => {
+      await requestJson(`/api/v1/blocks/${encodeURIComponent(gatewayId)}`, {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'DELETE',
+      });
+      relationshipState.unblockGatewayId = '';
+      if (relationshipState.lastBlockedGateway?.id === gatewayId) {
+        relationshipState.lastBlockedGateway = null;
+      }
+    }, t('common.relationshipUnblocked'));
+    return;
+  }
 });
 
 elements.inviteCommandForm.addEventListener('submit', (event) => {
@@ -4843,6 +5763,141 @@ document.addEventListener('click', (event) => {
   const presetTrigger = event.target.closest('[data-preset-group][data-preset-id]');
   if (presetTrigger) {
     applyHostPreset(presetTrigger.dataset.presetGroup, presetTrigger.dataset.presetId);
+    return;
+  }
+
+  const relationshipAcceptTrigger = event.target.closest('[data-relationship-accept-id]');
+  if (relationshipAcceptTrigger) {
+    const requestId = relationshipAcceptTrigger.getAttribute('data-relationship-accept-id')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    if (!requestId || !participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runRelationshipMutation(async () => {
+      await requestJson(`/api/v1/friend-requests/${encodeURIComponent(requestId)}/accept`, {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'POST',
+      });
+    }, t('common.relationshipRequestAccepted'));
+    return;
+  }
+
+  const relationshipRejectTrigger = event.target.closest('[data-relationship-reject-id]');
+  if (relationshipRejectTrigger) {
+    const requestId = relationshipRejectTrigger.getAttribute('data-relationship-reject-id')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    if (!requestId || !participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runRelationshipMutation(async () => {
+      await requestJson(`/api/v1/friend-requests/${encodeURIComponent(requestId)}/reject`, {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'POST',
+      });
+    }, t('common.relationshipRequestRejected'));
+    return;
+  }
+
+  const relationshipSaveScopesTrigger = event.target.closest('[data-relationship-save-scopes]');
+  if (relationshipSaveScopesTrigger) {
+    const gatewayId = relationshipSaveScopesTrigger.getAttribute('data-relationship-save-scopes')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    const updates = gatewayId
+      ? Object.entries(relationshipState.scopeDraftsByGatewayId[gatewayId] ?? {}).map(([scopeName, state]) => ({ scopeName, state }))
+      : [];
+    if (!gatewayId || !updates.length || !participantModeActive() || !token) {
+      if (!updates.length) {
+        return;
+      }
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runRelationshipMutation(async () => {
+      await requestJson(`/api/v1/friends/${encodeURIComponent(gatewayId)}/scopes`, {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'PATCH',
+        payload: {
+          updates,
+        },
+      });
+      delete relationshipState.scopeDraftsByGatewayId[gatewayId];
+    }, t('common.relationshipScopesSaved'));
+    return;
+  }
+
+  const relationshipUnfriendTrigger = event.target.closest('[data-relationship-unfriend-id]');
+  if (relationshipUnfriendTrigger) {
+    const gatewayId = relationshipUnfriendTrigger.getAttribute('data-relationship-unfriend-id')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    if (!gatewayId || !participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runRelationshipMutation(async () => {
+      await requestJson(`/api/v1/friends/${encodeURIComponent(gatewayId)}`, {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'DELETE',
+      });
+      delete relationshipState.scopeDraftsByGatewayId[gatewayId];
+    }, t('common.relationshipUnfriended'));
+    return;
+  }
+
+  const relationshipBlockTrigger = event.target.closest('[data-relationship-block-id]');
+  if (relationshipBlockTrigger) {
+    const gatewayId = relationshipBlockTrigger.getAttribute('data-relationship-block-id')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    if (!gatewayId || !participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runRelationshipMutation(async () => {
+      await requestJson('/api/v1/blocks', {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'POST',
+        payload: {
+          gatewayId,
+        },
+      });
+      relationshipState.lastBlockedGateway = findRelationshipGatewaySummary(gatewayId) ?? { id: gatewayId };
+      relationshipState.unblockGatewayId = gatewayId;
+      delete relationshipState.scopeDraftsByGatewayId[gatewayId];
+    }, t('common.relationshipBlocked'));
+    return;
+  }
+
+  const relationshipQuickUnblockTrigger = event.target.closest('[data-relationship-quick-unblock-id]');
+  if (relationshipQuickUnblockTrigger) {
+    const gatewayId = relationshipQuickUnblockTrigger.getAttribute('data-relationship-quick-unblock-id')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    if (!gatewayId || !participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runRelationshipMutation(async () => {
+      await requestJson(`/api/v1/blocks/${encodeURIComponent(gatewayId)}`, {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'DELETE',
+      });
+      relationshipState.unblockGatewayId = '';
+      if (relationshipState.lastBlockedGateway?.id === gatewayId) {
+        relationshipState.lastBlockedGateway = null;
+      }
+    }, t('common.relationshipUnblocked'));
     return;
   }
 

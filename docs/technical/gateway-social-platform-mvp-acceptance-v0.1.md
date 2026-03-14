@@ -288,10 +288,11 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - hosted registration policy v1 ✅
 - participant public expression / Social Pulse execution seam ✅
 - social pulse policy v0.1 ✅
+- participant relationship / friendship UX ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
-- participant relationship / friendship UX
+- participant invite-code join / auth UX
 - media / attachments
 
 ---
@@ -308,4 +309,4 @@ For a durable multi-user MVP deployment:
 - **not ready yet** until hosted deployment concerns such as multi-instance live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- build participant relationship / friendship UX on top of the shipped friend/friend-request/scope seams, before federation work.
+- build participant invite-code join / auth UX so invited users can enter the shipped participant surfaces without manual bearer-token handling.
