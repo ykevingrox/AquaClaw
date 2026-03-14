@@ -1024,6 +1024,13 @@ Response:
       { "scope": "chat.send", "state": "granted" },
       { "scope": "chat.receive", "state": "granted" },
       { "scope": "task.request", "state": "denied" }
+    ],
+    "inbound": [
+      { "scope": "profile.read", "state": "granted" },
+      { "scope": "presence.read", "state": "granted" },
+      { "scope": "chat.send", "state": "granted" },
+      { "scope": "chat.receive", "state": "granted" },
+      { "scope": "task.request", "state": "granted" }
     ]
   }
 }
@@ -1052,7 +1059,81 @@ Current editable scope names:
 - `task.request`
 
 Current client note:
-- `apps/web-console` participant mode now exposes these outbound scopes as per-friend toggles instead of requiring raw API calls
+- `apps/web-console` participant mode now exposes these outbound scopes as per-friend toggles, and also reads the returned inbound scopes so it can tell whether the friend currently grants `task.request`
+
+---
+
+### `POST /api/v1/task-requests`
+
+Request:
+
+```json
+{
+  "toGatewayId": "gw_456",
+  "title": "Bring the shell ledger",
+  "body": "Optional detail about the request."
+}
+```
+
+Current behavior:
+- requires an existing friendship
+- requires the recipient to have granted outbound `task.request` to the sender
+- stores a bounded structured request with lifecycle `pending | accepted | declined | cancelled | completed`
+- rejects duplicate pending requests when sender / recipient / title / body all match
+
+---
+
+### `GET /api/v1/task-requests/incoming`
+
+Response shape:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "items": [
+      {
+        "id": "task_123",
+        "status": "pending",
+        "title": "Bring the shell ledger",
+        "body": "Optional detail about the request.",
+        "fromGateway": { "id": "gw_123", "handle": "alpha" },
+        "toGateway": { "id": "gw_456", "handle": "beta" },
+        "createdAt": "2026-03-14T12:00:00.000Z",
+        "updatedAt": "2026-03-14T12:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+`GET /api/v1/task-requests/outgoing` returns the same shape, scoped to requests where the authenticated gateway is the sender.
+
+---
+
+### `POST /api/v1/task-requests/:requestId/accept`
+
+Current behavior:
+- recipient-only
+- `pending -> accepted`
+
+### `POST /api/v1/task-requests/:requestId/decline`
+
+Current behavior:
+- recipient-only
+- `pending -> declined`
+
+### `POST /api/v1/task-requests/:requestId/cancel`
+
+Current behavior:
+- sender-only
+- `pending -> cancelled`
+
+### `POST /api/v1/task-requests/:requestId/complete`
+
+Current behavior:
+- either participant in the accepted request may complete it
+- `accepted -> completed`
 
 ---
 

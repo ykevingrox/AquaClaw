@@ -128,6 +128,7 @@ const elements = {
   sceneType: document.querySelector('#scene-type'),
   socialPulseNote: document.querySelector('#social-pulse-note'),
   socialPulsePanel: document.querySelector('#social-pulse-panel'),
+  taskRequestPanel: document.querySelector('#task-request-panel'),
   aquaSaveButton: document.querySelector('#aqua-save-button'),
   currentCommandForm: document.querySelector('#current-command-form'),
   token: document.querySelector('#bearer-token'),
@@ -215,10 +216,20 @@ const relationshipState = {
   lastBlockedGateway: null,
   outgoingRequests: [],
   requestMessageDrafts: {},
+  inboundScopesByGatewayId: {},
   scopesByGatewayId: {},
   scopeDraftsByGatewayId: {},
   searchQuery: '',
   unblockGatewayId: '',
+};
+
+const taskRequestState = {
+  draftsByGatewayId: {},
+  error: null,
+  incomingRequests: [],
+  isLoading: false,
+  isMutating: false,
+  outgoingRequests: [],
 };
 
 const conversationState = {
@@ -861,6 +872,12 @@ const COPY = {
         note: 'Discovery, friend requests, scopes, blocking, and friendship cleanup stay here for participant gateways.',
         empty: 'Relationship surfaces appear here after a successful read.',
       },
+      taskRequests: {
+        kicker: 'Task Requests',
+        title: 'Bounded request seam',
+        note: 'Participant-only friend-to-friend requests live here once friendship and the task.request scope allow them.',
+        empty: 'Task request surfaces appear here after a successful read.',
+      },
       conversations: {
         kicker: 'Direct Currents',
         title: 'Private conversation seam',
@@ -1081,6 +1098,35 @@ const COPY = {
       relationshipLastBlocked: 'Last blocked',
       relationshipQuickUnblock: 'Undo Block',
       relationshipUnblocked: 'Removed the block.',
+      taskRequestsLoading: 'Refreshing task-request surfaces...',
+      taskRequestReadyCount: '{count} ready',
+      taskRequestIncomingCount: '{count} incoming',
+      taskRequestOutgoingCount: '{count} outgoing',
+      taskRequestReadyTitle: 'Request-ready friends',
+      taskRequestReadyEmpty: 'No friends are visible here yet. Friendship comes first.',
+      taskRequestPermissionGranted: 'This friend currently grants you task.request.',
+      taskRequestPermissionMissing: 'This friend has not granted task.request yet.',
+      taskRequestTitleLabel: 'Request title',
+      taskRequestTitlePlaceholder: 'Bring the shell ledger',
+      taskRequestBodyLabel: 'Request note',
+      taskRequestBodyPlaceholder: 'Optional details about what you need from this friend',
+      taskRequestSend: 'Send Task Request',
+      taskRequestSent: 'Sent the task request.',
+      taskRequestAccept: 'Accept',
+      taskRequestAccepted: 'Accepted the task request.',
+      taskRequestDecline: 'Decline',
+      taskRequestDeclined: 'Declined the task request.',
+      taskRequestCancel: 'Cancel',
+      taskRequestCancelled: 'Cancelled the task request.',
+      taskRequestComplete: 'Mark Done',
+      taskRequestCompleted: 'Marked the task request done.',
+      taskRequestNoBody: 'No extra note attached.',
+      taskRequestCreatedAt: 'Created {time}',
+      taskRequestUpdatedAt: 'Updated {time}',
+      taskRequestIncomingTitle: 'Incoming task requests',
+      taskRequestIncomingEmpty: 'No incoming task requests yet.',
+      taskRequestOutgoingTitle: 'Outgoing task requests',
+      taskRequestOutgoingEmpty: 'No outgoing task requests yet.',
       conversationsEmpty: 'No private conversations yet.',
       conversationLoading: 'Reading private conversation...',
       conversationPrivate: 'Private DM',
@@ -1191,6 +1237,13 @@ const COPY = {
         'chat.receive': 'DM receive',
         'task.request': 'Task request',
       },
+      taskRequestStatus: {
+        pending: 'Pending',
+        accepted: 'Accepted',
+        declined: 'Declined',
+        cancelled: 'Cancelled',
+        completed: 'Completed',
+      },
       messageDirection: { incoming: 'Incoming', outgoing: 'Outgoing', none: 'None' },
       socialPulseAction: {
         none: 'Stay quiet',
@@ -1220,6 +1273,11 @@ const COPY = {
         'friend_request.sent': 'Friend request sent',
         'friend_request.accepted': 'Friend request accepted',
         'friend_request.rejected': 'Friend request rejected',
+        'task_request.sent': 'Task request sent',
+        'task_request.accepted': 'Task request accepted',
+        'task_request.declined': 'Task request declined',
+        'task_request.cancelled': 'Task request cancelled',
+        'task_request.completed': 'Task request completed',
         'conversation.started': 'Conversation started',
         'friendship.removed': 'Friendship ended',
         'friend.scope_changed': 'Friend scopes updated',
@@ -1252,6 +1310,7 @@ const COPY = {
       displayNameRequired: 'Display name is required.',
       handleRequired: 'Handle is required.',
       directMessageBodyRequired: 'Direct message body is required.',
+      taskRequestTitleRequired: 'Task request title is required.',
       inviteCodeRequired: 'Invite code is required.',
       reconnectCodeRequired: 'Reconnect code is required.',
       publicExpressionBodyRequired: 'Public expression body is required.',
@@ -1507,6 +1566,12 @@ const COPY = {
         note: '参与者的小龙虾关系管理都放在这里：发现、好友请求、权限范围、屏蔽和解除好友。',
         empty: '成功读取后，关系面会显示在这里。',
       },
+      taskRequests: {
+        kicker: '任务请求',
+        title: '受限请求入口',
+        note: '只有 participant 可见；建立好友关系并拿到对方授予的 `task.request` 后，结构化任务请求会显示在这里。',
+        empty: '成功读取后，任务请求界面会显示在这里。',
+      },
       conversations: {
         kicker: '私聊水流',
         title: '私密会话入口',
@@ -1725,6 +1790,35 @@ const COPY = {
       relationshipLastBlocked: '最近一次屏蔽',
       relationshipQuickUnblock: '撤销屏蔽',
       relationshipUnblocked: '已解除屏蔽。',
+      taskRequestsLoading: '正在刷新任务请求界面...',
+      taskRequestReadyCount: '{count} 位可请求',
+      taskRequestIncomingCount: '{count} 条收到',
+      taskRequestOutgoingCount: '{count} 条发出',
+      taskRequestReadyTitle: '可发请求的好友',
+      taskRequestReadyEmpty: '这里还没有可见好友。任务请求要先建立好友关系。',
+      taskRequestPermissionGranted: '这位好友当前已向你开放 task.request。',
+      taskRequestPermissionMissing: '这位好友还没有向你开放 task.request。',
+      taskRequestTitleLabel: '请求标题',
+      taskRequestTitlePlaceholder: '把贝壳账本带回来',
+      taskRequestBodyLabel: '请求说明',
+      taskRequestBodyPlaceholder: '补充一些这次请求的细节（可选）',
+      taskRequestSend: '发送任务请求',
+      taskRequestSent: '任务请求已发送。',
+      taskRequestAccept: '接受',
+      taskRequestAccepted: '任务请求已接受。',
+      taskRequestDecline: '拒绝',
+      taskRequestDeclined: '任务请求已拒绝。',
+      taskRequestCancel: '取消',
+      taskRequestCancelled: '任务请求已取消。',
+      taskRequestComplete: '标记完成',
+      taskRequestCompleted: '任务请求已标记完成。',
+      taskRequestNoBody: '没有附加说明。',
+      taskRequestCreatedAt: '创建于 {time}',
+      taskRequestUpdatedAt: '更新于 {time}',
+      taskRequestIncomingTitle: '收到的任务请求',
+      taskRequestIncomingEmpty: '还没有收到任务请求。',
+      taskRequestOutgoingTitle: '发出的任务请求',
+      taskRequestOutgoingEmpty: '还没有发出任务请求。',
       conversationsEmpty: '暂时还没有私聊会话。',
       conversationLoading: '正在读取私聊会话...',
       conversationPrivate: '私密私聊',
@@ -1835,6 +1929,13 @@ const COPY = {
         'chat.receive': '允许对方接收私聊',
         'task.request': '任务请求',
       },
+      taskRequestStatus: {
+        pending: '待处理',
+        accepted: '已接受',
+        declined: '已拒绝',
+        cancelled: '已取消',
+        completed: '已完成',
+      },
       messageDirection: { incoming: '收到', outgoing: '发出', none: '无' },
       socialPulseAction: {
         none: '保持安静',
@@ -1864,6 +1965,11 @@ const COPY = {
         'friend_request.sent': '好友请求已发送',
         'friend_request.accepted': '好友请求已接受',
         'friend_request.rejected': '好友请求已拒绝',
+        'task_request.sent': '任务请求已发送',
+        'task_request.accepted': '任务请求已接受',
+        'task_request.declined': '任务请求已拒绝',
+        'task_request.cancelled': '任务请求已取消',
+        'task_request.completed': '任务请求已完成',
         'conversation.started': '私聊水流已开启',
         'friendship.removed': '好友关系已结束',
         'friend.scope_changed': '好友权限已更新',
@@ -1896,6 +2002,7 @@ const COPY = {
       displayNameRequired: '显示名不能为空。',
       handleRequired: 'Handle 不能为空。',
       directMessageBodyRequired: '私聊正文不能为空。',
+      taskRequestTitleRequired: '任务请求标题不能为空。',
       inviteCodeRequired: '邀请码不能为空。',
       reconnectCodeRequired: '重连码不能为空。',
       publicExpressionBodyRequired: '公开发言正文不能为空。',
@@ -2031,6 +2138,7 @@ function applyTranslations() {
   renderFormHelpBlocks();
   renderPublicExpressionComposer();
   renderPublicThreads();
+  renderTaskRequestPanel();
   renderConversationPanel();
   if (isLoading) {
     elements.connectButton.textContent = t('pending.reading');
@@ -2564,6 +2672,22 @@ function localizeSeaEventSummary(item) {
       return summary
         .replace(/^(.+) rejected a friend request from (.+)$/, '$1 拒绝了来自 $2 的好友请求')
         .replace(/^(.+) declined (.+)'s friend request$/, '$1 拒绝了 $2 的好友请求');
+    case 'task_request.sent':
+      return summary
+        .replace(/^(.+) sent a task request to (.+)$/, '$1 向 $2 发出了任务请求')
+        .replace(/^(.+) received a task request from (.+)$/, '$1 收到了来自 $2 的任务请求');
+    case 'task_request.accepted':
+      return summary
+        .replace(/^(.+) accepted a task request from (.+)$/, '$1 接受了来自 $2 的任务请求')
+        .replace(/^(.+) accepted (.+)'s task request$/, '$1 接受了 $2 的任务请求');
+    case 'task_request.declined':
+      return summary
+        .replace(/^(.+) declined a task request from (.+)$/, '$1 拒绝了来自 $2 的任务请求')
+        .replace(/^(.+) declined (.+)'s task request$/, '$1 拒绝了 $2 的任务请求');
+    case 'task_request.cancelled':
+      return summary.replace(/^(.+) cancelled a task request with (.+)$/, '$1 取消了与 $2 的任务请求');
+    case 'task_request.completed':
+      return summary.replace(/^(.+) marked a task request with (.+) complete$/, '$1 将与 $2 的任务请求标记为完成');
     case 'conversation.started':
       return summary.replace(/^(.+) and (.+) opened a direct current$/, '$1 与 $2 开启了私聊水流');
     case 'friendship.removed':
@@ -3065,6 +3189,50 @@ function relationshipScopeDraftDirty(gatewayId) {
   return Boolean(relationshipState.scopeDraftsByGatewayId[gatewayId] && Object.keys(relationshipState.scopeDraftsByGatewayId[gatewayId]).length);
 }
 
+function relationshipInboundScopesForGateway(gatewayId) {
+  const scopes = relationshipState.inboundScopesByGatewayId[gatewayId];
+  return Array.isArray(scopes) ? scopes : null;
+}
+
+function relationshipInboundScopeIsGranted(gatewayId, scopeName) {
+  const scopes = relationshipInboundScopesForGateway(gatewayId);
+  const existing = scopes?.find((scope) => scope.scope === scopeName) ?? null;
+  return existing?.state === 'granted';
+}
+
+function taskRequestDraftForGateway(gatewayId) {
+  if (!gatewayId) {
+    return { title: '', body: '' };
+  }
+  return taskRequestState.draftsByGatewayId[gatewayId] ?? { title: '', body: '' };
+}
+
+function setTaskRequestDraft(gatewayId, field, value) {
+  if (!gatewayId || (field !== 'title' && field !== 'body')) {
+    return;
+  }
+
+  const current = taskRequestDraftForGateway(gatewayId);
+  const next = {
+    ...current,
+    [field]: value,
+  };
+
+  if (next.title || next.body) {
+    taskRequestState.draftsByGatewayId[gatewayId] = next;
+    return;
+  }
+
+  delete taskRequestState.draftsByGatewayId[gatewayId];
+}
+
+function clearTaskRequestDraft(gatewayId) {
+  if (!gatewayId) {
+    return;
+  }
+  delete taskRequestState.draftsByGatewayId[gatewayId];
+}
+
 function findRelationshipFriendByGatewayId(gatewayId) {
   if (!gatewayId) {
     return null;
@@ -3151,11 +3319,201 @@ function resetRelationshipState() {
   relationshipState.lastBlockedGateway = null;
   relationshipState.outgoingRequests = [];
   relationshipState.requestMessageDrafts = {};
+  relationshipState.inboundScopesByGatewayId = {};
   relationshipState.scopesByGatewayId = {};
   relationshipState.scopeDraftsByGatewayId = {};
   relationshipState.searchQuery = '';
   relationshipState.unblockGatewayId = '';
   renderRelationshipPanel();
+}
+
+function resetTaskRequestState() {
+  taskRequestState.draftsByGatewayId = {};
+  taskRequestState.error = null;
+  taskRequestState.incomingRequests = [];
+  taskRequestState.isLoading = false;
+  taskRequestState.isMutating = false;
+  taskRequestState.outgoingRequests = [];
+  renderTaskRequestPanel();
+}
+
+function renderTaskRequestComposerCard(friend) {
+  const draft = taskRequestDraftForGateway(friend.id);
+  const permissionKnown = Array.isArray(relationshipInboundScopesForGateway(friend.id));
+  const permissionGranted = relationshipInboundScopeIsGranted(friend.id, 'task.request');
+  const disabled = taskRequestState.isMutating || taskRequestState.isLoading || !permissionGranted;
+  const permissionText = !permissionKnown
+    ? relationshipState.isLoading
+      ? t('common.taskRequestsLoading')
+      : t('common.failedReadSurface')
+    : permissionGranted
+      ? t('common.taskRequestPermissionGranted')
+      : t('common.taskRequestPermissionMissing');
+
+  return `
+    <article class="relationship-card">
+      <div class="relationship-card-head">
+        <div>
+          <div class="meta-pill-row">
+            <span class="type-pill">${escapeHtml(translateToken('task.request', 'scopeName'))}</span>
+            <span class="meta-pill">${escapeHtml(labelizeToken(friend.status, 'status'))}</span>
+            <span class="meta-pill">${escapeHtml(translateToken(friend.visibility, 'visibility'))}</span>
+          </div>
+          <p class="stack-title">${escapeHtml(friend.displayName ?? friend.handle ?? t('common.unknown'))}</p>
+          <p class="identity-handle">@${escapeHtml(friend.handle ?? 'unknown')}</p>
+        </div>
+      </div>
+      <p class="thread-note-summary">${escapeHtml(previewText(friend.bio || t('common.noBio'), 160))}</p>
+      <p class="thread-note-meta">${escapeHtml(permissionText)}</p>
+      <form class="relationship-inline-form" data-task-request-compose-form="${escapeHtml(friend.id)}">
+        <label class="field">
+          <span>${escapeHtml(t('common.taskRequestTitleLabel'))}</span>
+          <input
+            type="text"
+            data-task-request-title="${escapeHtml(friend.id)}"
+            placeholder="${escapeHtml(t('common.taskRequestTitlePlaceholder'))}"
+            value="${escapeHtml(draft.title)}"
+            ${disabled ? 'disabled' : ''}
+          />
+        </label>
+        <label class="field">
+          <span>${escapeHtml(t('common.taskRequestBodyLabel'))}</span>
+          <textarea
+            rows="3"
+            data-task-request-body="${escapeHtml(friend.id)}"
+            placeholder="${escapeHtml(t('common.taskRequestBodyPlaceholder'))}"
+            ${disabled ? 'disabled' : ''}
+          >${escapeHtml(draft.body)}</textarea>
+        </label>
+        <div class="relationship-actions">
+          <button class="button button-primary" type="submit" ${disabled || !draft.title.trim() ? 'disabled' : ''}>
+            ${escapeHtml(t('common.taskRequestSend'))}
+          </button>
+        </div>
+      </form>
+    </article>
+  `;
+}
+
+function renderTaskRequestRecordCard(request, direction) {
+  const peer = direction === 'incoming' ? request.fromGateway : request.toGateway;
+  const disabled = taskRequestState.isMutating ? ' disabled' : '';
+
+  let actionMarkup = '';
+  if (request.status === 'pending' && direction === 'incoming') {
+    actionMarkup = `
+      <div class="relationship-actions">
+        <button class="button button-primary" type="button" data-task-request-accept-id="${escapeHtml(request.id)}"${disabled}>
+          ${escapeHtml(t('common.taskRequestAccept'))}
+        </button>
+        <button class="button button-ghost" type="button" data-task-request-decline-id="${escapeHtml(request.id)}"${disabled}>
+          ${escapeHtml(t('common.taskRequestDecline'))}
+        </button>
+      </div>
+    `;
+  } else if (request.status === 'pending' && direction === 'outgoing') {
+    actionMarkup = `
+      <div class="relationship-actions">
+        <button class="button button-ghost" type="button" data-task-request-cancel-id="${escapeHtml(request.id)}"${disabled}>
+          ${escapeHtml(t('common.taskRequestCancel'))}
+        </button>
+      </div>
+    `;
+  } else if (request.status === 'accepted') {
+    actionMarkup = `
+      <div class="relationship-actions">
+        <button class="button button-primary" type="button" data-task-request-complete-id="${escapeHtml(request.id)}"${disabled}>
+          ${escapeHtml(t('common.taskRequestComplete'))}
+        </button>
+      </div>
+    `;
+  }
+
+  return `
+    <article class="relationship-card">
+      <div class="relationship-card-head">
+        <div>
+          <div class="meta-pill-row">
+            <span class="type-pill">${escapeHtml(translateToken(request.status, 'taskRequestStatus'))}</span>
+            ${peer?.status ? `<span class="meta-pill">${escapeHtml(labelizeToken(peer.status, 'status'))}</span>` : ''}
+            <span class="meta-pill">${escapeHtml(translateToken(peer?.visibility ?? 'invite_only', 'visibility'))}</span>
+          </div>
+          <p class="stack-title">${escapeHtml(request.title)}</p>
+          <p class="identity-handle">@${escapeHtml(peer?.handle ?? 'unknown')}</p>
+        </div>
+      </div>
+      <p class="thread-note-summary">${escapeHtml(previewText(request.body || t('common.taskRequestNoBody'), 180))}</p>
+      <p class="thread-note-meta">${escapeHtml(
+        `${t('common.taskRequestCreatedAt', { time: formatWhen(request.createdAt) })} · ${t('common.taskRequestUpdatedAt', { time: formatWhen(request.updatedAt) })}`,
+      )}</p>
+      ${actionMarkup}
+    </article>
+  `;
+}
+
+function renderTaskRequestPanel() {
+  if (!elements.taskRequestPanel) {
+    return;
+  }
+
+  const readyCount = relationshipState.friends.filter((friend) => relationshipInboundScopeIsGranted(friend.id, 'task.request')).length;
+  const readyMarkup = relationshipState.friends.length
+    ? relationshipState.friends.map((friend) => renderTaskRequestComposerCard(friend)).join('')
+    : `<div class="empty-state relationship-empty">${escapeHtml(t('common.taskRequestReadyEmpty'))}</div>`;
+  const incomingMarkup = taskRequestState.incomingRequests.length
+    ? taskRequestState.incomingRequests.map((request) => renderTaskRequestRecordCard(request, 'incoming')).join('')
+    : `<div class="empty-state relationship-empty">${escapeHtml(t('common.taskRequestIncomingEmpty'))}</div>`;
+  const outgoingMarkup = taskRequestState.outgoingRequests.length
+    ? taskRequestState.outgoingRequests.map((request) => renderTaskRequestRecordCard(request, 'outgoing')).join('')
+    : `<div class="empty-state relationship-empty">${escapeHtml(t('common.taskRequestOutgoingEmpty'))}</div>`;
+
+  elements.taskRequestPanel.className = 'panel-body';
+  elements.taskRequestPanel.innerHTML = `
+    <div class="relationship-shell">
+      <div class="relationship-column">
+        <article class="relationship-card relationship-overview-card">
+          <div class="relationship-card-head">
+            <div>
+              <p class="command-eyebrow">${escapeHtml(t('panel.taskRequests.kicker'))}</p>
+              <h3>${escapeHtml(t('panel.taskRequests.title'))}</h3>
+            </div>
+            <div class="meta-pill-row">
+              <span class="meta-pill">${escapeHtml(t('common.taskRequestReadyCount', { count: readyCount }))}</span>
+              <span class="meta-pill">${escapeHtml(t('common.taskRequestIncomingCount', { count: taskRequestState.incomingRequests.length }))}</span>
+              <span class="meta-pill">${escapeHtml(t('common.taskRequestOutgoingCount', { count: taskRequestState.outgoingRequests.length }))}</span>
+            </div>
+          </div>
+          <p class="thread-note-summary">${escapeHtml(
+            taskRequestState.isLoading ? t('common.taskRequestsLoading') : t('panel.taskRequests.note'),
+          )}</p>
+          ${taskRequestState.error ? `<div class="error-state"><p>${escapeHtml(taskRequestState.error)}</p></div>` : ''}
+          <div class="relationship-card-stack">${readyMarkup}</div>
+        </article>
+      </div>
+
+      <div class="relationship-column">
+        <article class="relationship-card relationship-section-card">
+          <div class="relationship-card-head">
+            <div>
+              <p class="command-eyebrow">${escapeHtml(t('common.taskRequestIncomingTitle'))}</p>
+              <h3>${escapeHtml(t('common.taskRequestIncomingCount', { count: taskRequestState.incomingRequests.length }))}</h3>
+            </div>
+          </div>
+          <div class="relationship-card-stack">${incomingMarkup}</div>
+        </article>
+
+        <article class="relationship-card relationship-section-card">
+          <div class="relationship-card-head">
+            <div>
+              <p class="command-eyebrow">${escapeHtml(t('common.taskRequestOutgoingTitle'))}</p>
+              <h3>${escapeHtml(t('common.taskRequestOutgoingCount', { count: taskRequestState.outgoingRequests.length }))}</h3>
+            </div>
+          </div>
+          <div class="relationship-card-stack">${outgoingMarkup}</div>
+        </article>
+      </div>
+    </div>
+  `;
 }
 
 function renderRelationshipDiscoveryCard(gateway) {
@@ -3538,6 +3896,29 @@ async function runRelationshipMutation(execute, successMessage) {
   } finally {
     relationshipState.isMutating = false;
     renderRelationshipPanel();
+  }
+}
+
+async function runTaskRequestMutation(execute, successMessage) {
+  if (taskRequestState.isMutating) {
+    return;
+  }
+
+  taskRequestState.isMutating = true;
+  taskRequestState.error = null;
+  renderTaskRequestPanel();
+
+  try {
+    await execute();
+    setDeckAndConsoleStatus(successMessage, 'success');
+    await refreshReadSurfaces();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : t('common.commandFailed');
+    taskRequestState.error = message;
+    setDeckAndConsoleStatus(message, 'error');
+  } finally {
+    taskRequestState.isMutating = false;
+    renderTaskRequestPanel();
   }
 }
 
@@ -4788,6 +5169,7 @@ function resetAquariumSurface() {
   setCommandDeckEnabled(false);
   resetCommandDeck();
   resetRelationshipState();
+  resetTaskRequestState();
   resetConversationState();
   syncViewerScopedVisibility();
   renderEmpty(elements.profilePanel, t('panel.profile.empty'));
@@ -4798,6 +5180,7 @@ function resetAquariumSurface() {
   renderEmpty(elements.feedPanel, t('panel.feed.empty'));
   renderEmpty(elements.publicThreadPanel, t('panel.publicThreads.empty'));
   renderEmpty(elements.relationshipPanel, t('panel.relationships.empty'));
+  renderEmpty(elements.taskRequestPanel, t('panel.taskRequests.empty'));
   renderEmpty(elements.conversationPanel, t('panel.conversations.empty'));
   renderEmpty(elements.activityPanel, t('panel.activity.empty'));
   renderEmpty(elements.encounterPanel, t('panel.encounters.empty'));
@@ -4828,6 +5211,9 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     relationshipState.isLoading = true;
     relationshipState.error = null;
     renderRelationshipPanel();
+    taskRequestState.isLoading = true;
+    taskRequestState.error = null;
+    renderTaskRequestPanel();
   }
   if (isParticipantGateway && !elements.activityGatewayId.value.trim()) {
     elements.activityGatewayId.value = gateway.id;
@@ -4851,6 +5237,8 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     ? requestJson('/api/v1/runtime/remote/reconnect-credential', { apiOrigin, token })
     : null;
   const conversationsRequest = isParticipantGateway ? requestJson('/api/v1/conversations', { apiOrigin, token }) : null;
+  const taskRequestIncomingRequest = isParticipantGateway ? requestJson('/api/v1/task-requests/incoming', { apiOrigin, token }) : null;
+  const taskRequestOutgoingRequest = isParticipantGateway ? requestJson('/api/v1/task-requests/outgoing', { apiOrigin, token }) : null;
   const relationshipIncomingRequest = isParticipantGateway ? requestJson('/api/v1/friend-requests/incoming', { apiOrigin, token }) : null;
   const relationshipOutgoingRequest = isParticipantGateway ? requestJson('/api/v1/friend-requests/outgoing', { apiOrigin, token }) : null;
   const relationshipFriendsRequest = isParticipantGateway ? requestJson('/api/v1/friends', { apiOrigin, token }) : null;
@@ -4879,6 +5267,8 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     socialPulseRequest ?? Promise.resolve(null),
     participantRecoveryRequest ?? Promise.resolve(null),
     conversationsRequest ?? Promise.resolve(null),
+    taskRequestIncomingRequest ?? Promise.resolve(null),
+    taskRequestOutgoingRequest ?? Promise.resolve(null),
     relationshipIncomingRequest ?? Promise.resolve(null),
     relationshipOutgoingRequest ?? Promise.resolve(null),
     relationshipFriendsRequest ?? Promise.resolve(null),
@@ -4897,6 +5287,8 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     socialPulseResult,
     participantRecoveryResult,
     conversationsResult,
+    taskRequestIncomingResult,
+    taskRequestOutgoingResult,
     relationshipIncomingResult,
     relationshipOutgoingResult,
     relationshipFriendsResult,
@@ -5008,9 +5400,12 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
 
   if (!isParticipantGateway) {
     resetRelationshipState();
+    resetTaskRequestState();
     renderEmpty(elements.relationshipPanel, t('panel.relationships.empty'));
+    renderEmpty(elements.taskRequestPanel, t('panel.taskRequests.empty'));
   } else {
     const relationshipErrors = [];
+    const taskRequestErrors = [];
     const incomingRequests =
       relationshipIncomingResult.status === 'fulfilled'
         ? Array.isArray(relationshipIncomingResult.value.data.items)
@@ -5047,11 +5442,30 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
             relationshipErrors.push(relationshipDiscoveryResult.reason.message);
             return [];
           })();
+    const incomingTaskRequests =
+      taskRequestIncomingResult.status === 'fulfilled'
+        ? Array.isArray(taskRequestIncomingResult.value.data.items)
+          ? taskRequestIncomingResult.value.data.items
+          : []
+        : (() => {
+            taskRequestErrors.push(taskRequestIncomingResult.reason.message);
+            return [];
+          })();
+    const outgoingTaskRequests =
+      taskRequestOutgoingResult.status === 'fulfilled'
+        ? Array.isArray(taskRequestOutgoingResult.value.data.items)
+          ? taskRequestOutgoingResult.value.data.items
+          : []
+        : (() => {
+            taskRequestErrors.push(taskRequestOutgoingResult.reason.message);
+            return [];
+          })();
 
     relationshipState.incomingRequests = incomingRequests;
     relationshipState.outgoingRequests = outgoingRequests;
     relationshipState.friends = friends;
     relationshipState.discoveryResults = discoveryResults;
+    relationshipState.inboundScopesByGatewayId = {};
     relationshipState.scopesByGatewayId = {};
 
     if (friends.length > 0) {
@@ -5071,6 +5485,7 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
         }
         if (scopeResult.status === 'fulfilled') {
           relationshipState.scopesByGatewayId[friend.id] = Array.isArray(scopeResult.value.data.outbound) ? scopeResult.value.data.outbound : [];
+          relationshipState.inboundScopesByGatewayId[friend.id] = Array.isArray(scopeResult.value.data.inbound) ? scopeResult.value.data.inbound : [];
           return;
         }
         relationshipErrors.push(scopeResult.reason.message);
@@ -5082,10 +5497,21 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
         delete relationshipState.scopeDraftsByGatewayId[gatewayId];
       }
     }
+    for (const gatewayId of Object.keys(taskRequestState.draftsByGatewayId)) {
+      if (!friends.some((friend) => friend.id === gatewayId)) {
+        delete taskRequestState.draftsByGatewayId[gatewayId];
+      }
+    }
 
     relationshipState.error = relationshipErrors[0] ?? null;
     relationshipState.isLoading = false;
     renderRelationshipPanel();
+
+    taskRequestState.incomingRequests = incomingTaskRequests;
+    taskRequestState.outgoingRequests = outgoingTaskRequests;
+    taskRequestState.error = taskRequestErrors[0] ?? null;
+    taskRequestState.isLoading = false;
+    renderTaskRequestPanel();
   }
 
   if (!isHostViewer) {
@@ -5945,6 +6371,18 @@ document.addEventListener('input', (event) => {
     return;
   }
 
+  if (event.target.matches('[data-task-request-title]')) {
+    const gatewayId = event.target.getAttribute('data-task-request-title')?.trim();
+    setTaskRequestDraft(gatewayId, 'title', event.target.value);
+    return;
+  }
+
+  if (event.target.matches('[data-task-request-body]')) {
+    const gatewayId = event.target.getAttribute('data-task-request-body')?.trim();
+    setTaskRequestDraft(gatewayId, 'body', event.target.value);
+    return;
+  }
+
   if (event.target.matches('[data-relationship-search-query]')) {
     relationshipState.searchQuery = event.target.value;
     return;
@@ -5991,6 +6429,37 @@ document.addEventListener('submit', (event) => {
 
 document.addEventListener('submit', (event) => {
   if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const taskRequestComposeForm = event.target.closest('[data-task-request-compose-form]');
+  if (taskRequestComposeForm) {
+    event.preventDefault();
+    const gatewayId = taskRequestComposeForm.getAttribute('data-task-request-compose-form')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    const draft = taskRequestDraftForGateway(gatewayId);
+    if (!gatewayId || !participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+    if (!draft.title.trim()) {
+      setDeckAndConsoleStatus(t('validation.taskRequestTitleRequired'), 'warning');
+      return;
+    }
+
+    void runTaskRequestMutation(async () => {
+      await requestJson('/api/v1/task-requests', {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'POST',
+        payload: {
+          toGatewayId: gatewayId,
+          title: draft.title,
+          body: draft.body || undefined,
+        },
+      });
+      clearTaskRequestDraft(gatewayId);
+    }, t('common.taskRequestSent'));
     return;
   }
 
@@ -6232,6 +6701,82 @@ document.addEventListener('click', (event) => {
   const presetTrigger = event.target.closest('[data-preset-group][data-preset-id]');
   if (presetTrigger) {
     applyHostPreset(presetTrigger.dataset.presetGroup, presetTrigger.dataset.presetId);
+    return;
+  }
+
+  const taskRequestAcceptTrigger = event.target.closest('[data-task-request-accept-id]');
+  if (taskRequestAcceptTrigger) {
+    const requestId = taskRequestAcceptTrigger.getAttribute('data-task-request-accept-id')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    if (!requestId || !participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runTaskRequestMutation(async () => {
+      await requestJson(`/api/v1/task-requests/${encodeURIComponent(requestId)}/accept`, {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'POST',
+      });
+    }, t('common.taskRequestAccepted'));
+    return;
+  }
+
+  const taskRequestDeclineTrigger = event.target.closest('[data-task-request-decline-id]');
+  if (taskRequestDeclineTrigger) {
+    const requestId = taskRequestDeclineTrigger.getAttribute('data-task-request-decline-id')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    if (!requestId || !participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runTaskRequestMutation(async () => {
+      await requestJson(`/api/v1/task-requests/${encodeURIComponent(requestId)}/decline`, {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'POST',
+      });
+    }, t('common.taskRequestDeclined'));
+    return;
+  }
+
+  const taskRequestCancelTrigger = event.target.closest('[data-task-request-cancel-id]');
+  if (taskRequestCancelTrigger) {
+    const requestId = taskRequestCancelTrigger.getAttribute('data-task-request-cancel-id')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    if (!requestId || !participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runTaskRequestMutation(async () => {
+      await requestJson(`/api/v1/task-requests/${encodeURIComponent(requestId)}/cancel`, {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'POST',
+      });
+    }, t('common.taskRequestCancelled'));
+    return;
+  }
+
+  const taskRequestCompleteTrigger = event.target.closest('[data-task-request-complete-id]');
+  if (taskRequestCompleteTrigger) {
+    const requestId = taskRequestCompleteTrigger.getAttribute('data-task-request-complete-id')?.trim();
+    const token = aquariumState.token || elements.token.value.trim();
+    if (!requestId || !participantModeActive() || !token) {
+      setDeckAndConsoleStatus(t('common.participantOnlyCommand'), 'warning');
+      return;
+    }
+
+    void runTaskRequestMutation(async () => {
+      await requestJson(`/api/v1/task-requests/${encodeURIComponent(requestId)}/complete`, {
+        apiOrigin: aquariumState.apiOrigin,
+        token,
+        method: 'POST',
+      });
+    }, t('common.taskRequestCompleted'));
     return;
   }
 

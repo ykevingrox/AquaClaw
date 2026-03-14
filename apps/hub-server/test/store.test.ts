@@ -40,6 +40,71 @@ test('createGatewayStore postgres backend is explicitly not implemented yet', ()
   );
 });
 
+test('GatewayStore task requests require granted scope and follow the bounded lifecycle', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Task Alpha', handle: 'task-alpha-store' });
+  const beta = registerGateway(store, { displayName: 'Task Beta', handle: 'task-beta-store' });
+
+  const friendshipRequest = store.createFriendRequest({
+    fromGatewayId: alpha.id,
+    toGatewayId: beta.id,
+  });
+  store.acceptFriendRequest(friendshipRequest.id, beta.id);
+
+  assert.throws(
+    () =>
+      store.createTaskRequest({
+        fromGatewayId: alpha.id,
+        toGatewayId: beta.id,
+        title: 'Carry the shell lanterns',
+      }),
+    /task request not allowed/,
+  );
+
+  store.updateFriendScopes({
+    fromGatewayId: beta.id,
+    toGatewayId: alpha.id,
+    updates: [{ scopeName: 'task.request', state: 'granted' }],
+  });
+
+  const created = store.createTaskRequest({
+    fromGatewayId: alpha.id,
+    toGatewayId: beta.id,
+    title: 'Carry the shell lanterns',
+    body: 'Bring the shell lanterns back to the glass edge before dusk.',
+  });
+  assert.equal(created.status, 'pending');
+  assert.equal(store.listOutgoingTaskRequests(alpha.id)[0]?.id, created.id);
+  assert.equal(store.listIncomingTaskRequests(beta.id)[0]?.id, created.id);
+
+  const accepted = store.acceptTaskRequest(created.id, beta.id);
+  assert.equal(accepted.status, 'accepted');
+
+  const completed = store.completeTaskRequest(created.id, alpha.id);
+  assert.equal(completed.status, 'completed');
+
+  const another = store.createTaskRequest({
+    fromGatewayId: alpha.id,
+    toGatewayId: beta.id,
+    title: 'Map the quieter reef path',
+  });
+  const active = store.acceptTaskRequest(another.id, beta.id);
+  assert.equal(active.status, 'accepted');
+
+  store.removeFriendship(alpha.id, beta.id);
+
+  const cancelled = store.listOutgoingTaskRequests(alpha.id).find((request) => request.id === another.id);
+  assert.equal(cancelled?.status, 'cancelled');
+
+  const mineFeed = store.listSeaFeed({
+    viewerGatewayId: alpha.id,
+    scope: 'mine',
+  });
+  assert.equal(mineFeed.items.some((event) => event.type === 'task_request.sent'), true);
+  assert.equal(mineFeed.items.some((event) => event.type === 'task_request.completed'), true);
+  assert.equal(mineFeed.items.some((event) => event.type === 'task_request.cancelled'), true);
+});
+
 test('GatewayStore current seam keeps the active manual current readable', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Current Seam', handle: 'current-seam' });

@@ -522,6 +522,43 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     assert.equal(accepted.statusCode, 200);
     const conversationId = accepted.json().data.conversation.id as string;
 
+    const taskScope = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/friends/${gatewayId}/scopes`,
+      headers: { authorization: `Bearer ${peerToken}` },
+      payload: {
+        updates: [{ scopeName: 'task.request', state: 'granted' }],
+      },
+    });
+    assert.equal(taskScope.statusCode, 200);
+
+    const taskRequest = await app.inject({
+      method: 'POST',
+      url: '/api/v1/task-requests',
+      headers: { authorization: `Bearer ${gatewayToken}` },
+      payload: {
+        toGatewayId: peerGatewayId,
+        title: 'Carry the smoke ledger',
+        body: 'Carry the smoke ledger back before the next current shift.',
+      },
+    });
+    assert.equal(taskRequest.statusCode, 201);
+    const taskRequestId = taskRequest.json().data.request.id as string;
+
+    const acceptTaskRequest = await app.inject({
+      method: 'POST',
+      url: `/api/v1/task-requests/${taskRequestId}/accept`,
+      headers: { authorization: `Bearer ${peerToken}` },
+    });
+    assert.equal(acceptTaskRequest.statusCode, 200);
+
+    const completeTaskRequest = await app.inject({
+      method: 'POST',
+      url: `/api/v1/task-requests/${taskRequestId}/complete`,
+      headers: { authorization: `Bearer ${gatewayToken}` },
+    });
+    assert.equal(completeTaskRequest.statusCode, 200);
+
     const heartbeat = await app.inject({
       method: 'POST',
       url: '/api/v1/presence/heartbeat',
@@ -641,7 +678,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
 
   return (
     'health=1 current=1 bootstrap=1 session_me=1 live_stream=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 ' +
-    'current_write=1 profile_update=1 invite_create=1 search=1 register=1 messages=1 encounters=1 scenes=1 ' +
+    'current_write=1 profile_update=1 invite_create=1 search=1 register=1 task_requests=1 messages=1 encounters=1 scenes=1 ' +
     'sea_feed=1 system_feed=1 activity=1 local_reef_seed=1'
   );
 }

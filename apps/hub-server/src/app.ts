@@ -23,6 +23,7 @@ import {
   type SeaEvent,
   type SeaEventLiveSource,
   type SocialPulsePolicyRecord,
+  type TaskRequestRecord,
 } from './store.js';
 
 interface BuildAppOptions {
@@ -149,6 +150,12 @@ interface CreateFriendRequestBody {
   message?: string;
 }
 
+interface CreateTaskRequestBody {
+  toGatewayId?: string;
+  title?: string;
+  body?: string;
+}
+
 interface SearchGatewaysQuerystring {
   q?: string;
   limit?: string;
@@ -194,6 +201,10 @@ interface PublicExpressionQuerystring {
 }
 
 interface FriendRequestParams {
+  requestId: string;
+}
+
+interface TaskRequestParams {
   requestId: string;
 }
 
@@ -902,6 +913,16 @@ function toFriendSummary(
   };
 }
 
+function toTaskRequestSummary(store: GatewayStore, request: TaskRequestRecord) {
+  const fromGateway = store.findById(request.fromGatewayId);
+  const toGateway = store.findById(request.toGatewayId);
+  return {
+    ...request,
+    fromGateway: fromGateway ? toFriendSummary(store, fromGateway) : null,
+    toGateway: toGateway ? toFriendSummary(store, toGateway) : null,
+  };
+}
+
 function toEncounterSummary(store: GatewayStore, encounter: EncounterRecord, subjectGatewayId: string) {
   const peerGatewayId = encounter.gatewayAId === subjectGatewayId ? encounter.gatewayBId : encounter.gatewayAId;
   const peerGateway = store.findById(peerGatewayId);
@@ -1075,6 +1096,31 @@ function friendRequestErrorToHttp(message: string) {
   }
   if (message === 'friend request is not pending') {
     return { statusCode: 409, code: 'invalid_state' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function taskRequestErrorToHttp(message: string) {
+  if (message === 'gateway not found' || message === 'task request not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'pending task request already exists') {
+    return { statusCode: 409, code: 'pending_request_exists' };
+  }
+  if (message === 'task request is not pending' || message === 'task request is not accepted') {
+    return { statusCode: 409, code: 'invalid_state' };
+  }
+  if (
+    message === 'blocked relationship' ||
+    message === 'task requests require friendship' ||
+    message === 'task request not allowed' ||
+    message === 'owner gateway cannot participate in task requests' ||
+    message === 'only the recipient can accept this task request' ||
+    message === 'only the recipient can decline this task request' ||
+    message === 'only the sender can cancel this task request' ||
+    message === 'only participants can complete this task request'
+  ) {
+    return { statusCode: 403, code: 'forbidden' };
   }
   return { statusCode: 400, code: 'validation_failed' };
 }
@@ -4620,10 +4666,16 @@ export function buildApp(options: BuildAppOptions = {}) {
         state: scope.state,
         updatedAt: scope.updatedAt,
       }));
+      const inbound = store.listFriendScopes(request.params.gatewayId, result.gateway.id).map((scope) => ({
+        scope: scope.scopeName,
+        state: scope.state,
+        updatedAt: scope.updatedAt,
+      }));
       return {
         ok: true,
         data: {
           outbound,
+          inbound,
         },
       };
     } catch (error) {
@@ -4697,6 +4749,225 @@ export function buildApp(options: BuildAppOptions = {}) {
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'failed to update friend scopes';
       const mapped = friendScopesErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: CreateTaskRequestBody }>('/api/v1/task-requests', async (request, reply) => {
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    const toGatewayId = request.body?.toGatewayId?.trim();
+    const title = request.body?.title?.trim();
+    if (!toGatewayId) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'toGatewayId is required',
+        },
+      });
+    }
+    if (!title) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'title is required',
+        },
+      });
+    }
+
+    try {
+      const taskRequest = store.createTaskRequest({
+        fromGatewayId: result.gateway.id,
+        toGatewayId,
+        title,
+        body: request.body?.body,
+      });
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          request: toTaskRequestSummary(store, taskRequest),
+        },
+      });
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to create task request';
+      const mapped = taskRequestErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.get('/api/v1/task-requests/incoming', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    return {
+      ok: true,
+      data: {
+        items: store.listIncomingTaskRequests(result.gateway.id).map((taskRequest) => toTaskRequestSummary(store, taskRequest)),
+      },
+    };
+  });
+
+  app.get('/api/v1/task-requests/outgoing', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    return {
+      ok: true,
+      data: {
+        items: store.listOutgoingTaskRequests(result.gateway.id).map((taskRequest) => toTaskRequestSummary(store, taskRequest)),
+      },
+    };
+  });
+
+  app.post<{ Params: TaskRequestParams }>('/api/v1/task-requests/:requestId/accept', async (request, reply) => {
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    try {
+      const taskRequest = store.acceptTaskRequest(request.params.requestId, result.gateway.id);
+      return {
+        ok: true,
+        data: {
+          request: toTaskRequestSummary(store, taskRequest),
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to accept task request';
+      const mapped = taskRequestErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Params: TaskRequestParams }>('/api/v1/task-requests/:requestId/decline', async (request, reply) => {
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    try {
+      const taskRequest = store.declineTaskRequest(request.params.requestId, result.gateway.id);
+      return {
+        ok: true,
+        data: {
+          request: toTaskRequestSummary(store, taskRequest),
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to decline task request';
+      const mapped = taskRequestErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Params: TaskRequestParams }>('/api/v1/task-requests/:requestId/cancel', async (request, reply) => {
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    try {
+      const taskRequest = store.cancelTaskRequest(request.params.requestId, result.gateway.id);
+      return {
+        ok: true,
+        data: {
+          request: toTaskRequestSummary(store, taskRequest),
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to cancel task request';
+      const mapped = taskRequestErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Params: TaskRequestParams }>('/api/v1/task-requests/:requestId/complete', async (request, reply) => {
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    try {
+      const taskRequest = store.completeTaskRequest(request.params.requestId, result.gateway.id);
+      return {
+        ok: true,
+        data: {
+          request: toTaskRequestSummary(store, taskRequest),
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to complete task request';
+      const mapped = taskRequestErrorToHttp(messageText);
       return reply.code(mapped.statusCode).send({
         ok: false,
         error: {

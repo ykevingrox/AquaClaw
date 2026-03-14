@@ -146,6 +146,71 @@ test('sea feed emits representative events with readable summaries and structure
   });
   assert.equal(scopeUpdate.statusCode, 200);
 
+  const acceptedTaskRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/task-requests',
+    headers: { authorization: `Bearer ${beta.token}` },
+    payload: {
+      toGatewayId: alpha.gateway.id,
+      title: 'Track the bright wake',
+      body: 'Follow the bright wake and report back before dusk.',
+    },
+  });
+  assert.equal(acceptedTaskRequest.statusCode, 201);
+  const acceptedTaskRequestId = acceptedTaskRequest.json().data.request.id as string;
+
+  const acceptTaskRequest = await app.inject({
+    method: 'POST',
+    url: `/api/v1/task-requests/${acceptedTaskRequestId}/accept`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(acceptTaskRequest.statusCode, 200);
+
+  const completeTaskRequest = await app.inject({
+    method: 'POST',
+    url: `/api/v1/task-requests/${acceptedTaskRequestId}/complete`,
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(completeTaskRequest.statusCode, 200);
+
+  const declinedTaskRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/task-requests',
+    headers: { authorization: `Bearer ${beta.token}` },
+    payload: {
+      toGatewayId: alpha.gateway.id,
+      title: 'Decline this patrol',
+    },
+  });
+  assert.equal(declinedTaskRequest.statusCode, 201);
+  const declinedTaskRequestId = declinedTaskRequest.json().data.request.id as string;
+
+  const declineTaskRequest = await app.inject({
+    method: 'POST',
+    url: `/api/v1/task-requests/${declinedTaskRequestId}/decline`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(declineTaskRequest.statusCode, 200);
+
+  const cancelledTaskRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/task-requests',
+    headers: { authorization: `Bearer ${beta.token}` },
+    payload: {
+      toGatewayId: alpha.gateway.id,
+      title: 'Cancel the spare drift',
+    },
+  });
+  assert.equal(cancelledTaskRequest.statusCode, 201);
+  const cancelledTaskRequestId = cancelledTaskRequest.json().data.request.id as string;
+
+  const cancelTaskRequest = await app.inject({
+    method: 'POST',
+    url: `/api/v1/task-requests/${cancelledTaskRequestId}/cancel`,
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(cancelTaskRequest.statusCode, 200);
+
   const sentMessage = await app.inject({
     method: 'POST',
     url: `/api/v1/conversations/${betaConversationId}/messages`,
@@ -208,6 +273,11 @@ test('sea feed emits representative events with readable summaries and structure
     'friend_request.sent',
     'friend_request.accepted',
     'friend_request.rejected',
+    'task_request.sent',
+    'task_request.accepted',
+    'task_request.declined',
+    'task_request.cancelled',
+    'task_request.completed',
     'friendship.removed',
     'gateway.blocked',
     'gateway.unblocked',
@@ -242,6 +312,16 @@ test('sea feed emits representative events with readable summaries and structure
   assert.ok(scopeEvent);
   assert.match(scopeEvent.summary, /updated friend scopes/);
   assert.deepEqual(scopeEvent.metadata.updates, [{ scopeName: 'task.request', state: 'granted' }]);
+
+  const taskRequestEvent = feedItems.find((item) => item.type === 'task_request.completed');
+  assert.ok(taskRequestEvent);
+  assert.match(taskRequestEvent.summary, /marked a task request/);
+  assert.equal(taskRequestEvent.metadata.auditAction, 'task_request.completed');
+  assert.equal(typeof taskRequestEvent.metadata.requestId, 'string');
+  assert.equal(typeof taskRequestEvent.metadata.titleLength, 'number');
+  assert.equal(typeof taskRequestEvent.metadata.bodyLength, 'number');
+  assert.equal('title' in taskRequestEvent.metadata, false);
+  assert.equal('body' in taskRequestEvent.metadata, false);
 
   const activityPageOne = await app.inject({
     method: 'GET',

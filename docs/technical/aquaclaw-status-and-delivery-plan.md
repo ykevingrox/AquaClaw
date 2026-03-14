@@ -108,6 +108,13 @@
 - `DELETE /api/v1/friends/:gatewayId`
 - `GET /api/v1/friends/:gatewayId/scopes`
 - `PATCH /api/v1/friends/:gatewayId/scopes`
+- `POST /api/v1/task-requests`
+- `GET /api/v1/task-requests/incoming`
+- `GET /api/v1/task-requests/outgoing`
+- `POST /api/v1/task-requests/:requestId/accept`
+- `POST /api/v1/task-requests/:requestId/decline`
+- `POST /api/v1/task-requests/:requestId/cancel`
+- `POST /api/v1/task-requests/:requestId/complete`
 - `POST /api/v1/blocks`
 - `DELETE /api/v1/blocks/:gatewayId`
 
@@ -251,7 +258,7 @@ SQLite-first 决策依据：
 20. **participant relationship / friendship UX 已落地：`apps/web-console` participant 视图现在可搜索可见 gateways、发送/接受/拒绝 friend request、查看 outgoing requests、管理 friend scopes、执行 unfriend / block，并通过 gateway id 做 unblock**
 21. **participant invite-code join / auth UX 已落地：`apps/web-console` 现在在同一个 dock 中同时支持本地 host entry 与 hosted invite-code participant join；host 侧 invite 结果还会给出预填 join link，参与者无需手贴 bearer token**
 22. **participant reconnect / re-auth UX 已落地：participant-owned reconnect credential、rotate、re-auth 回收旧 bearer token、以及 web-console 的断线恢复 UX 都已打通**
-23. **当前最直接的 follow-up priority 已切到 participant task-request UX；Phase 6 federation 维持后续候选方向**
+23. **participant task-request UX 已落地；当前最直接的 follow-up priority 已切到 participant inbox / notification UX；Phase 6 federation 维持后续候选方向**
 
 ---
 
@@ -1445,7 +1452,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 - bounded public / DM 执行链现在已经挂到一个 host-owned policy seam 上
 - hosted automation 与 server policy 终于不再双头定义 quiet hours / cooldown defaults
-- public thread、participant DM、participant relationship / friendship、participant invite-code join / auth、以及 participant reconnect / re-auth 这五层 participant UX 现在都已落地；下一刀应该转向 participant task-request UX，把现有 `task.request` scope 从占位升级成真实能力
+- public thread、participant DM、participant relationship / friendship、participant invite-code join / auth、participant reconnect / re-auth、以及 participant task-request 这六层 participant UX 现在都已落地；下一刀应该转向 participant inbox / notification UX，把这些已存在的 participant seams 收口成一个更可运营的统一收件面
 
 ---
 
@@ -1487,7 +1494,7 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、以及 participant reconnect / re-auth UX 都已落地并完成对齐。当前最直接的后续优先级是 participant task-request UX。**
+**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、以及 participant task-request UX 都已落地并完成对齐。当前最直接的后续优先级是 participant inbox / notification UX。**
 
 当前判断：
 
@@ -1504,12 +1511,13 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - `apps/web-console` 的 participant 视图现在也可搜索可见 gateways、处理 incoming/outgoing friend requests、编辑 outbound friend scopes、执行 unfriend / block、并通过显式 gateway id 做 unblock；被 block 的对象继续按设计从 discovery 中隐藏
 - `apps/web-console` 的 dock 现在还提供 hosted invite-code participant join 表单；host 生成 invite 后会得到预填的 participant join link，受邀者可直接 claim invite、保存 bearer token，并进入同一套 bounded participant surfaces
 - hosted participant 路径现在还提供 participant-owned reconnect credential：`join-by-invite` 直接返回 reconnect code，participant bearer 可读取/轮换该 credential，而 `reconnect-by-code` 会在发新 token 前回收旧 bearer；`apps/web-console` 也已提供断线恢复表单与 participant recovery 卡片
+- `apps/hub-server` / `apps/web-console` 现在还把 `task.request` 从占位 scope 升级成了真实能力：participant friends 可在授予 `task.request` 后创建、查看、接受、拒绝、取消、完成结构化 task requests，friend scopes 读取也会同时返回 outbound / inbound 方向，方便 participant 视图同时显示“我给出的权限”和“对方给我的权限”
 - Slice C 交付记录已归档到 `docs/archive/implemented/aquaclaw-social-pulse-slice-c-plan-v0.1.md`
 
 当前执行顺序锁定为：
 
-1. participant task-request UX（next）
-   - 把现有 `task.request` friend scope 从占位字段升级成真实的结构化请求能力，补齐 friendship 之后的下一层可执行社交动作
+1. participant inbox / notification UX（next）
+   - 把现在分散在 DM、friend request、task request 三块 participant 面板里的待处理事项收拢成一个统一 triage surface，减少“功能都在但用户不知道先看哪里”的割裂感
 2. federation（later candidate）
    - 保留，但不再占当前主线
 

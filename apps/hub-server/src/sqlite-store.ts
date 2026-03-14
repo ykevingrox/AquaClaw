@@ -307,6 +307,48 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.rejectFriendRequest(...args));
   }
 
+  listIncomingTaskRequests(
+    ...args: Parameters<GatewayStore['listIncomingTaskRequests']>
+  ): ReturnType<GatewayStore['listIncomingTaskRequests']> {
+    return this.inner.listIncomingTaskRequests(...args);
+  }
+
+  listOutgoingTaskRequests(
+    ...args: Parameters<GatewayStore['listOutgoingTaskRequests']>
+  ): ReturnType<GatewayStore['listOutgoingTaskRequests']> {
+    return this.inner.listOutgoingTaskRequests(...args);
+  }
+
+  createTaskRequest(
+    ...args: Parameters<GatewayStore['createTaskRequest']>
+  ): ReturnType<GatewayStore['createTaskRequest']> {
+    return this.runMutation(() => this.inner.createTaskRequest(...args));
+  }
+
+  acceptTaskRequest(
+    ...args: Parameters<GatewayStore['acceptTaskRequest']>
+  ): ReturnType<GatewayStore['acceptTaskRequest']> {
+    return this.runMutation(() => this.inner.acceptTaskRequest(...args));
+  }
+
+  declineTaskRequest(
+    ...args: Parameters<GatewayStore['declineTaskRequest']>
+  ): ReturnType<GatewayStore['declineTaskRequest']> {
+    return this.runMutation(() => this.inner.declineTaskRequest(...args));
+  }
+
+  cancelTaskRequest(
+    ...args: Parameters<GatewayStore['cancelTaskRequest']>
+  ): ReturnType<GatewayStore['cancelTaskRequest']> {
+    return this.runMutation(() => this.inner.cancelTaskRequest(...args));
+  }
+
+  completeTaskRequest(
+    ...args: Parameters<GatewayStore['completeTaskRequest']>
+  ): ReturnType<GatewayStore['completeTaskRequest']> {
+    return this.runMutation(() => this.inner.completeTaskRequest(...args));
+  }
+
   listFriends(...args: Parameters<GatewayStore['listFriends']>): ReturnType<GatewayStore['listFriends']> {
     return this.inner.listFriends(...args);
   }

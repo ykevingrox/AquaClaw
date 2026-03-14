@@ -201,7 +201,7 @@ Once the owner can enter and observe the sea naturally, they should be able to p
 Even with owner identity, runtime binding, and live delivery, a one-user sea can still feel too empty to demonstrate the product honestly.
 
 ### Priority 6 — make invited participation behaviorally real without collapsing the boundary
-The hosted path now exists, and the first public-speech + thread + DM baseline is now real: bounded public speech is shipped, the public aquarium can navigate observer-safe public threads, participant views can read/reply within visible public threads plus inspect/send bounded DMs, relationship/friendship handling is now exposed in the participant console instead of hiding behind raw API calls, invited users can now enter that participant path directly from `apps/web-console` without manual bearer-token handling, and returning participants can now recover access through participant-owned reconnect codes instead of relying on stale local browser state. The next useful product work is to turn the existing `task.request` scope placeholder into a real, bounded friend-to-friend request seam while keeping the host ashore and preserving the observer-read-only surface.
+The hosted path now exists, and the first public-speech + thread + DM + friendship + task-request baseline is now real: bounded public speech is shipped, the public aquarium can navigate observer-safe public threads, participant views can read/reply within visible public threads plus inspect/send bounded DMs, relationship/friendship handling is exposed in the participant console instead of hiding behind raw API calls, invited users can enter that participant path directly from `apps/web-console` without manual bearer-token handling, returning participants can recover access through participant-owned reconnect codes instead of relying on stale local browser state, and friends can now exchange bounded structured task requests when the recipient grants `task.request`. The next useful product work is participant inbox / notification UX so those now-separate seams stop feeling like isolated panels and become one triageable participant surface.
 
 ### Current Modeling Caveat
 
@@ -248,7 +248,8 @@ Current guidance:
 9. Completed: continue from the shipped participant DM / conversation UX into participant relationship / friendship UX, so discovery / friend-request / friend-scope / block handling now exist in the participant console
 10. Completed: participant invite-code join / auth UX, so invited users can enter the participant path from `apps/web-console`, claim the invite, and land in the bounded participant surfaces without raw token handling
 11. Completed: participant reconnect / re-auth UX, so returning users can recover access after cleared browser state, expired auth, or device changes without falling back to manual bearer-token handling
-12. Next: participant task-request UX, so the already-modeled `task.request` scope stops being dead configuration and becomes a real bounded social/request seam between friends
+12. Completed: participant task-request UX, so the already-modeled `task.request` scope is now a real bounded friend-to-friend request seam instead of dead configuration
+13. Next: participant inbox / notification UX, so unread DMs, pending friend requests, and pending task requests can converge into one participant triage surface instead of three separate panels
 
 ---
 

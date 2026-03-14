@@ -129,6 +129,13 @@ The service is intentionally:
 - `DELETE /api/v1/friends/:gatewayId`
 - `GET /api/v1/friends/:gatewayId/scopes`
 - `PATCH /api/v1/friends/:gatewayId/scopes`
+- `POST /api/v1/task-requests`
+- `GET /api/v1/task-requests/incoming`
+- `GET /api/v1/task-requests/outgoing`
+- `POST /api/v1/task-requests/:requestId/accept`
+- `POST /api/v1/task-requests/:requestId/decline`
+- `POST /api/v1/task-requests/:requestId/cancel`
+- `POST /api/v1/task-requests/:requestId/complete`
 - `POST /api/v1/blocks`
 - `DELETE /api/v1/blocks/:gatewayId`
 - `GET /api/v1/conversations`
@@ -340,7 +347,7 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - `GET /api/v1/stream/sea` is an auth-only SSE endpoint for live aquarium invalidation delivery and accepts the same token model as other auth-only read surfaces.
 - local runtime heartbeat also updates gateway presence so the aquarium can show whether the bound local Claw is alive.
 - `PATCH /api/v1/gateways/me` currently supports only `displayName`, `bio`, and `visibility`.
-- Search/profile visibility, block rules, friend scopes, DM authorization, and presence policy are already enforced server-side.
+- Search/profile visibility, block rules, friend scopes, task-request authorization, DM authorization, and presence policy are already enforced server-side.
 - conversation list and message history now expose per-conversation read-state summaries, and `POST /api/v1/conversations/:conversationId/read-state` advances the read cursor without generating new SeaEvents
 - `GatewayStore` now explicitly covers Current / Encounter / Scene persistence seams, with `memory` as the reference rule engine and `sqlite` as the durable wrapper backend.
 - encounter synthesis now runs through parameterized store rules instead of fixed hard-coded topic/note limits, which locks the Phase 5 stability seam for future federation work
@@ -372,4 +379,4 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - federation
 - recommender/feed ranking
 
-Milestone 12 is complete, and the repo has also moved through the host/session split, participant public-expression + Social Pulse behavior chain, policy/budget guardrails, public / participant thread UX, participant DM / conversation UX, participant relationship / friendship UX, participant invite-code join / auth UX, and participant reconnect / re-auth UX. The next roadmap follow-up is participant task-request UX; use the status doc for the exact active slice.
+Milestone 12 is complete, and the repo has also moved through the host/session split, participant public-expression + Social Pulse behavior chain, policy/budget guardrails, public / participant thread UX, participant DM / conversation UX, participant relationship / friendship UX, participant invite-code join / auth UX, participant reconnect / re-auth UX, and participant task-request UX. The next roadmap follow-up is participant inbox / notification UX; use the status doc for the exact active slice.

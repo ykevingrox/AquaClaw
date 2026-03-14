@@ -2881,6 +2881,226 @@ test('friend scopes require an existing friendship', async () => {
   await app.close();
 });
 
+test('task requests require granted scope and follow the participant lifecycle', async () => {
+  const app = buildApp();
+
+  const alpha = await registerGateway(app, {
+    displayName: 'Alpha Task',
+    handle: 'alpha-task',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Beta Task',
+    handle: 'beta-task',
+  });
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: { toGatewayId: beta.gateway.id },
+  });
+  const friendRequestId = friendRequest.json().data.request.id as string;
+
+  const acceptFriend = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${friendRequestId}/accept`,
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(acceptFriend.statusCode, 200);
+
+  const scopesBefore = await app.inject({
+    method: 'GET',
+    url: `/api/v1/friends/${beta.gateway.id}/scopes`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(scopesBefore.statusCode, 200);
+  const inboundBefore = scopesBefore.json().data.inbound.find((item: { scope: string; state: string }) => item.scope === 'task.request');
+  assert.equal(inboundBefore?.state, 'denied');
+
+  const createBeforeGrant = await app.inject({
+    method: 'POST',
+    url: '/api/v1/task-requests',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: {
+      toGatewayId: beta.gateway.id,
+      title: 'Bring the kelp map',
+    },
+  });
+  assert.equal(createBeforeGrant.statusCode, 403);
+  assert.equal(createBeforeGrant.json().error.message, 'task request not allowed');
+
+  const grantScope = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/friends/${alpha.gateway.id}/scopes`,
+    headers: { authorization: `Bearer ${beta.token}` },
+    payload: {
+      updates: [{ scopeName: 'task.request', state: 'granted' }],
+    },
+  });
+  assert.equal(grantScope.statusCode, 200);
+
+  const scopesAfter = await app.inject({
+    method: 'GET',
+    url: `/api/v1/friends/${beta.gateway.id}/scopes`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  const inboundAfter = scopesAfter.json().data.inbound.find((item: { scope: string; state: string }) => item.scope === 'task.request');
+  assert.equal(inboundAfter?.state, 'granted');
+
+  const createdTaskRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/task-requests',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: {
+      toGatewayId: beta.gateway.id,
+      title: 'Bring the kelp map',
+      body: 'Bring the kelp map back before the tide shifts.',
+    },
+  });
+  assert.equal(createdTaskRequest.statusCode, 201);
+  const taskRequestId = createdTaskRequest.json().data.request.id as string;
+  assert.equal(createdTaskRequest.json().data.request.fromGateway.handle, 'alpha-task');
+  assert.equal(createdTaskRequest.json().data.request.toGateway.handle, 'beta-task');
+
+  const incoming = await app.inject({
+    method: 'GET',
+    url: '/api/v1/task-requests/incoming',
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(incoming.statusCode, 200);
+  assert.equal(incoming.json().data.items.length, 1);
+  assert.equal(incoming.json().data.items[0].title, 'Bring the kelp map');
+  assert.equal(incoming.json().data.items[0].status, 'pending');
+
+  const acceptedTaskRequest = await app.inject({
+    method: 'POST',
+    url: `/api/v1/task-requests/${taskRequestId}/accept`,
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(acceptedTaskRequest.statusCode, 200);
+  assert.equal(acceptedTaskRequest.json().data.request.status, 'accepted');
+
+  const completedTaskRequest = await app.inject({
+    method: 'POST',
+    url: `/api/v1/task-requests/${taskRequestId}/complete`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(completedTaskRequest.statusCode, 200);
+  assert.equal(completedTaskRequest.json().data.request.status, 'completed');
+
+  const outgoing = await app.inject({
+    method: 'GET',
+    url: '/api/v1/task-requests/outgoing',
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(outgoing.statusCode, 200);
+  assert.equal(outgoing.json().data.items.length, 1);
+  assert.equal(outgoing.json().data.items[0].status, 'completed');
+
+  await app.close();
+});
+
+test('task requests can be cancelled directly and auto-cancel when friendship ends', async () => {
+  const app = buildApp();
+
+  const alpha = await registerGateway(app, {
+    displayName: 'Alpha Task Cancel',
+    handle: 'alpha-task-cancel',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Beta Task Cancel',
+    handle: 'beta-task-cancel',
+  });
+
+  const friendRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: { toGatewayId: beta.gateway.id },
+  });
+  const friendRequestId = friendRequest.json().data.request.id as string;
+
+  const acceptFriend = await app.inject({
+    method: 'POST',
+    url: `/api/v1/friend-requests/${friendRequestId}/accept`,
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(acceptFriend.statusCode, 200);
+
+  const grantScope = await app.inject({
+    method: 'PATCH',
+    url: `/api/v1/friends/${alpha.gateway.id}/scopes`,
+    headers: { authorization: `Bearer ${beta.token}` },
+    payload: {
+      updates: [{ scopeName: 'task.request', state: 'granted' }],
+    },
+  });
+  assert.equal(grantScope.statusCode, 200);
+
+  const firstTaskRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/task-requests',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: {
+      toGatewayId: beta.gateway.id,
+      title: 'Cancel the spare route',
+    },
+  });
+  assert.equal(firstTaskRequest.statusCode, 201);
+  const firstTaskRequestId = firstTaskRequest.json().data.request.id as string;
+
+  const cancelTaskRequest = await app.inject({
+    method: 'POST',
+    url: `/api/v1/task-requests/${firstTaskRequestId}/cancel`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(cancelTaskRequest.statusCode, 200);
+  assert.equal(cancelTaskRequest.json().data.request.status, 'cancelled');
+
+  const secondTaskRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/task-requests',
+    headers: { authorization: `Bearer ${alpha.token}` },
+    payload: {
+      toGatewayId: beta.gateway.id,
+      title: 'Carry the glass ledger',
+    },
+  });
+  assert.equal(secondTaskRequest.statusCode, 201);
+  const secondTaskRequestId = secondTaskRequest.json().data.request.id as string;
+
+  const acceptTaskRequest = await app.inject({
+    method: 'POST',
+    url: `/api/v1/task-requests/${secondTaskRequestId}/accept`,
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(acceptTaskRequest.statusCode, 200);
+
+  const unfriend = await app.inject({
+    method: 'DELETE',
+    url: `/api/v1/friends/${beta.gateway.id}`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(unfriend.statusCode, 200);
+
+  const outgoing = await app.inject({
+    method: 'GET',
+    url: '/api/v1/task-requests/outgoing',
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(outgoing.statusCode, 200);
+  assert.equal(
+    outgoing.json().data.items.find((item: { id: string; status: string }) => item.id === firstTaskRequestId)?.status,
+    'cancelled',
+  );
+  assert.equal(
+    outgoing.json().data.items.find((item: { id: string; status: string }) => item.id === secondTaskRequestId)?.status,
+    'cancelled',
+  );
+
+  await app.close();
+});
+
 test('invite can be created and claimed into a friend request', async () => {
   const app = buildApp();
 
@@ -3275,6 +3495,32 @@ test('audit endpoint records representative critical actions', async () => {
   });
   assert.equal(scopeUpdate.statusCode, 200);
 
+  const taskRequest = await app.inject({
+    method: 'POST',
+    url: '/api/v1/task-requests',
+    headers: { authorization: `Bearer ${beta.token}` },
+    payload: {
+      toGatewayId: alpha.gateway.id,
+      title: 'Audit the kelp ledger',
+    },
+  });
+  assert.equal(taskRequest.statusCode, 201);
+  const taskRequestId = taskRequest.json().data.request.id as string;
+
+  const acceptTaskRequest = await app.inject({
+    method: 'POST',
+    url: `/api/v1/task-requests/${taskRequestId}/accept`,
+    headers: { authorization: `Bearer ${alpha.token}` },
+  });
+  assert.equal(acceptTaskRequest.statusCode, 200);
+
+  const completeTaskRequest = await app.inject({
+    method: 'POST',
+    url: `/api/v1/task-requests/${taskRequestId}/complete`,
+    headers: { authorization: `Bearer ${beta.token}` },
+  });
+  assert.equal(completeTaskRequest.statusCode, 200);
+
   const message = await app.inject({
     method: 'POST',
     url: `/api/v1/conversations/${conversationId}/messages`,
@@ -3341,6 +3587,9 @@ test('audit endpoint records representative critical actions', async () => {
   assert.equal(uniqueActions.has('gateway.blocked'), true);
   assert.equal(uniqueActions.has('gateway.unblocked'), true);
   assert.equal(uniqueActions.has('friend.scope_changed'), true);
+  assert.equal(uniqueActions.has('task_request.created'), true);
+  assert.equal(uniqueActions.has('task_request.accepted'), true);
+  assert.equal(uniqueActions.has('task_request.completed'), true);
   assert.equal(uniqueActions.has('message.sent'), true);
 
   await app.close();

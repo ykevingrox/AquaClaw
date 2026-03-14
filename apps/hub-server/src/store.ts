@@ -79,6 +79,19 @@ export interface FriendRequestRecord {
   respondedAt?: string;
 }
 
+export type TaskRequestStatus = 'pending' | 'accepted' | 'declined' | 'cancelled' | 'completed';
+
+export interface TaskRequestRecord {
+  id: string;
+  fromGatewayId: string;
+  toGatewayId: string;
+  status: TaskRequestStatus;
+  title: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface FriendshipRecord {
   id: string;
   gatewayAId: string;
@@ -515,6 +528,7 @@ export interface GatewayStoreSnapshot {
   remoteRuntimeBindings?: RemoteRuntimeBindingRecord[];
   presenceHeartbeats: GatewayPresenceSnapshotRecord[];
   friendRequests: FriendRequestRecord[];
+  taskRequests?: TaskRequestRecord[];
   friendships: FriendshipRecord[];
   friendScopes: FriendScopeRecord[];
   blocks: BlockRecord[];
@@ -602,6 +616,13 @@ export interface GatewayStore {
     conversation: ConversationRecord;
   };
   rejectFriendRequest(requestId: string, actingGatewayId: string): FriendRequestRecord;
+  listIncomingTaskRequests(gatewayId: string): TaskRequestRecord[];
+  listOutgoingTaskRequests(gatewayId: string): TaskRequestRecord[];
+  createTaskRequest(input: CreateTaskRequestInput): TaskRequestRecord;
+  acceptTaskRequest(requestId: string, actingGatewayId: string): TaskRequestRecord;
+  declineTaskRequest(requestId: string, actingGatewayId: string): TaskRequestRecord;
+  cancelTaskRequest(requestId: string, actingGatewayId: string): TaskRequestRecord;
+  completeTaskRequest(requestId: string, actingGatewayId: string): TaskRequestRecord;
   listFriends(gatewayId: string): GatewayRecord[];
   removeFriendship(gatewayAId: string, gatewayBId: string): FriendshipRecord;
   listFriendScopes(fromGatewayId: string, toGatewayId: string): FriendScopeRecord[];
@@ -762,6 +783,13 @@ interface CreateFriendRequestInput {
   toGatewayId: string;
   message?: string;
   bypassGuardrails?: boolean;
+}
+
+interface CreateTaskRequestInput {
+  fromGatewayId: string;
+  toGatewayId: string;
+  title: string;
+  body?: string;
 }
 
 interface SearchGatewaysInput {
@@ -1045,6 +1073,8 @@ const SOCIAL_PULSE_MEMORY_THRESHOLD = 0.34;
 const SOCIAL_PULSE_BUDGET_WINDOW_HOURS = 24;
 const SOCIAL_PULSE_BUDGET_WINDOW_MS = SOCIAL_PULSE_BUDGET_WINDOW_HOURS * 60 * 60 * 1000;
 const SOCIAL_PULSE_AUTOMATION_ORIGIN: SocialPulseAutomationOrigin = 'social_pulse';
+const TASK_REQUEST_TITLE_MAX_LENGTH = 120;
+const TASK_REQUEST_BODY_MAX_LENGTH = 500;
 const DEFAULT_SOCIAL_PULSE_POLICY: SocialPulsePolicyRecord = {
   publicExpressionEnabled: true,
   directMessagesEnabled: true,
@@ -1382,6 +1412,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly localSessionsByToken = new Map<string, LocalSessionRecord>();
   private readonly hostedSessionsByToken = new Map<string, HostedSessionRecord>();
   private readonly friendRequestsById = new Map<string, FriendRequestRecord>();
+  private readonly taskRequestsById = new Map<string, TaskRequestRecord>();
   private readonly friendshipsById = new Map<string, FriendshipRecord>();
   private readonly friendScopesByKey = new Map<string, FriendScopeRecord>();
   private readonly blocksByKey = new Map<string, BlockRecord>();
@@ -3009,6 +3040,224 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return updatedRequest;
   }
 
+  listIncomingTaskRequests(gatewayId: string): TaskRequestRecord[] {
+    return Array.from(this.taskRequestsById.values())
+      .filter((request) => request.toGatewayId === gatewayId)
+      .sort((a, b) => this.compareTaskRequestsByUpdatedAt(a, b));
+  }
+
+  listOutgoingTaskRequests(gatewayId: string): TaskRequestRecord[] {
+    return Array.from(this.taskRequestsById.values())
+      .filter((request) => request.fromGatewayId === gatewayId)
+      .sort((a, b) => this.compareTaskRequestsByUpdatedAt(a, b));
+  }
+
+  createTaskRequest(input: CreateTaskRequestInput): TaskRequestRecord {
+    if (input.fromGatewayId === input.toGatewayId) {
+      throw new Error('cannot task request yourself');
+    }
+
+    const fromGateway = this.gatewaysById.get(input.fromGatewayId);
+    const toGateway = this.gatewaysById.get(input.toGatewayId);
+    if (!fromGateway || !toGateway) {
+      throw new Error('gateway not found');
+    }
+    if (this.isOwnerGatewayId(fromGateway.id) || this.isOwnerGatewayId(toGateway.id)) {
+      throw new Error('owner gateway cannot participate in task requests');
+    }
+    if (this.isBlockedEitherWay(input.fromGatewayId, input.toGatewayId)) {
+      throw new Error('blocked relationship');
+    }
+    if (!this.areFriends(input.fromGatewayId, input.toGatewayId)) {
+      throw new Error('task requests require friendship');
+    }
+    if (!this.hasGrantedFriendScope(input.toGatewayId, input.fromGatewayId, 'task.request')) {
+      throw new Error('task request not allowed');
+    }
+
+    const title = input.title.trim();
+    const body = input.body?.trim() ?? '';
+    if (!title) {
+      throw new Error('title is required');
+    }
+    if (title.length > TASK_REQUEST_TITLE_MAX_LENGTH) {
+      throw new Error(`title must be ${TASK_REQUEST_TITLE_MAX_LENGTH} characters or fewer`);
+    }
+    if (body.length > TASK_REQUEST_BODY_MAX_LENGTH) {
+      throw new Error(`body must be ${TASK_REQUEST_BODY_MAX_LENGTH} characters or fewer`);
+    }
+
+    const duplicate = Array.from(this.taskRequestsById.values()).find(
+      (request) =>
+        request.status === 'pending' &&
+        request.fromGatewayId === input.fromGatewayId &&
+        request.toGatewayId === input.toGatewayId &&
+        request.title === title &&
+        request.body === body,
+    );
+    if (duplicate) {
+      throw new Error('pending task request already exists');
+    }
+
+    const now = new Date().toISOString();
+    const request: TaskRequestRecord = {
+      id: randomUUID(),
+      fromGatewayId: input.fromGatewayId,
+      toGatewayId: input.toGatewayId,
+      status: 'pending',
+      title,
+      body,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.taskRequestsById.set(request.id, request);
+    this.appendAuditRecord({
+      actorGatewayId: request.fromGatewayId,
+      targetGatewayId: request.toGatewayId,
+      action: 'task_request.created',
+      metadata: {
+        requestId: request.id,
+        titleLength: request.title.length,
+        bodyLength: request.body.length,
+      },
+      createdAt: now,
+    });
+    return request;
+  }
+
+  acceptTaskRequest(requestId: string, actingGatewayId: string): TaskRequestRecord {
+    const request = this.taskRequestsById.get(requestId);
+    if (!request) {
+      throw new Error('task request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new Error('task request is not pending');
+    }
+    if (request.toGatewayId !== actingGatewayId) {
+      throw new Error('only the recipient can accept this task request');
+    }
+
+    const now = new Date().toISOString();
+    const updatedRequest: TaskRequestRecord = {
+      ...request,
+      status: 'accepted',
+      updatedAt: now,
+    };
+    this.taskRequestsById.set(request.id, updatedRequest);
+    this.appendAuditRecord({
+      actorGatewayId: actingGatewayId,
+      targetGatewayId: request.fromGatewayId,
+      action: 'task_request.accepted',
+      metadata: {
+        requestId: updatedRequest.id,
+        titleLength: updatedRequest.title.length,
+        bodyLength: updatedRequest.body.length,
+      },
+      createdAt: now,
+    });
+    return updatedRequest;
+  }
+
+  declineTaskRequest(requestId: string, actingGatewayId: string): TaskRequestRecord {
+    const request = this.taskRequestsById.get(requestId);
+    if (!request) {
+      throw new Error('task request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new Error('task request is not pending');
+    }
+    if (request.toGatewayId !== actingGatewayId) {
+      throw new Error('only the recipient can decline this task request');
+    }
+
+    const now = new Date().toISOString();
+    const updatedRequest: TaskRequestRecord = {
+      ...request,
+      status: 'declined',
+      updatedAt: now,
+    };
+    this.taskRequestsById.set(request.id, updatedRequest);
+    this.appendAuditRecord({
+      actorGatewayId: actingGatewayId,
+      targetGatewayId: request.fromGatewayId,
+      action: 'task_request.declined',
+      metadata: {
+        requestId: updatedRequest.id,
+        titleLength: updatedRequest.title.length,
+        bodyLength: updatedRequest.body.length,
+      },
+      createdAt: now,
+    });
+    return updatedRequest;
+  }
+
+  cancelTaskRequest(requestId: string, actingGatewayId: string): TaskRequestRecord {
+    const request = this.taskRequestsById.get(requestId);
+    if (!request) {
+      throw new Error('task request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new Error('task request is not pending');
+    }
+    if (request.fromGatewayId !== actingGatewayId) {
+      throw new Error('only the sender can cancel this task request');
+    }
+
+    const now = new Date().toISOString();
+    const updatedRequest: TaskRequestRecord = {
+      ...request,
+      status: 'cancelled',
+      updatedAt: now,
+    };
+    this.taskRequestsById.set(request.id, updatedRequest);
+    this.appendAuditRecord({
+      actorGatewayId: actingGatewayId,
+      targetGatewayId: request.toGatewayId,
+      action: 'task_request.cancelled',
+      metadata: {
+        requestId: updatedRequest.id,
+        titleLength: updatedRequest.title.length,
+        bodyLength: updatedRequest.body.length,
+      },
+      createdAt: now,
+    });
+    return updatedRequest;
+  }
+
+  completeTaskRequest(requestId: string, actingGatewayId: string): TaskRequestRecord {
+    const request = this.taskRequestsById.get(requestId);
+    if (!request) {
+      throw new Error('task request not found');
+    }
+    if (request.status !== 'accepted') {
+      throw new Error('task request is not accepted');
+    }
+    if (request.fromGatewayId !== actingGatewayId && request.toGatewayId !== actingGatewayId) {
+      throw new Error('only participants can complete this task request');
+    }
+
+    const now = new Date().toISOString();
+    const updatedRequest: TaskRequestRecord = {
+      ...request,
+      status: 'completed',
+      updatedAt: now,
+    };
+    this.taskRequestsById.set(request.id, updatedRequest);
+    this.appendAuditRecord({
+      actorGatewayId: actingGatewayId,
+      targetGatewayId: actingGatewayId === request.fromGatewayId ? request.toGatewayId : request.fromGatewayId,
+      action: 'task_request.completed',
+      metadata: {
+        requestId: updatedRequest.id,
+        titleLength: updatedRequest.title.length,
+        bodyLength: updatedRequest.body.length,
+      },
+      createdAt: now,
+    });
+    return updatedRequest;
+  }
+
   removeFriendship(gatewayAId: string, gatewayBId: string) {
     const friendship = Array.from(this.friendshipsById.values()).find(
       (item) =>
@@ -3020,6 +3269,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
 
     this.friendshipsById.delete(friendship.id);
+    this.cancelActiveTaskRequestsBetween(gatewayAId, gatewayBId, gatewayAId, 'friendship_removed');
     this.clearFriendScopes(gatewayAId, gatewayBId);
     this.clearFriendScopes(gatewayBId, gatewayAId);
     this.appendAuditRecord({
@@ -5663,6 +5913,161 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
               ]
             : []),
         ];
+      case 'task_request.created':
+        return [
+          this.createSeaEvent({
+            type: 'task_request.sent',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} sent a task request to ${targetLabel}`,
+            tone: 'calm',
+            sceneHint: 'task-request',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+          ...(record.targetGatewayId
+            ? [
+                this.createSeaEvent({
+                  type: 'task_request.sent',
+                  actorGatewayId: record.actorGatewayId,
+                  subjectGatewayId: record.targetGatewayId,
+                  objectGatewayId: record.actorGatewayId,
+                  visibility: 'private',
+                  summary: `${targetLabel} received a task request from ${actorLabel}`,
+                  tone: 'calm',
+                  sceneHint: 'task-request',
+                  metadata: baseMetadata,
+                  createdAt: record.createdAt,
+                }),
+              ]
+            : []),
+        ];
+      case 'task_request.accepted':
+        return [
+          this.createSeaEvent({
+            type: 'task_request.accepted',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} accepted a task request from ${targetLabel}`,
+            tone: 'playful',
+            sceneHint: 'task-request',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+          ...(record.targetGatewayId
+            ? [
+                this.createSeaEvent({
+                  type: 'task_request.accepted',
+                  actorGatewayId: record.actorGatewayId,
+                  subjectGatewayId: record.targetGatewayId,
+                  objectGatewayId: record.actorGatewayId,
+                  visibility: 'private',
+                  summary: `${actorLabel} accepted ${targetLabel}'s task request`,
+                  tone: 'playful',
+                  sceneHint: 'task-request',
+                  metadata: baseMetadata,
+                  createdAt: record.createdAt,
+                }),
+              ]
+            : []),
+        ];
+      case 'task_request.declined':
+        return [
+          this.createSeaEvent({
+            type: 'task_request.declined',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} declined a task request from ${targetLabel}`,
+            tone: 'sharp',
+            sceneHint: 'task-request',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+          ...(record.targetGatewayId
+            ? [
+                this.createSeaEvent({
+                  type: 'task_request.declined',
+                  actorGatewayId: record.actorGatewayId,
+                  subjectGatewayId: record.targetGatewayId,
+                  objectGatewayId: record.actorGatewayId,
+                  visibility: 'private',
+                  summary: `${actorLabel} declined ${targetLabel}'s task request`,
+                  tone: 'sharp',
+                  sceneHint: 'task-request',
+                  metadata: baseMetadata,
+                  createdAt: record.createdAt,
+                }),
+              ]
+            : []),
+        ];
+      case 'task_request.cancelled':
+        return [
+          this.createSeaEvent({
+            type: 'task_request.cancelled',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} cancelled a task request with ${targetLabel}`,
+            tone: 'reflective',
+            sceneHint: 'task-request',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+          ...(record.targetGatewayId
+            ? [
+                this.createSeaEvent({
+                  type: 'task_request.cancelled',
+                  actorGatewayId: record.actorGatewayId,
+                  subjectGatewayId: record.targetGatewayId,
+                  objectGatewayId: record.actorGatewayId,
+                  visibility: 'private',
+                  summary: `${actorLabel} cancelled a task request with ${targetLabel}`,
+                  tone: 'reflective',
+                  sceneHint: 'task-request',
+                  metadata: baseMetadata,
+                  createdAt: record.createdAt,
+                }),
+              ]
+            : []),
+        ];
+      case 'task_request.completed':
+        return [
+          this.createSeaEvent({
+            type: 'task_request.completed',
+            actorGatewayId: record.actorGatewayId,
+            subjectGatewayId: record.actorGatewayId,
+            objectGatewayId: record.targetGatewayId,
+            visibility: 'private',
+            summary: `${actorLabel} marked a task request with ${targetLabel} complete`,
+            tone: 'calm',
+            sceneHint: 'task-request',
+            metadata: baseMetadata,
+            createdAt: record.createdAt,
+          }),
+          ...(record.targetGatewayId
+            ? [
+                this.createSeaEvent({
+                  type: 'task_request.completed',
+                  actorGatewayId: record.actorGatewayId,
+                  subjectGatewayId: record.targetGatewayId,
+                  objectGatewayId: record.actorGatewayId,
+                  visibility: 'private',
+                  summary: `${actorLabel} marked a task request with ${targetLabel} complete`,
+                  tone: 'calm',
+                  sceneHint: 'task-request',
+                  metadata: baseMetadata,
+                  createdAt: record.createdAt,
+                }),
+              ]
+            : []),
+        ];
       case 'friend.removed':
         return [
           this.createSeaEvent({
@@ -5756,6 +6161,50 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         ];
       default:
         return [];
+    }
+  }
+
+  private compareTaskRequestsByUpdatedAt(a: TaskRequestRecord, b: TaskRequestRecord) {
+    const updatedAtComparison = b.updatedAt.localeCompare(a.updatedAt);
+    if (updatedAtComparison !== 0) {
+      return updatedAtComparison;
+    }
+    return b.createdAt.localeCompare(a.createdAt);
+  }
+
+  private cancelActiveTaskRequestsBetween(
+    gatewayAId: string,
+    gatewayBId: string,
+    actingGatewayId: string,
+    reason: string,
+  ) {
+    const now = new Date().toISOString();
+    for (const request of this.taskRequestsById.values()) {
+      const matchesPair =
+        (request.fromGatewayId === gatewayAId && request.toGatewayId === gatewayBId) ||
+        (request.fromGatewayId === gatewayBId && request.toGatewayId === gatewayAId);
+      if (!matchesPair || (request.status !== 'pending' && request.status !== 'accepted')) {
+        continue;
+      }
+
+      const updatedRequest: TaskRequestRecord = {
+        ...request,
+        status: 'cancelled',
+        updatedAt: now,
+      };
+      this.taskRequestsById.set(request.id, updatedRequest);
+      this.appendAuditRecord({
+        actorGatewayId: actingGatewayId,
+        targetGatewayId: actingGatewayId === request.fromGatewayId ? request.toGatewayId : request.fromGatewayId,
+        action: 'task_request.cancelled',
+        metadata: {
+          requestId: updatedRequest.id,
+          titleLength: updatedRequest.title.length,
+          bodyLength: updatedRequest.body.length,
+          reason,
+        },
+        createdAt: now,
+      });
     }
   }
 
@@ -5894,6 +6343,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         lastSeenAt,
       })),
       friendRequests: [...this.friendRequestsById.values()],
+      taskRequests: [...this.taskRequestsById.values()],
       friendships: [...this.friendshipsById.values()],
       friendScopes: [...this.friendScopesByKey.values()],
       blocks: [...this.blocksByKey.values()],
@@ -6091,6 +6541,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     for (const request of snapshot.friendRequests) {
       this.friendRequestsById.set(request.id, request);
     }
+    for (const request of snapshot.taskRequests ?? []) {
+      this.taskRequestsById.set(request.id, request);
+    }
     for (const friendship of snapshot.friendships) {
       this.friendshipsById.set(friendship.id, friendship);
     }
@@ -6166,6 +6619,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.remoteRuntimeBridgeCredentialsByToken.clear();
     this.remoteRuntimeBindingsByGatewayId.clear();
     this.friendRequestsById.clear();
+    this.taskRequestsById.clear();
     this.friendshipsById.clear();
     this.friendScopesByKey.clear();
     this.blocksByKey.clear();

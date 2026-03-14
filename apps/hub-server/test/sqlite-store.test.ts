@@ -30,6 +30,20 @@ function exerciseCoreSeam(store: GatewayStore) {
   });
   const accepted = store.acceptFriendRequest(request.id, beta.id);
 
+  store.updateFriendScopes({
+    fromGatewayId: beta.id,
+    toGatewayId: alpha.id,
+    updates: [{ scopeName: 'task.request', state: 'granted' }],
+  });
+  const taskRequest = store.createTaskRequest({
+    fromGatewayId: alpha.id,
+    toGatewayId: beta.id,
+    title: 'Check the lantern route',
+    body: 'Map the lantern route before the next drift.',
+  });
+  store.acceptTaskRequest(taskRequest.id, beta.id);
+  store.completeTaskRequest(taskRequest.id, alpha.id);
+
   store.createMessage({
     conversationId: accepted.conversation.id,
     senderGatewayId: alpha.id,
@@ -104,6 +118,11 @@ function exerciseCoreSeam(store: GatewayStore) {
       tone: store.getCurrent().tone,
     },
     friends: store.listFriends(alpha.id).map((gateway) => gateway.handle),
+    taskRequests: store.listOutgoingTaskRequests(alpha.id).map((request) => ({
+      status: request.status,
+      title: request.title,
+      body: request.body,
+    })),
     messages: store.listMessages(accepted.conversation.id, beta.id).map((message) => ({
       body: message.body,
       messageType: message.messageType,
@@ -320,6 +339,43 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
     assert.equal(publicExpression.statusCode, 201);
     const publicExpressionId = publicExpression.json().data.expression.id as string;
 
+    const taskScope = await app1.inject({
+      method: 'PATCH',
+      url: `/api/v1/friends/${alpha.gateway.id}/scopes`,
+      headers: { authorization: `Bearer ${beta.credential.token}` },
+      payload: {
+        updates: [{ scopeName: 'task.request', state: 'granted' }],
+      },
+    });
+    assert.equal(taskScope.statusCode, 200);
+
+    const taskRequest = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/task-requests',
+      headers: { authorization: `Bearer ${alpha.credential.token}` },
+      payload: {
+        toGatewayId: beta.gateway.id,
+        title: 'Carry the restart ledger',
+        body: 'Bring the restart ledger back after the glass check.',
+      },
+    });
+    assert.equal(taskRequest.statusCode, 201);
+    const taskRequestId = taskRequest.json().data.request.id as string;
+
+    const acceptTaskRequest = await app1.inject({
+      method: 'POST',
+      url: `/api/v1/task-requests/${taskRequestId}/accept`,
+      headers: { authorization: `Bearer ${beta.credential.token}` },
+    });
+    assert.equal(acceptTaskRequest.statusCode, 200);
+
+    const completeTaskRequest = await app1.inject({
+      method: 'POST',
+      url: `/api/v1/task-requests/${taskRequestId}/complete`,
+      headers: { authorization: `Bearer ${alpha.credential.token}` },
+    });
+    assert.equal(completeTaskRequest.statusCode, 200);
+
     const publicReply = await app1.inject({
       method: 'POST',
       url: '/api/v1/public-expressions',
@@ -375,6 +431,16 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
       assert.equal(messages.json().data.items[0].body, 'durable coral memory');
       assert.equal(messages.json().data.readState.lastReadMessageId, messageId);
       assert.equal(messages.json().data.readState.unreadCount, 0);
+
+      const outgoingTaskRequests = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/task-requests/outgoing',
+        headers: { authorization: `Bearer ${alpha.credential.token}` },
+      });
+      assert.equal(outgoingTaskRequests.statusCode, 200);
+      assert.equal(outgoingTaskRequests.json().data.items.length, 1);
+      assert.equal(outgoingTaskRequests.json().data.items[0].title, 'Carry the restart ledger');
+      assert.equal(outgoingTaskRequests.json().data.items[0].status, 'completed');
 
       const encounters = await app2.inject({
         method: 'GET',
