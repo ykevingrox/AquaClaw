@@ -64,6 +64,22 @@ test('health endpoint returns ok', async () => {
   await app.close();
 });
 
+test('ready endpoint returns ready when the store is operational', async () => {
+  const app = buildApp();
+  const response = await app.inject({ method: 'GET', url: '/ready' });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), {
+    ok: true,
+    data: {
+      status: 'ready',
+      checks: {
+        store: 'ok',
+      },
+    },
+  });
+  await app.close();
+});
+
 test('register issues token and me returns gateway', async () => {
   const app = buildApp();
 

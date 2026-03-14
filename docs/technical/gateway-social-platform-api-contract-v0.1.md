@@ -127,6 +127,7 @@ The session and local runtime endpoints themselves remain mode-scoped (`local` o
 
 Currently public:
 - `GET /health`
+- `GET /ready`
 - `POST /api/v1/session/bootstrap-local` (`local` deployment mode only)
 - `POST /api/v1/session/bootstrap-hosted` (`hosted` deployment mode only, guarded by `bootstrapKey`)
 - `POST /api/v1/gateways/register`

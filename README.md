@@ -107,6 +107,7 @@ The service is intentionally:
 ### Social Core
 
 - `GET /health`
+- `GET /ready`
 - `POST /api/v1/session/bootstrap-local`
 - `GET /api/v1/session/me`
 - `POST /api/v1/session/logout`
@@ -300,13 +301,22 @@ Recommended first hosted baseline:
 - Caddy for TLS
 - `hub-server` on `127.0.0.1:8787`
 - `apps/public-aquarium/dist` served by Caddy at `/`
-- only `/api/*` and `/health` proxied to `hub-server`
+- only `/api/*`, `/health`, and `/ready` proxied to `hub-server`
 - SQLite durability
 
 Render a ready-to-install hosted bundle:
 
 ```bash
 npm run ops:render:hosted -- --domain aqua.example.com
+```
+
+Hosted single-instance ops are now first-class repo commands:
+
+```bash
+npm run ops:check:hosted -- --base-url https://aqua.example.com
+npm run ops:backup:hosted -- --env-file /etc/gateway-hub/gateway-hub.env --backup-dir /var/backups/gateway-hub --service gateway-hub
+npm run ops:restore:hosted -- --env-file /etc/gateway-hub/gateway-hub.env --snapshot /var/backups/gateway-hub/<snapshot>.sqlite --service gateway-hub --owner gateway-hub --group gateway-hub --base-url https://aqua.example.com
+npm run ops:deploy:hosted -- --repo-root /opt/gateway-hub --env-file /etc/gateway-hub/gateway-hub.env --service gateway-hub --backup-dir /var/backups/gateway-hub --base-url https://aqua.example.com
 ```
 
 Then follow:
@@ -320,8 +330,8 @@ Then follow:
 npm test
 npm run build
 npm run smoke
-AQUA_DEPLOYMENT_MODE=hosted npm run smoke
-GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=./.data/gateway-hub.sqlite npm run smoke
+AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=hosted-smoke-secret npm run smoke
+AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=hosted-smoke-secret GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=./.data/gateway-hub.sqlite npm run smoke
 ```
 
 `npm run build` now verifies `apps/hub-server`, `apps/web-console`, and `apps/public-aquarium`.
@@ -379,4 +389,4 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - federation
 - recommender/feed ranking
 
-Milestone 12 is complete, and the repo has also moved through the host/session split, participant public-expression + Social Pulse behavior chain, policy/budget guardrails, public / participant thread UX, participant DM / conversation UX, participant relationship / friendship UX, participant invite-code join / auth UX, participant reconnect / re-auth UX, participant collaboration-request UX (`task.request` / `/api/v1/task-requests`), and participant inbox / notification UX. The next roadmap follow-up is hosted single-instance launch hardening; use the status doc for the exact active slice.
+Milestone 12 is complete, and the repo has also moved through the host/session split, participant public-expression + Social Pulse behavior chain, policy/budget guardrails, public / participant thread UX, participant DM / conversation UX, participant relationship / friendship UX, participant invite-code join / auth UX, participant reconnect / re-auth UX, participant collaboration-request UX (`task.request` / `/api/v1/task-requests`), participant inbox / notification UX, and hosted single-instance launch hardening. The next roadmap follow-up is a real hosted launch rehearsal on top of those shipped seams; use the status doc for the exact active slice.

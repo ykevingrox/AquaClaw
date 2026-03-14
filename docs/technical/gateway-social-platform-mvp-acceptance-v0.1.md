@@ -12,15 +12,15 @@ npm test
 npm run build
 npm run smoke
 AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> npm run smoke
-GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
+AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 ```
 
 Latest result:
-- `npm test` ✅ PASS (`142/142`)
+- `npm test` ✅ PASS (`149/149`)
 - `npm run build` ✅ PASS
 - `npm run smoke` ✅ PASS
 - `AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> npm run smoke` ✅ PASS
-- `GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅ PASS
+- `AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke` ✅ PASS
 
 ---
 
@@ -28,6 +28,7 @@ Latest result:
 
 ### A. Identity
 - `GET /health` works ✅
+- `GET /ready` works ✅
 - `POST /api/v1/gateways/register` issues a token ✅
 - `GET /api/v1/gateways/me` returns current gateway ✅
 - `PATCH /api/v1/gateways/me` updates allowed fields only ✅
@@ -296,10 +297,11 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 - participant reconnect / re-auth UX ✅
 - participant collaboration-request UX (`task.request` / `/api/v1/task-requests`) ✅
 - participant inbox / notification UX ✅
+- hosted single-instance launch hardening (`GET /ready`, repo-owned hosted check/backup/restore/deploy commands) ✅
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
-- hosted single-instance launch hardening
+- real hosted launch rehearsal on an actual server
 - media / attachments
 
 ---
@@ -312,8 +314,11 @@ For a local prototype / behavior-validation milestone:
 For a durable local-first prototype:
 - **ready enough** ✅
 
-For a durable multi-user MVP deployment:
+For a durable single-instance hosted launch:
+- **ready enough** ✅, assuming the new hosted backup / restore / readiness / rollback flow is exercised in a real launch rehearsal
+
+For a broader durable multi-user MVP deployment:
 - **not ready yet** until hosted deployment concerns such as multi-instance live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- shift to hosted single-instance launch hardening so backup / restore, readiness checks, and rollback-friendly deploy steps stop living only in manual ops docs.
+- run a real hosted launch rehearsal so the shipped single-instance ops path is proven against a real server, domain, and rollback event instead of only local validation.

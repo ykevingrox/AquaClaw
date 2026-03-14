@@ -183,7 +183,8 @@ Current state:
 - Priorities 1-5 are now implemented in the local baseline.
 - The host-vs-participant identity split is now implemented as a first-class `host/session` path.
 - Hosted invited participation now exists as a real path, including public observation, invite-based join, and first public speech.
-- The next product decision area is no longer "do the identity split"; it is how far to push participant behavior and hosted UX without collapsing the host/participant/public boundary.
+- Hosted single-instance launch hardening is now also implemented as an executable ops layer, so backup / restore / readiness / rollback flow no longer live only in prose docs.
+- The next product decision area is no longer "do the identity split" or "keep expanding participant surface"; it is whether the current hosted single-instance stack is ready for a real launch rehearsal without opening broader multi-instance complexity.
 
 ### Priority 1 — make “my Claw” a real local identity
 The next local user should not need manual curl + token copy just to enter the aquarium.
@@ -201,7 +202,10 @@ Once the owner can enter and observe the sea naturally, they should be able to p
 Even with owner identity, runtime binding, and live delivery, a one-user sea can still feel too empty to demonstrate the product honestly.
 
 ### Priority 6 — make invited participation behaviorally real without collapsing the boundary
-The hosted path now exists, and the first public-speech + thread + DM + friendship + collaboration-request baseline is now real: bounded public speech is shipped, the public aquarium can navigate observer-safe public threads, participant views can read/reply within visible public threads plus inspect/send bounded DMs, relationship/friendship handling is exposed in the participant console instead of hiding behind raw API calls, invited users can enter that participant path directly from `apps/web-console` without manual bearer-token handling, returning participants can recover access through participant-owned reconnect codes instead of relying on stale local browser state, friends can now exchange bounded structured collaboration requests when the recipient grants `task.request`, and the participant console now has a unified inbox / notification triage surface on top of those seams. The next useful product work is hosted single-instance launch hardening so backup / restore, readiness checks, and rollback-friendly deploy steps stop living only in manual ops docs.
+The hosted path now exists, and the first public-speech + thread + DM + friendship + collaboration-request baseline is now real: bounded public speech is shipped, the public aquarium can navigate observer-safe public threads, participant views can read/reply within visible public threads plus inspect/send bounded DMs, relationship/friendship handling is exposed in the participant console instead of hiding behind raw API calls, invited users can enter that participant path directly from `apps/web-console` without manual bearer-token handling, returning participants can recover access through participant-owned reconnect codes instead of relying on stale local browser state, friends can now exchange bounded structured collaboration requests when the recipient grants `task.request`, and the participant console now has a unified inbox / notification triage surface on top of those seams.
+
+### Priority 7 — make the first hosted launch operable, reversible, and boring
+The hosted single-instance path now also has first-class operational seams: `GET /ready`, repo-owned hosted checks, SQLite backup/restore commands, and a rollback-friendly deploy script. The next useful product work is no longer another participant UX panel; it is a real hosted launch rehearsal that proves those seams are sufficient on an actual server.
 
 ### Current Modeling Caveat
 
@@ -250,7 +254,8 @@ Current guidance:
 11. Completed: participant reconnect / re-auth UX, so returning users can recover access after cleared browser state, expired auth, or device changes without falling back to manual bearer-token handling
 12. Completed: participant collaboration-request UX, so the already-modeled `task.request` scope is now a real bounded friend-to-friend request seam instead of dead configuration
 13. Completed: participant inbox / notification UX, so unread DMs, pending friend requests, and pending collaboration requests now converge into one participant triage surface instead of three separate panels
-14. Next: hosted single-instance launch hardening, so backup / restore, readiness checks, and rollback-friendly deploy steps stop living only in manual ops docs
+14. Completed: hosted single-instance launch hardening, so backup / restore, readiness checks, and rollback-friendly deploy steps now exist as repo-owned commands instead of only manual ops prose
+15. Next: real hosted launch rehearsal, so the shipped single-instance hosted stack is exercised on an actual server before reopening larger topology questions
 
 ---
 
@@ -261,7 +266,7 @@ Not immediate priorities:
 - public global vent walls
 - complex recommender systems
 - full vector memory infra on day one
-- premature cloud deployment assumptions
+- multi-instance cloud topology before the single-instance hosted launch is proven
 - full multi-user hosted auth before the local-first owner flow is solid
 
 The next slices are about making AquaClaw personally legible and operable, not making it huge.

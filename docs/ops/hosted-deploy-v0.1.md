@@ -139,8 +139,22 @@ sudo systemctl status gateway-hub
 <your-domain> {
   encode gzip
 
-  reverse_proxy 127.0.0.1:8787 {
-    flush_interval -1
+  handle /api/* {
+    reverse_proxy 127.0.0.1:8787 {
+      flush_interval -1
+    }
+  }
+
+  handle /health {
+    reverse_proxy 127.0.0.1:8787 {
+      flush_interval -1
+    }
+  }
+
+  handle /ready {
+    reverse_proxy 127.0.0.1:8787 {
+      flush_interval -1
+    }
   }
 }
 ```
@@ -176,8 +190,13 @@ server {
 ## 7. 上线后最小验收
 
 ```bash
-# health
+# one-command hosted check
+cd /opt/gateway-hub
+npm run ops:check:hosted -- --base-url https://<your-domain>
+
+# manual spot checks
 curl -sS https://<your-domain>/health
+curl -sS https://<your-domain>/ready
 
 # hosted 下 local-only guard
 curl -i -X POST https://<your-domain>/api/v1/session/bootstrap-local
@@ -194,21 +213,27 @@ curl -i -X GET https://<your-domain>/api/v1/currents/current
 
 ### 8.1 备份
 
-最小建议：每天至少一次快照备份，保留 7~14 天。
+最小建议：每天至少一次快照备份，保留 7~14 天。优先直接用 repo 内置命令：
 
 ```bash
-mkdir -p /var/backups/gateway-hub
-cp /var/lib/gateway-hub/gateway-hub.sqlite \
-  /var/backups/gateway-hub/gateway-hub-$(date +%F-%H%M%S).sqlite
+cd /opt/gateway-hub
+npm run ops:backup:hosted -- \
+  --env-file /etc/gateway-hub/gateway-hub.env \
+  --backup-dir /var/backups/gateway-hub \
+  --service gateway-hub
 ```
 
 ### 8.2 恢复
 
 ```bash
-sudo systemctl stop gateway-hub
-cp /var/backups/gateway-hub/<snapshot>.sqlite /var/lib/gateway-hub/gateway-hub.sqlite
-sudo chown gateway-hub:gateway-hub /var/lib/gateway-hub/gateway-hub.sqlite
-sudo systemctl start gateway-hub
+cd /opt/gateway-hub
+npm run ops:restore:hosted -- \
+  --env-file /etc/gateway-hub/gateway-hub.env \
+  --snapshot /var/backups/gateway-hub/<snapshot>.sqlite \
+  --service gateway-hub \
+  --owner gateway-hub \
+  --group gateway-hub \
+  --base-url https://<your-domain>
 ```
 
 恢复后，执行第 7 节最小验收。
@@ -217,12 +242,30 @@ sudo systemctl start gateway-hub
 
 ## 9. 升级流程（建议）
 
-1. 先备份 SQLite
-2. 拉新代码并 `npm ci && npm run build`
-3. 先跑 `npm test && npm run smoke`
-4. 滚动重启 `gateway-hub`
-5. 跑上线后最小验收
-6. 观察日志 10~30 分钟无异常再结束变更
+推荐直接用 rollback-friendly deploy 命令：
+
+```bash
+cd /opt/gateway-hub
+npm run ops:deploy:hosted -- \
+  --repo-root /opt/gateway-hub \
+  --env-file /etc/gateway-hub/gateway-hub.env \
+  --service gateway-hub \
+  --backup-dir /var/backups/gateway-hub \
+  --base-url https://<your-domain>
+```
+
+它会按顺序执行：
+
+1. `npm ci`
+2. `npm run build`
+3. `npm test`
+4. `npm run smoke`
+5. hosted smoke
+6. hosted + sqlite smoke
+7. 生成 pre-deploy SQLite 快照
+8. 重启 `gateway-hub`
+9. 跑 hosted readiness / guard checks
+10. 如果失败则自动 restore 到部署前快照
 
 ---
 

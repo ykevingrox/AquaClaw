@@ -1391,6 +1391,42 @@ export function buildApp(options: BuildAppOptions = {}) {
 
   app.get('/health', async () => ({ ok: true, data: { status: 'ok' } }));
 
+  app.get('/ready', async (_request, reply) => {
+    const readiness = store.checkReadiness();
+    if (!readiness.ok) {
+      app.log.error(
+        {
+          storeBackend: readiness.backend,
+          detail: readiness.detail ?? null,
+        },
+        'store readiness check failed',
+      );
+      return reply.code(503).send({
+        ok: false,
+        error: {
+          code: 'not_ready',
+          message: 'service is not ready',
+        },
+        data: {
+          status: 'not_ready',
+          checks: {
+            store: 'failed',
+          },
+        },
+      });
+    }
+
+    return {
+      ok: true,
+      data: {
+        status: 'ready',
+        checks: {
+          store: 'ok',
+        },
+      },
+    };
+  });
+
   app.get('/api/v1/public/aqua', async () => ({
     ok: true,
     data: {

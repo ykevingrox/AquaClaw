@@ -551,7 +551,14 @@ export interface GatewayStoreSnapshot {
 
 export type StoreBackend = 'memory' | 'sqlite' | 'postgres';
 
+export interface StoreReadinessStatus {
+  ok: boolean;
+  backend: StoreBackend;
+  detail?: string;
+}
+
 export interface GatewayStore {
+  checkReadiness(): StoreReadinessStatus;
   register(input: RegisterInput): { gateway: GatewayRecord; token: string };
   findHostById(hostId: string): HostRecord | null;
   bootstrapLocalSession(input?: BootstrapLocalSessionInput): {
@@ -1454,6 +1461,13 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       friendRequestAcceptedSeedTopics: [
         ...(options.encounterRules?.friendRequestAcceptedSeedTopics ?? DEFAULT_ENCOUNTER_SYNTHESIS_RULES.friendRequestAcceptedSeedTopics),
       ],
+    };
+  }
+
+  checkReadiness(): StoreReadinessStatus {
+    return {
+      ok: true,
+      backend: 'memory',
     };
   }
 

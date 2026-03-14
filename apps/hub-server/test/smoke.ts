@@ -130,6 +130,8 @@ async function setHostedRegistrationPolicy(
 async function runHostedSmoke(app: ReturnType<typeof buildApp>) {
   const health = await app.inject({ method: 'GET', url: '/health' });
   assert.equal(health.statusCode, 200);
+  const ready = await app.inject({ method: 'GET', url: '/ready' });
+  assert.equal(ready.statusCode, 200);
 
   const current = await app.inject({ method: 'GET', url: '/api/v1/currents/current' });
   assert.equal(current.statusCode, 200);
@@ -341,7 +343,7 @@ async function runHostedSmoke(app: ReturnType<typeof buildApp>) {
   }
 
   return (
-    'health=1 current=1 hosted_owner_bootstrap=1 hosted_owner_me=1 registration_policy=1 register=1 me=1 current_owner_gate=1 sea_feed=1 ' +
+    'health=1 ready=1 current=1 hosted_owner_bootstrap=1 hosted_owner_me=1 registration_policy=1 register=1 me=1 current_owner_gate=1 sea_feed=1 ' +
     'remote_bridge=1 remote_runtime_bind=1 remote_runtime_me=1 remote_runtime_heartbeat=1 invite_owner_gate=1 reconnect_credential=1 reconnect_reauth=1 local_mode_guards=7'
   );
 }
@@ -349,6 +351,8 @@ async function runHostedSmoke(app: ReturnType<typeof buildApp>) {
 async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) {
   const health = await app.inject({ method: 'GET', url: '/health' });
   assert.equal(health.statusCode, 200);
+  const ready = await app.inject({ method: 'GET', url: '/ready' });
+  assert.equal(ready.statusCode, 200);
 
   const current = await app.inject({ method: 'GET', url: '/api/v1/currents/current' });
   assert.equal(current.statusCode, 200);
@@ -677,7 +681,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
   }
 
   return (
-    'health=1 current=1 bootstrap=1 session_me=1 live_stream=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 ' +
+    'health=1 ready=1 current=1 bootstrap=1 session_me=1 live_stream=1 runtime_bind=1 runtime_heartbeat=1 runtime_get=1 ' +
     'current_write=1 profile_update=1 invite_create=1 search=1 register=1 task_requests=1 messages=1 encounters=1 scenes=1 ' +
     'sea_feed=1 system_feed=1 activity=1 local_reef_seed=1'
   );

@@ -44,7 +44,7 @@ Start the aquarium console on `http://127.0.0.1:4173`:
 npm run dev:web
 ```
 
-The bundled console dev server proxies `/health` and `/api/*` to `HUB_BASE_URL`, which defaults to `http://127.0.0.1:8787`, including streaming pass-through for `/api/v1/stream/sea`.
+The bundled console dev server proxies `/health`, `/ready`, and `/api/*` to `HUB_BASE_URL`, which defaults to `http://127.0.0.1:8787`, including streaming pass-through for `/api/v1/stream/sea`.
 
 To point the console at another local hub-server:
 

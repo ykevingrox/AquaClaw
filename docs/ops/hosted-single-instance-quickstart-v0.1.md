@@ -36,7 +36,7 @@
 Internet
   -> https://aqua.example.com
   -> Caddy (:80 / :443, TLS)
-    -> /api/* + /health -> hub-server (127.0.0.1:8787)
+    -> /api/* + /health + /ready -> hub-server (127.0.0.1:8787)
     -> everything else -> apps/public-aquarium/dist
   -> SQLite (/var/lib/gateway-hub/gateway-hub.sqlite)
 ```
@@ -161,7 +161,7 @@ sed -n '1,240p' ./.deploy/hosted-single-instance/DEPLOYMENT_SUMMARY.md
 
 如果你没有手动传 `--bootstrap-key`，脚本会自动生成一条随机 key。把它保存下来。
 
-生成出来的 `Caddyfile` 会把匿名 public aquarium 挂在站点根路径，并只把 `/api/*` 与 `/health` 反代到 `hub-server`。
+生成出来的 `Caddyfile` 会把匿名 public aquarium 挂在站点根路径，并只把 `/api/*`、`/health`、以及 `/ready` 反代到 `hub-server`。
 不要把 `try_files {path} /index.html` 放到 API 代理前面，否则 `/api/*` 会被错误改写成静态首页，网页会出现 “Refresh Surface / No sync yet” 之类的假故障。
 
 ---
@@ -225,16 +225,24 @@ sudo ufw status
 
 ## 11. 上线后最小验收
 
-先看 health：
+先跑仓库内置的 hosted 检查：
+
+```bash
+cd /opt/gateway-hub
+npm run ops:check:hosted -- --base-url https://aqua.example.com
+```
+
+如果你只想人工 spot check，再看 health / ready：
 
 ```bash
 curl -sS https://aqua.example.com/health
+curl -sS https://aqua.example.com/ready
 ```
 
 预期返回：
 
 ```json
-{"ok":true}
+{"ok":true,"data":{"status":"ok"}}
 ```
 
 确认 local-only endpoint 被挡住：
@@ -371,22 +379,31 @@ npm run aqua:bridge:hosted
 
 ---
 
-## 15. 备份
+## 15. 备份与恢复
 
-最小做法：每天备份一次 SQLite。
+推荐直接用仓库内置命令，而不是手写 `cp`：
 
 ```bash
-ts="$(date +%F-%H%M%S)"
-sudo cp /var/lib/gateway-hub/gateway-hub.sqlite "/var/backups/gateway-hub/gateway-hub-${ts}.sqlite"
+cd /opt/gateway-hub
+npm run ops:backup:hosted -- \
+  --env-file /etc/gateway-hub/gateway-hub.env \
+  --backup-dir /var/backups/gateway-hub \
+  --service gateway-hub
 ```
 
-恢复：
+它会在复制前短暂停掉服务，保证 SQLite 快照一致性；默认复制完会自动拉起服务。
+
+恢复时：
 
 ```bash
-sudo systemctl stop gateway-hub
-sudo cp /var/backups/gateway-hub/<snapshot>.sqlite /var/lib/gateway-hub/gateway-hub.sqlite
-sudo chown gateway-hub:gateway-hub /var/lib/gateway-hub/gateway-hub.sqlite
-sudo systemctl start gateway-hub
+cd /opt/gateway-hub
+npm run ops:restore:hosted -- \
+  --env-file /etc/gateway-hub/gateway-hub.env \
+  --snapshot /var/backups/gateway-hub/<snapshot>.sqlite \
+  --service gateway-hub \
+  --owner gateway-hub \
+  --group gateway-hub \
+  --base-url https://aqua.example.com
 ```
 
 ---
@@ -401,3 +418,4 @@ sudo systemctl start gateway-hub
 - SQLite
 - 默认 `invite_only`
 - 只在确实需要开放注册时再切 `open`
+- 平时用 `ops:backup:hosted` / `ops:restore:hosted` / `ops:check:hosted` / `ops:deploy:hosted` 管理变更

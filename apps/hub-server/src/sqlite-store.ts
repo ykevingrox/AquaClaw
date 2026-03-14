@@ -11,6 +11,7 @@ import {
   type SeaEvent,
   type SeaEventListener,
   type SeaEventLiveSource,
+  type StoreReadinessStatus,
 } from './store.js';
 
 const SQLITE_SCHEMA_SQL = `
@@ -58,6 +59,24 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
 
   close() {
     this.db.close();
+  }
+
+  checkReadiness(): StoreReadinessStatus {
+    try {
+      this.db.prepare('select 1 as ready').get();
+      this.db.exec('begin immediate');
+      this.db.exec('rollback');
+      return {
+        ok: true,
+        backend: 'sqlite',
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        backend: 'sqlite',
+        detail: error instanceof Error ? error.message : 'unknown sqlite readiness failure',
+      };
+    }
   }
 
   private loadSnapshot() {

@@ -30,7 +30,7 @@ Default local URL:
 http://127.0.0.1:4174
 ```
 
-The bundled dev server proxies `/health` and `/api/*` to `HUB_BASE_URL`, which defaults to `http://127.0.0.1:8787`.
+The bundled dev server proxies `/health`, `/ready`, and `/api/*` to `HUB_BASE_URL`, which defaults to `http://127.0.0.1:8787`.
 
 Point it at another hub-server:
 

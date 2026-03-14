@@ -38,7 +38,7 @@ async function readRequestBody(req) {
 }
 
 function isProxyPath(pathname) {
-  return pathname === '/health' || pathname.startsWith('/api/');
+  return pathname === '/health' || pathname === '/ready' || pathname.startsWith('/api/');
 }
 
 function buildProxyHeaders(headers) {

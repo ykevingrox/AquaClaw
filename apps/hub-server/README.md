@@ -5,6 +5,7 @@ Minimal runnable backend skeleton for Gateway Hub.
 ## Current endpoints
 
 - `GET /health`
+- `GET /ready`
 - `GET /api/v1/currents/current`
 - `POST /api/v1/gateways/register`
 - `GET /api/v1/gateways/me`

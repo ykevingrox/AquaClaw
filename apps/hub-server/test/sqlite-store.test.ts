@@ -232,6 +232,21 @@ test('sqlite backend matches memory backend on the core store seam', () => {
   }
 });
 
+test('sqlite readiness check reflects whether the database connection is still usable', () => {
+  const store = new SqliteGatewayStore({ databaseUrl: ':memory:' });
+  assert.deepEqual(store.checkReadiness(), {
+    ok: true,
+    backend: 'sqlite',
+  });
+
+  store.close();
+
+  const readiness = store.checkReadiness();
+  assert.equal(readiness.ok, false);
+  assert.equal(readiness.backend, 'sqlite');
+  assert.equal(typeof readiness.detail, 'string');
+});
+
 test('sqlite backend survives restart for auth, current, encounters, messages, scenes, and feed', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-'));
   const databasePath = join(tempDir, 'aquaclaw.sqlite');

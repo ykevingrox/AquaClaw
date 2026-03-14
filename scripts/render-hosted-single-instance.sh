@@ -215,6 +215,12 @@ ${domain} {
     }
   }
 
+  handle /ready {
+    reverse_proxy ${app_host}:${app_port} {
+      flush_interval -1
+    }
+  }
+
   handle {
     try_files {path} /index.html
     file_server
@@ -257,8 +263,18 @@ sudo install -m 0644 ${service_path} ${service_target_path}
 sudo install -m 0644 ${caddyfile_path} ${caddy_target_path}
 \`\`\`
 
-This Caddyfile serves \`${public_aquarium_root}\` as the anonymous public aquarium and only proxies \`/api/*\` plus \`/health\` to \`${app_host}:${app_port}\`.
+This Caddyfile serves \`${public_aquarium_root}\` as the anonymous public aquarium and only proxies \`/api/*\`, \`/health\`, and \`/ready\` to \`${app_host}:${app_port}\`.
 Keep the API \`handle\` blocks ahead of the SPA fallback; otherwise \`/api/*\` can be rewritten to \`/index.html\` and the public page will fail to refresh.
+
+## Suggested hosted ops commands
+
+\`\`\`bash
+cd ${repo_root}
+npm run ops:check:hosted -- --base-url https://${domain}
+npm run ops:backup:hosted -- --env-file ${env_target_path} --backup-dir ${backup_dir} --service ${service_name}
+npm run ops:restore:hosted -- --env-file ${env_target_path} --snapshot <snapshot-path> --service ${service_name} --owner ${service_user} --group ${service_group} --base-url https://${domain}
+npm run ops:deploy:hosted -- --repo-root ${repo_root} --env-file ${env_target_path} --service ${service_name} --backup-dir ${backup_dir} --base-url https://${domain}
+\`\`\`
 
 If \`${caddy_target_path}\` already contains other sites, merge this site block instead of overwriting the whole file.
 
