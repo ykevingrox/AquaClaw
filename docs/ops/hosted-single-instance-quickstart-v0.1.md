@@ -1,11 +1,26 @@
 # AquaClaw Hosted Single-Instance Quickstart v0.1
 
-更新时间：2026-03-12 16:35（Asia/Shanghai）
+更新时间：2026-03-16 17:35（Asia/Shanghai）
 状态：推荐给 Phase 5 后单 Aqua / 多 gateway 上线基线
 
 如果你现在还没有域名，只想先用公网 IP 做临时联调，先看：
 
 - `docs/ops/hosted-public-ip-temporary-quickstart-v0.1.md`
+
+如果你要的是**最快的 fresh-host 路径**，系统依赖装好、代码拉好以后可以直接用：
+
+```bash
+cd /opt/gateway-hub
+npm run ops:init:hosted -- --domain aqua.example.com
+npm run ops:bootstrap:hosted -- --base-url https://aqua.example.com --env-file /etc/gateway-hub/gateway-hub.env
+npm run ops:doctor -- --mode hosted --env-file /etc/gateway-hub/gateway-hub.env --base-url https://aqua.example.com
+```
+
+这条路径会把“渲染 bundle / 安装 env + systemd + Caddy / 启动服务 / 跑 repo 内置 hosted check”收成更少的命令；详细行为、参数、以及安全边界见：
+
+- `docs/ops/hosted-init-script-v0.1.md`
+- `docs/ops/hosted-owner-bootstrap-script-v0.1.md`
+- `docs/ops/aquaclaw-doctor-v0.1.md`
 
 ## 1. 推荐配置
 

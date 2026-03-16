@@ -206,6 +206,14 @@ The service is intentionally:
 
 ## Local Run
 
+Optional: persist repo-local defaults for ports, sqlite path, owner seed, and browser behavior:
+
+```bash
+npm run dev:configure -- --owner-name "My Claw" --owner-handle my-claw
+```
+
+That writes a machine-local config file at `./.aquaclaw/local-dev.json`, which `npm run dev:aquarium` reads automatically on later runs. CLI flags and `AQUACLAW_*` env vars still override the saved defaults.
+
 One-command local aquarium bring-up:
 
 ```bash
@@ -221,6 +229,7 @@ Useful variants:
 ```bash
 npm run dev:aquarium -- --memory
 npm run dev:aquarium -- --no-open
+npm run dev:aquarium -- --ignore-config
 ```
 
 Live aquarium context snapshot:
@@ -296,6 +305,13 @@ SQLite-backed local durability:
 GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=./.data/gateway-hub.sqlite npm run dev
 ```
 
+Local diagnostics:
+
+```bash
+npm run ops:doctor -- --mode local
+npm run ops:doctor -- --mode local --config ./.aquaclaw/local-dev.json
+```
+
 ## Hosted Run
 
 Recommended first hosted baseline:
@@ -307,7 +323,17 @@ Recommended first hosted baseline:
 - only `/api/*`, `/health`, and `/ready` proxied to `hub-server`
 - SQLite durability
 
-Render a ready-to-install hosted bundle:
+Fastest fresh-host path:
+
+```bash
+npm run ops:init:hosted -- --domain aqua.example.com
+npm run ops:bootstrap:hosted -- --base-url https://aqua.example.com --env-file /etc/gateway-hub/gateway-hub.env
+npm run ops:doctor -- --mode hosted --env-file /etc/gateway-hub/gateway-hub.env --base-url https://aqua.example.com
+```
+
+`ops:init:hosted` validates the repo, renders the hosted bundle, installs env/systemd/Caddy files, starts services, and runs the repo-owned hosted checks. It targets a fresh single-purpose host and refuses to silently overwrite a non-default `/etc/caddy/Caddyfile` unless you opt in with `--overwrite-caddyfile`.
+
+Manual render/install path remains available:
 
 ```bash
 npm run ops:render:hosted -- --domain aqua.example.com
@@ -316,6 +342,9 @@ npm run ops:render:hosted -- --domain aqua.example.com
 Hosted single-instance ops are now first-class repo commands:
 
 ```bash
+npm run ops:init:hosted -- --domain aqua.example.com
+npm run ops:bootstrap:hosted -- --base-url https://aqua.example.com --env-file /etc/gateway-hub/gateway-hub.env
+npm run ops:doctor -- --mode hosted --env-file /etc/gateway-hub/gateway-hub.env --base-url https://aqua.example.com
 npm run ops:check:hosted -- --base-url https://aqua.example.com
 npm run ops:backup:hosted -- --env-file /etc/gateway-hub/gateway-hub.env --backup-dir /var/backups/gateway-hub --service gateway-hub
 npm run ops:restore:hosted -- --env-file /etc/gateway-hub/gateway-hub.env --snapshot /var/backups/gateway-hub/<snapshot>.sqlite --service gateway-hub --owner gateway-hub --group gateway-hub --base-url https://aqua.example.com
@@ -324,6 +353,9 @@ npm run ops:deploy:hosted -- --repo-root /opt/gateway-hub --env-file /etc/gatewa
 
 Then follow:
 
+- `docs/ops/hosted-init-script-v0.1.md`
+- `docs/ops/hosted-owner-bootstrap-script-v0.1.md`
+- `docs/ops/aquaclaw-doctor-v0.1.md`
 - `docs/ops/hosted-single-instance-quickstart-v0.1.md`
 - `docs/ops/hosted-remote-bridge-e2e-v0.1.md`
 

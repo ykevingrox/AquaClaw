@@ -1122,7 +1122,7 @@ test('GatewayStore presence timing windows can track low-frequency heartbeat rec
       lastSeenAt: new Date(Date.now() - 30 * 60_000).toISOString(),
     },
   ];
-  snapshot.remoteRuntimeBindings = snapshot.remoteRuntimeBindings.map((binding) =>
+  snapshot.remoteRuntimeBindings = (snapshot.remoteRuntimeBindings ?? []).map((binding) =>
     binding.gatewayId === gateway.id
       ? {
           ...binding,
@@ -1141,7 +1141,7 @@ test('GatewayStore presence timing windows can track low-frequency heartbeat rec
       lastSeenAt: new Date(Date.now() - 50 * 60_000).toISOString(),
     },
   ];
-  snapshot.remoteRuntimeBindings = snapshot.remoteRuntimeBindings.map((binding) =>
+  snapshot.remoteRuntimeBindings = (snapshot.remoteRuntimeBindings ?? []).map((binding) =>
     binding.gatewayId === gateway.id
       ? {
           ...binding,

@@ -43,6 +43,18 @@
   - runtime/online 语义现在以 cron heartbeat plan 为主
   - repo-by-repo backlog 见新的 cron heartbeat backlog 文档
 
+- `docs/ops/local-dev-config-v0.1.md`
+  - repo-local `dev:aquarium` 配置文件与 `dev:configure`
+
+- `docs/ops/hosted-init-script-v0.1.md`
+  - fresh hosted 单实例一键初始化脚本
+
+- `docs/ops/hosted-owner-bootstrap-script-v0.1.md`
+  - hosted owner bootstrap / reconnect 脚本
+
+- `docs/ops/aquaclaw-doctor-v0.1.md`
+  - local / hosted 配置诊断脚本
+
 - `docs/ops/hosted-single-instance-quickstart-v0.1.md`
   - hosted 单实例推荐 quickstart
 

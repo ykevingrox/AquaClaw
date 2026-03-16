@@ -6,15 +6,19 @@ import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
+import {
+  applyLocalDevOverrides,
+  buildLocalDevBuiltinDefaults,
+  buildLocalDevEnvOverrides,
+  loadLocalDevConfig,
+  resolveLocalDevConfigPath,
+  validateLocalDevOptions,
+} from './local-dev-config-lib.mjs';
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const logDir = resolve(repoRoot, '.tmp', 'dev-aquarium');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const managedChildren = [];
-
-const VALID_BACKENDS = new Set(['memory', 'sqlite']);
-const VALID_FEED_SCOPES = new Set(['mine', 'all', 'friends', 'system']);
-const VALID_VISIBILITIES = new Set(['private', 'invite_only', 'friends_only', 'public']);
-const FALSEY_VALUES = new Set(['0', 'false', 'no', 'off']);
 
 let shuttingDown = false;
 
@@ -22,6 +26,8 @@ function printHelp() {
   console.log(`Usage: npm run dev:aquarium -- [options]
 
 Options:
+  --config <path>               Local dev config path (default: ./.aquaclaw/local-dev.json)
+  --ignore-config               Ignore the repo-local config file for this run
   --backend <memory|sqlite>   Storage backend for hub-server (default: sqlite)
   --memory                    Shortcut for --backend memory
   --sqlite                    Shortcut for --backend sqlite
@@ -51,25 +57,10 @@ Environment overrides:
   AQUACLAW_RUNTIME_ID
   AQUACLAW_INSTALLATION_ID
   AQUACLAW_RUNTIME_LABEL
+  AQUACLAW_LOCAL_DEV_CONFIG
   AQUACLAW_OPEN_BROWSER=0
   AQUACLAW_BIND_RUNTIME=0
   AQUACLAW_SEED_REEF=0`);
-}
-
-function envEnabled(name, fallback = true) {
-  const raw = process.env[name];
-  if (raw === undefined) {
-    return fallback;
-  }
-  return !FALSEY_VALUES.has(raw.trim().toLowerCase());
-}
-
-function parsePort(value, label) {
-  const parsed = Number.parseInt(String(value), 10);
-  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65_535) {
-    throw new Error(`${label} must be a valid port`);
-  }
-  return parsed;
 }
 
 function parseArgValue(argv, index, current, label) {
@@ -83,46 +74,10 @@ function parseArgValue(argv, index, current, label) {
   return next;
 }
 
-function slug(value, fallback) {
-  const normalized = String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return normalized || fallback;
-}
-
-function currentUsername() {
-  try {
-    return os.userInfo().username || 'openclaw';
-  } catch {
-    return 'openclaw';
-  }
-}
-
 function parseOptions(argv) {
-  const username = currentUsername();
-  const defaultRuntimeId = process.env.AQUACLAW_RUNTIME_ID?.trim() || `openclaw-${slug(username, 'local')}`;
-  const defaultInstallationId = process.env.AQUACLAW_INSTALLATION_ID?.trim() || slug(os.hostname(), 'local-installation');
-  const defaultRuntimeLabel = process.env.AQUACLAW_RUNTIME_LABEL?.trim() || `${username}'s OpenClaw Runtime`;
-
-  const options = {
-    backend: (process.env.AQUACLAW_BACKEND?.trim().toLowerCase() || 'sqlite'),
-    bindRuntime: envEnabled('AQUACLAW_BIND_RUNTIME', true),
-    databaseUrl: process.env.AQUACLAW_DATABASE_URL?.trim() || join(repoRoot, '.data', 'aquarium-dev.sqlite'),
-    feedScope: process.env.AQUACLAW_FEED_SCOPE?.trim() || 'all',
-    hubPort: parsePort(process.env.AQUACLAW_HUB_PORT ?? 8787, 'hub port'),
-    installationId: defaultInstallationId,
-    openBrowser: envEnabled('AQUACLAW_OPEN_BROWSER', true),
-    ownerBio: process.env.AQUACLAW_OWNER_BIO?.trim() || '',
-    ownerDisplayName: process.env.AQUACLAW_OWNER_DISPLAY_NAME?.trim() || '',
-    ownerHandle: process.env.AQUACLAW_OWNER_HANDLE?.trim() || '',
-    ownerVisibility: process.env.AQUACLAW_OWNER_VISIBILITY?.trim() || '',
-    runtimeId: defaultRuntimeId,
-    runtimeLabel: defaultRuntimeLabel,
-    seedReef: envEnabled('AQUACLAW_SEED_REEF', true),
-    webPort: parsePort(process.env.AQUACLAW_WEB_PORT ?? 4173, 'web-console port'),
-  };
+  let explicitConfigPath = null;
+  let ignoreConfig = false;
+  const cliOverrides = {};
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -130,84 +85,95 @@ function parseOptions(argv) {
       printHelp();
       process.exit(0);
     }
+    if (arg === '--ignore-config') {
+      ignoreConfig = true;
+      continue;
+    }
     if (arg === '--memory') {
-      options.backend = 'memory';
+      cliOverrides.backend = 'memory';
       continue;
     }
     if (arg === '--sqlite') {
-      options.backend = 'sqlite';
+      cliOverrides.backend = 'sqlite';
       continue;
     }
     if (arg === '--no-bind') {
-      options.bindRuntime = false;
+      cliOverrides.bindRuntime = false;
       continue;
     }
     if (arg === '--no-seed') {
-      options.seedReef = false;
+      cliOverrides.seedReef = false;
       continue;
     }
     if (arg === '--no-open') {
-      options.openBrowser = false;
+      cliOverrides.openBrowser = false;
+      continue;
+    }
+    if (arg.startsWith('--config')) {
+      explicitConfigPath = parseArgValue(argv, index, arg, '--config').trim();
+      if (!arg.includes('=')) {
+        index += 1;
+      }
       continue;
     }
     if (arg.startsWith('--backend')) {
-      options.backend = parseArgValue(argv, index, arg, '--backend').trim().toLowerCase();
+      cliOverrides.backend = parseArgValue(argv, index, arg, '--backend').trim().toLowerCase();
       if (!arg.includes('=')) {
         index += 1;
       }
       continue;
     }
     if (arg.startsWith('--database-url')) {
-      options.databaseUrl = parseArgValue(argv, index, arg, '--database-url').trim();
+      cliOverrides.databaseUrl = parseArgValue(argv, index, arg, '--database-url').trim();
       if (!arg.includes('=')) {
         index += 1;
       }
       continue;
     }
     if (arg.startsWith('--hub-port')) {
-      options.hubPort = parsePort(parseArgValue(argv, index, arg, '--hub-port'), 'hub port');
+      cliOverrides.hubPort = parseArgValue(argv, index, arg, '--hub-port');
       if (!arg.includes('=')) {
         index += 1;
       }
       continue;
     }
     if (arg.startsWith('--web-port')) {
-      options.webPort = parsePort(parseArgValue(argv, index, arg, '--web-port'), 'web-console port');
+      cliOverrides.webPort = parseArgValue(argv, index, arg, '--web-port');
       if (!arg.includes('=')) {
         index += 1;
       }
       continue;
     }
     if (arg.startsWith('--feed-scope')) {
-      options.feedScope = parseArgValue(argv, index, arg, '--feed-scope').trim();
+      cliOverrides.feedScope = parseArgValue(argv, index, arg, '--feed-scope').trim();
       if (!arg.includes('=')) {
         index += 1;
       }
       continue;
     }
     if (arg.startsWith('--owner-name')) {
-      options.ownerDisplayName = parseArgValue(argv, index, arg, '--owner-name').trim();
+      cliOverrides.ownerDisplayName = parseArgValue(argv, index, arg, '--owner-name').trim();
       if (!arg.includes('=')) {
         index += 1;
       }
       continue;
     }
     if (arg.startsWith('--owner-handle')) {
-      options.ownerHandle = parseArgValue(argv, index, arg, '--owner-handle').trim();
+      cliOverrides.ownerHandle = parseArgValue(argv, index, arg, '--owner-handle').trim();
       if (!arg.includes('=')) {
         index += 1;
       }
       continue;
     }
     if (arg.startsWith('--owner-bio')) {
-      options.ownerBio = parseArgValue(argv, index, arg, '--owner-bio').trim();
+      cliOverrides.ownerBio = parseArgValue(argv, index, arg, '--owner-bio').trim();
       if (!arg.includes('=')) {
         index += 1;
       }
       continue;
     }
     if (arg.startsWith('--owner-visibility')) {
-      options.ownerVisibility = parseArgValue(argv, index, arg, '--owner-visibility').trim();
+      cliOverrides.ownerVisibility = parseArgValue(argv, index, arg, '--owner-visibility').trim();
       if (!arg.includes('=')) {
         index += 1;
       }
@@ -217,20 +183,23 @@ function parseOptions(argv) {
     throw new Error(`unknown option: ${arg}`);
   }
 
-  if (!VALID_BACKENDS.has(options.backend)) {
-    throw new Error('backend must be memory or sqlite');
+  const configPath = resolveLocalDevConfigPath(repoRoot, explicitConfigPath, process.env);
+  const options = buildLocalDevBuiltinDefaults(repoRoot);
+  if (!ignoreConfig) {
+    const localConfig = loadLocalDevConfig(configPath);
+    if (localConfig) {
+      applyLocalDevOverrides(options, localConfig);
+    }
   }
-  if (!VALID_FEED_SCOPES.has(options.feedScope)) {
-    throw new Error('feed scope must be one of: mine, all, friends, system');
-  }
-  if (options.ownerVisibility && !VALID_VISIBILITIES.has(options.ownerVisibility)) {
-    throw new Error('owner visibility must be one of: private, invite_only, friends_only, public');
-  }
-  if (options.backend === 'memory') {
-    options.databaseUrl = '';
-  }
+  applyLocalDevOverrides(options, buildLocalDevEnvOverrides(process.env));
+  applyLocalDevOverrides(options, cliOverrides);
 
-  return options;
+  const validated = validateLocalDevOptions(options);
+  return {
+    ...validated,
+    configPath,
+    configLoaded: !ignoreConfig && Boolean(loadLocalDevConfig(configPath)),
+  };
 }
 
 async function describeFailedResponse(response) {
@@ -541,6 +510,9 @@ async function main() {
   const browserOpened = options.openBrowser && openBrowser(consoleUrl);
 
   console.log(`console: ${consoleUrl}`);
+  if (options.configLoaded) {
+    console.log(`config: loaded ${options.configPath}`);
+  }
   if (options.backend === 'sqlite') {
     console.log(`storage: sqlite at ${options.databaseUrl}`);
   } else {
