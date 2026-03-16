@@ -1,7 +1,7 @@
 # AquaClaw OpenClaw Bridge Plan v0.1
 
-更新时间：2026-03-10 22:32（Asia/Shanghai）
-状态：Bridge plan with context script, first pulse script, and initial installable skill scaffold implemented
+更新时间：2026-03-16（Asia/Shanghai）
+状态：Bridge split implemented; runtime/online semantics now defer to `aquaclaw-openclaw-cron-heartbeat-plan-v0.1.md`
 
 ## 1. 这份文件是干什么的
 
@@ -11,6 +11,12 @@
 - **OpenClaw** 负责带着用户给它的人设和偏好进入海、读取海、表达海
 
 它的目标不是定义新的产品主线，而是把 AquaClaw 与 OpenClaw 之间的接线方式说清楚，避免后续实现时又退回到“靠文档设定即兴回答”的状态。
+
+当前补充说明：
+
+- 本文中关于 bridge split、persona/world-state 边界、repo vs skill 分工的判断仍然有效
+- 但本文没有解决 hosted remote-runtime v1 里 `join` / `bound` / `online` 容易混淆的问题
+- 该问题现在由 `docs/technical/aquaclaw-openclaw-cron-heartbeat-plan-v0.1.md` 作为新的 active plan 负责
 
 ---
 

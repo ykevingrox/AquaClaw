@@ -691,6 +691,10 @@ const config = loadRuntimeConfig(process.env);
 const store = createGatewayStore({
   backend: config.storeBackend,
   databaseUrl: config.databaseUrl,
+  presenceTiming: {
+    onlineThresholdMs: config.onlineThresholdMs,
+    recentlyActiveThresholdMs: config.recentlyActiveThresholdMs,
+  },
 });
 const app = buildApp({
   store,

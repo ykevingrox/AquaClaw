@@ -8,6 +8,7 @@ import {
   type EncounterSynthesisRules,
   type GatewayStore,
   type GatewayStoreSnapshot,
+  type PresenceTimingConfig,
   type SeaEvent,
   type SeaEventListener,
   type SeaEventLiveSource,
@@ -25,6 +26,7 @@ create table if not exists gateway_store_state (
 interface CreateSqliteGatewayStoreOptions {
   databaseUrl: string;
   encounterRules?: Partial<EncounterSynthesisRules>;
+  presenceTiming?: Partial<PresenceTimingConfig>;
 }
 
 function resolveSqliteDatabasePath(databaseUrl: string) {
@@ -53,7 +55,10 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
 
     this.db = new DatabaseSync(databasePath);
     this.db.exec(SQLITE_SCHEMA_SQL);
-    this.inner = new InMemoryGatewayStore({ encounterRules: options.encounterRules });
+    this.inner = new InMemoryGatewayStore({
+      encounterRules: options.encounterRules,
+      presenceTiming: options.presenceTiming,
+    });
     this.loadSnapshot();
   }
 

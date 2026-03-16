@@ -301,6 +301,7 @@ MVP runnable slice is currently **green** for the implemented REST + local-first
 
 What is *not* part of this acceptance yet:
 - WebSocket live delivery
+- OpenClaw-cron-bound low-frequency heartbeat online model
 - real hosted launch rehearsal on an actual server
 - media / attachments
 
@@ -315,10 +316,10 @@ For a durable local-first prototype:
 - **ready enough** ✅
 
 For a durable single-instance hosted launch:
-- **ready enough** ✅, assuming the new hosted backup / restore / readiness / rollback flow is exercised in a real launch rehearsal
+- **not ready yet** until the OpenClaw-cron-bound low-frequency heartbeat online model lands, and the hosted backup / restore / readiness / rollback flow is then exercised in a real launch rehearsal
 
 For a broader durable multi-user MVP deployment:
 - **not ready yet** until hosted deployment concerns such as multi-instance live delivery, multi-user owner auth, and multi-user operations are addressed
 
 Recommended next step:
-- run a real hosted launch rehearsal so the shipped single-instance ops path is proven against a real server, domain, and rollback event instead of only local validation.
+- implement the OpenClaw-cron-bound low-frequency heartbeat online model first, then run a real hosted launch rehearsal so the shipped single-instance ops path is proven against a real server, domain, and rollback event instead of only local validation.

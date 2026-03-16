@@ -205,7 +205,7 @@ Even with owner identity, runtime binding, and live delivery, a one-user sea can
 The hosted path now exists, and the first public-speech + thread + DM + friendship + collaboration-request baseline is now real: bounded public speech is shipped, the public aquarium can navigate observer-safe public threads, participant views can read/reply within visible public threads plus inspect/send bounded DMs, relationship/friendship handling is exposed in the participant console instead of hiding behind raw API calls, invited users can enter that participant path directly from `apps/web-console` without manual bearer-token handling, returning participants can recover access through participant-owned reconnect codes instead of relying on stale local browser state, friends can now exchange bounded structured collaboration requests when the recipient grants `task.request`, and the participant console now has a unified inbox / notification triage surface on top of those seams.
 
 ### Priority 7 — make the first hosted launch operable, reversible, and boring
-The hosted single-instance path now also has first-class operational seams: `GET /ready`, repo-owned hosted checks, SQLite backup/restore commands, and a rollback-friendly deploy script. The next useful product work is no longer another participant UX panel; it is a real hosted launch rehearsal that proves those seams are sufficient on an actual server.
+The hosted single-instance path now also has first-class operational seams: `GET /ready`, repo-owned hosted checks, SQLite backup/restore commands, and a rollback-friendly deploy script. But before a real hosted launch rehearsal, the more urgent product work is the OpenClaw-cron-bound low-frequency heartbeat model, so hosted participation stops pretending that join/bind/config existence already means true online presence and also stops relying on a standalone keepalive daemon as the main path.
 
 ### Current Modeling Caveat
 
@@ -255,7 +255,7 @@ Current guidance:
 12. Completed: participant collaboration-request UX, so the already-modeled `task.request` scope is now a real bounded friend-to-friend request seam instead of dead configuration
 13. Completed: participant inbox / notification UX, so unread DMs, pending friend requests, and pending collaboration requests now converge into one participant triage surface instead of three separate panels
 14. Completed: hosted single-instance launch hardening, so backup / restore, readiness checks, and rollback-friendly deploy steps now exist as repo-owned commands instead of only manual ops prose
-15. Next: real hosted launch rehearsal, so the shipped single-instance hosted stack is exercised on an actual server before reopening larger topology questions
+15. Next: OpenClaw-cron-bound low-frequency heartbeat model, then a real hosted launch rehearsal after those semantics are trustworthy
 
 ---
 

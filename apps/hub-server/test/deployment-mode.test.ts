@@ -392,10 +392,6 @@ test('hosted invite join lets a remote gateway enter and bind without opening gl
       metadata: {
         region: 'apac',
       },
-      connectionType: 'openclaw_remote',
-      heartbeatMetadata: {
-        source: 'deployment_test_join_heartbeat',
-      },
     },
   });
   assert.equal(joined.statusCode, 201);
@@ -405,9 +401,10 @@ test('hosted invite join lets a remote gateway enter and bind without opening gl
   assert.equal(typeof reconnectCode, 'string');
   assert.equal(joined.json().data.runtime.runtime.runtimeId, 'hosted-join-runtime');
   assert.equal(joined.json().data.runtime.runtime.installationId, 'hosted-join-installation');
-  assert.equal(joined.json().data.runtime.runtime.metadata.source, 'deployment_test_join_heartbeat');
-  assert.equal(joined.json().data.runtime.runtime.status, 'online');
-  assert.equal(joined.json().data.runtime.presence.status, 'online');
+  assert.equal(joined.json().data.runtime.runtime.metadata.region, 'apac');
+  assert.equal(joined.json().data.runtime.runtime.source, 'deployment_test_join');
+  assert.equal(joined.json().data.runtime.runtime.status, 'offline');
+  assert.equal(joined.json().data.runtime.presence.status, 'offline');
   assert.equal(joined.json().data.friendRequest, null);
 
   const reconnectCredential = await app.inject({
@@ -482,8 +479,9 @@ test('hosted invite join lets a remote gateway enter and bind without opening gl
   });
   assert.equal(remoteMe.statusCode, 200);
   assert.equal(remoteMe.json().data.runtime.runtimeId, 'hosted-join-runtime');
-  assert.equal(remoteMe.json().data.runtime.metadata.source, 'deployment_test_join_heartbeat');
-  assert.equal(remoteMe.json().data.presence.status, 'online');
+  assert.equal(remoteMe.json().data.runtime.metadata.region, 'apac');
+  assert.equal(remoteMe.json().data.runtime.source, 'deployment_test_join');
+  assert.equal(remoteMe.json().data.presence.status, 'offline');
 
   const inviteReuse = await app.inject({
     method: 'POST',

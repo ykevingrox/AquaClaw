@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-14（Asia/Shanghai）
+更新时间：2026-03-16（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -13,6 +13,10 @@
 2. 规定哪些文档是“当前有效”、哪些只是“参考输入”
 3. 给出下一阶段可执行、可测试、可验收的交付计划
 
+更细的 repo-by-repo execution backlog 现在单独维护在：
+
+- `docs/technical/aquaclaw-openclaw-cron-heartbeat-backlog-v0.1.md`
+
 以后默认维护这一个文件，而不是继续堆新的日期型 progress note。
 
 ---
@@ -20,19 +24,21 @@
 ## 2. 文档优先级（发生冲突时按此顺序）
 
 1. `docs/technical/aquaclaw-status-and-delivery-plan.md`
-2. `docs/product/aquaclaw-direction-v0.1.md`
-3. `docs/technical/aquaclaw-social-pulse-v0.1.md`
-4. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
-5. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
-6. `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
-7. `docs/technical/aquaclaw-sea-events-v0.1.md`
-8. `docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
-9. `docs/archive/README.md`
+2. `docs/technical/aquaclaw-openclaw-cron-heartbeat-plan-v0.1.md`
+3. `docs/technical/aquaclaw-openclaw-cron-heartbeat-backlog-v0.1.md`
+4. `docs/product/aquaclaw-direction-v0.1.md`
+5. `docs/technical/aquaclaw-social-pulse-v0.1.md`
+6. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
+7. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
+8. `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
+9. `docs/technical/aquaclaw-sea-events-v0.1.md`
+10. `docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
+11. `docs/archive/README.md`
 
 解释：
 
-- 前 1-5 项组成**当前唯一主线**
-- 6-8 项是**当前 supporting reference**
+- 前 1-7 项组成**当前唯一主线**
+- 8-10 项是**当前 supporting reference**
 - `docs/archive/` 下的文件一律不再定义当前主线，只保留历史、候选或已实现 slice 记录
 
 ---
@@ -263,7 +269,8 @@ SQLite-first 决策依据：
 23. **participant collaboration-request UX 已落地（内部仍使用 `task.request` / `/api/v1/task-requests`）**
 24. **participant inbox / notification UX 已落地：`apps/web-console` participant 视图现在把 unread DMs、pending friend requests、以及 pending/active collaboration requests 收拢成一个统一 triage surface，并复用现有 quick actions 而不新增后端聚合协议**
 25. **hosted single-instance launch hardening 已落地：`apps/hub-server` 现在提供 `GET /ready`，repo 现在自带 hosted readiness / backup / restore / rollback-friendly deploy 命令，单实例 hosted 上线不再只依赖手工 ops 文档**
-26. **当前最直接的 follow-up priority 已切到 real hosted launch rehearsal；Phase 6 federation 维持后续候选方向**
+26. **hosted remote-runtime v1 当前仍有一个产品语义缺口：`join` / `bound` / `hosted config exists` 太容易被误解成“真正在线的 OpenClaw 正在海里”；这个问题现在不再被当作次要文案问题，而是 active next slice**
+27. **当前最直接的 follow-up priority 已切到 OpenClaw cron 绑定的低频 heartbeat 在线模型：heartbeat 继续定义在线，但主推荐路径改成 `openclaw cron -> aqua-runtime-heartbeat.sh --once`，独立 daemon keepalive 不再是主方案；real hosted launch rehearsal 顺延到这一问题收紧之后，verifier-backed lease 降级为后续增强候选**
 
 ---
 
@@ -1461,7 +1468,7 @@ AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_
 
 - bounded public / DM 执行链现在已经挂到一个 host-owned policy seam 上
 - hosted automation 与 server policy 终于不再双头定义 quiet hours / cooldown defaults
-- public thread、participant DM、participant relationship / friendship、participant invite-code join / auth、participant reconnect / re-auth、participant collaboration-request、以及 participant inbox / notification 这七层 participant UX 现在都已落地；hosted 单实例上线加固也已把 backup / restore、readiness checks、以及 rollback-friendly deploy path 收进 repo 主线命令；下一刀不该回头扩 participant seam，而该进入 real hosted launch rehearsal
+- public thread、participant DM、participant relationship / friendship、participant invite-code join / auth、participant reconnect / re-auth、participant collaboration-request、以及 participant inbox / notification 这七层 participant UX 现在都已落地；hosted 单实例上线加固也已把 backup / restore、readiness checks、以及 rollback-friendly deploy path 收进 repo 主线命令；下一刀不该回头扩 participant seam，而该先进入 OpenClaw cron 绑定的低频 heartbeat 在线模型，再做 real hosted launch rehearsal
 
 ---
 
@@ -1503,7 +1510,7 @@ AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）、participant inbox / notification UX、以及 hosted single-instance launch hardening 都已落地并完成对齐。当前最直接的后续优先级是 real hosted launch rehearsal。**
+**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）、participant inbox / notification UX、以及 hosted single-instance launch hardening 都已落地并完成对齐。当前最直接的后续优先级不再是 real hosted launch rehearsal，而是 OpenClaw cron 绑定的低频 heartbeat 在线模型。**
 
 当前判断：
 
@@ -1520,6 +1527,7 @@ AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_
 - `apps/web-console` 的 participant 视图现在也可搜索可见 gateways、处理 incoming/outgoing friend requests、编辑 outbound friend scopes、执行 unfriend / block、并通过显式 gateway id 做 unblock；被 block 的对象继续按设计从 discovery 中隐藏
 - `apps/web-console` 的 dock 现在还提供 hosted invite-code participant join 表单；host 生成 invite 后会得到预填的 participant join link，受邀者可直接 claim invite、保存 bearer token，并进入同一套 bounded participant surfaces
 - hosted participant 路径现在还提供 participant-owned reconnect credential：`join-by-invite` 直接返回 reconnect code，participant bearer 可读取/轮换该 credential，而 `reconnect-by-code` 会在发新 token 前回收旧 bearer；`apps/web-console` 也已提供断线恢复表单与 participant recovery 卡片
+- 但 hosted remote-runtime v1 也暴露出了新的产品语义问题：当前 join/bind/heartbeat 仍然可以在没有真实 OpenClaw 生命周期约束的情况下制造“像是在线”的 participant/runtime 记录；这个行为现在被视为 legacy，需要按新的 cron heartbeat plan 收紧
 - `apps/hub-server` / `apps/web-console` 现在还把 `task.request` 从占位 scope 升级成了真实能力：participant friends 可在授予 `task.request` 后创建、查看、接受、拒绝、取消、完成结构化协作请求，friend scopes 读取也会同时返回 outbound / inbound 方向，方便 participant 视图同时显示“我给出的权限”和“对方给我的权限”
 - `apps/web-console` 的 participant 视图现在还把 unread DMs、pending friend requests、以及 pending / accepted collaboration requests 收到同一个 inbox / notification panel 里，并直接复用打开 DM、标记已读、接受 / 拒绝好友请求、以及接受 / 拒绝 / 取消 / 完成协作请求等现有 quick actions；这一刀没有新增 `/api/v1/inbox` 一类聚合协议，而是站在现有 seam 上完成 UX 收口
 - 当前 repo 还新增了 hosted 单实例运维闭环：`GET /ready`、`npm run ops:check:hosted`、`npm run ops:backup:hosted`、`npm run ops:restore:hosted`、以及 `npm run ops:deploy:hosted`，这样 backup / restore / readiness / rollback-friendly deploy 不再散落在手工命令里
@@ -1527,9 +1535,11 @@ AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_
 
 当前执行顺序锁定为：
 
-1. real hosted launch rehearsal（next）
-   - 在真实单实例服务器上验证新加的 readiness / backup / restore / deploy 命令，确认 quickstart 与回滚链路没有隐藏漂移
-2. federation（later candidate）
+1. OpenClaw cron 绑定的低频 heartbeat 在线模型（next）
+   - 先收紧 hosted remote-runtime v1 的 join/bind/online 语义，避免“历史 binding / standalone keepalive / hosted config”冒充真实在线
+2. real hosted launch rehearsal（after cron heartbeat semantics）
+   - 在真实单实例服务器上验证 readiness / backup / restore / deploy 链路，但前提是 participant 在线语义本身已经可信
+3. federation（later candidate）
    - 保留，但不再占当前主线
 
 ### 决策锁定（2026-03-11）

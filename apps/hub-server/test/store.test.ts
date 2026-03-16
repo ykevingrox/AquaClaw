@@ -754,7 +754,7 @@ test('GatewayStore friend request guardrails protect owners and disabled recipie
   );
 });
 
-test('GatewayStore hosted invite join registers, claims, binds, and heartbeats in one atomic step', () => {
+test('GatewayStore hosted invite join registers, claims, and binds without implying live runtime status', () => {
   const store: GatewayStore = createGatewayStore();
   const host = store.bootstrapHostedSession({
     displayName: 'Hosted Join Owner',
@@ -777,10 +777,6 @@ test('GatewayStore hosted invite join registers, claims, binds, and heartbeats i
     metadata: {
       region: 'apac',
     },
-    connectionType: 'openclaw_remote',
-    heartbeatMetadata: {
-      source: 'hosted-join-heartbeat-store-test',
-    },
   });
 
   assert.equal(joined.gateway.handle, 'hosted-join-gateway-store');
@@ -793,14 +789,14 @@ test('GatewayStore hosted invite join registers, claims, binds, and heartbeats i
   assert.equal(joined.runtime.binding.runtimeId, 'hosted-join-runtime-store');
   assert.equal(joined.runtime.binding.installationId, 'hosted-join-install-store');
   assert.equal(joined.runtime.binding.metadata.region, 'apac');
-  assert.equal(joined.runtime.binding.metadata.source, 'hosted-join-heartbeat-store-test');
-  assert.equal(joined.runtime.status, 'online');
-  assert.equal(joined.presence.status, 'online');
+  assert.equal(joined.runtime.binding.source, 'hosted_join_store_test');
+  assert.equal(joined.runtime.status, 'offline');
+  assert.equal(joined.presence.status, 'offline');
 
   const runtime = store.getRemoteRuntimeBindingByGatewayId(joined.gateway.id);
   assert.ok(runtime);
   assert.equal(runtime.binding.runtimeId, 'hosted-join-runtime-store');
-  assert.equal(runtime.status, 'online');
+  assert.equal(runtime.status, 'offline');
 
   assert.throws(
     () =>
@@ -1085,4 +1081,76 @@ test('GatewayStore remote runtime seam supports claim, heartbeat, and revoke flo
       }),
     /remote runtime bridge credential revoked/,
   );
+});
+
+test('GatewayStore presence timing windows can track low-frequency heartbeat recency', () => {
+  const store = new InMemoryGatewayStore({
+    presenceTiming: {
+      onlineThresholdMs: 20 * 60_000,
+      recentlyActiveThresholdMs: 45 * 60_000,
+    },
+  });
+  const hostedOwner = store.bootstrapHostedSession({
+    displayName: 'Presence Timing Host',
+    handle: 'presence-timing-host',
+  }).host;
+  const gateway = registerGateway(store, {
+    displayName: 'Presence Timing Gateway',
+    handle: 'presence-timing-gateway',
+  });
+
+  const credential = store.createRemoteRuntimeBridgeCredential({
+    createdByHostId: hostedOwner.id,
+    label: 'Presence Timing Credential',
+  });
+  store.bindRemoteRuntime({
+    gatewayId: gateway.id,
+    bridgeToken: credential.token,
+    installationId: 'presence-installation',
+    runtimeId: 'presence-runtime',
+  });
+  store.heartbeatRemoteRuntime({
+    gatewayId: gateway.id,
+    runtimeId: 'presence-runtime',
+    connectionType: 'presence_test',
+  });
+
+  const snapshot = store.exportSnapshot();
+  snapshot.presenceHeartbeats = [
+    {
+      gatewayId: gateway.id,
+      lastSeenAt: new Date(Date.now() - 30 * 60_000).toISOString(),
+    },
+  ];
+  snapshot.remoteRuntimeBindings = snapshot.remoteRuntimeBindings.map((binding) =>
+    binding.gatewayId === gateway.id
+      ? {
+          ...binding,
+          lastHeartbeatAt: new Date(Date.now() - 30 * 60_000).toISOString(),
+        }
+      : binding,
+  );
+  store.importSnapshot(snapshot);
+
+  assert.equal(store.getPresence(gateway.id).status, 'recently_active');
+  assert.equal(store.getRemoteRuntimeBindingByGatewayId(gateway.id)?.status, 'recently_active');
+
+  snapshot.presenceHeartbeats = [
+    {
+      gatewayId: gateway.id,
+      lastSeenAt: new Date(Date.now() - 50 * 60_000).toISOString(),
+    },
+  ];
+  snapshot.remoteRuntimeBindings = snapshot.remoteRuntimeBindings.map((binding) =>
+    binding.gatewayId === gateway.id
+      ? {
+          ...binding,
+          lastHeartbeatAt: new Date(Date.now() - 50 * 60_000).toISOString(),
+        }
+      : binding,
+  );
+  store.importSnapshot(snapshot);
+
+  assert.equal(store.getPresence(gateway.id).status, 'offline');
+  assert.equal(store.getRemoteRuntimeBindingByGatewayId(gateway.id)?.status, 'offline');
 });

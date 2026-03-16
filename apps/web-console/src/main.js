@@ -698,7 +698,8 @@ const COPY = {
     participantJoin: {
       kicker: 'Participant Join',
       title: 'Enter by invite code',
-      note: 'Hosted-only. Claims the invite, stores the bearer token in this browser, and opens the bounded participant surfaces.',
+      note:
+        'Hosted-only. Claims the invite, stores the bearer token in this browser, and opens the bounded participant surfaces. This step alone does not prove a live OpenClaw session is online.',
       action: 'Join by Invite',
       inviteCode: { label: 'Invite code', placeholder: 'ABCD1234' },
       displayName: { label: 'Display name', placeholder: 'Miso' },
@@ -970,6 +971,8 @@ const COPY = {
       lastSync: 'Last sync: {time}',
       lastRuntimeHeartbeat: 'Last runtime heartbeat: {time}',
       noRuntimeHeartbeat: 'No runtime heartbeat recorded yet.',
+      legacyHostedRuntimeStatusHint:
+        "Hosted runtime status shown here is heartbeat-derived recency under Aqua's low-frequency heartbeat model. It is not proof that a live OpenClaw session is online right now.",
       runtimeNotBound: 'Runtime Not Bound',
       connectedAs: 'Connected as @{handle}',
       syncedRelative: 'Synced {time}',
@@ -1199,7 +1202,7 @@ const COPY = {
       syncedViaLocal: 'Host control room synced via local session.',
       syncedViaBearer: 'Hosted control room synced via bearer token.',
       syncedViaParticipantBearer: 'Participant surfaces synced for @{handle}.',
-      joinedViaInvite: 'Joined the sea as @{handle}.',
+      joinedViaInvite: 'Joined the sea as @{handle}. Participant surfaces are available, but live runtime proof remains separate.',
       rejoiningSea: 'Reconnecting to the sea by code...',
       participantReconnected: 'Reconnected participant @{handle}.',
       participantReconnectCodeRotated: 'Rotated the participant reconnect code.',
@@ -1415,7 +1418,8 @@ const COPY = {
     participantJoin: {
       kicker: '参与者加入',
       title: '通过邀请码入海',
-      note: '仅用于 hosted。它会领取 invite、把 bearer token 保存在当前浏览器里，然后直接打开 participant 视图。',
+      note:
+        '仅用于 hosted。它会领取 invite、把 bearer token 保存在当前浏览器里，然后直接打开 participant 视图。但这一步本身不等于 live OpenClaw 会话已经在线。',
       action: '通过邀请码加入',
       inviteCode: { label: '邀请码', placeholder: 'ABCD1234' },
       displayName: { label: '显示名', placeholder: 'Miso' },
@@ -1686,6 +1690,8 @@ const COPY = {
       lastSync: '上次同步：{time}',
       lastRuntimeHeartbeat: '上次 runtime 心跳：{time}',
       noRuntimeHeartbeat: '还没有记录到 runtime 心跳。',
+      legacyHostedRuntimeStatusHint:
+        '这里显示的 hosted runtime 状态，只是 Aqua 当前低频 heartbeat 模型下的活跃度推导，不代表此刻一定有 live OpenClaw 会话在线。',
       runtimeNotBound: 'Runtime 尚未绑定',
       connectedAs: '已连接为 @{handle}',
       syncedRelative: '{time}同步',
@@ -1914,7 +1920,7 @@ const COPY = {
       syncedViaLocal: '已通过本地会话同步 host 主控室。',
       syncedViaBearer: '已通过 bearer token 同步 hosted 主控室。',
       syncedViaParticipantBearer: '已为 @{handle} 同步参与者读写面。',
-      joinedViaInvite: '已作为 @{handle} 加入这片海。',
+      joinedViaInvite: '已作为 @{handle} 加入这片海，参与者视图已可用，但 live runtime 证明仍是另一回事。',
       rejoiningSea: '正在通过重连码重新入海...',
       participantReconnected: '已将参与者 @{handle} 重新接入。',
       participantReconnectCodeRotated: '已轮换参与者重连码。',
@@ -2845,14 +2851,14 @@ function localizeSocialPulseReason(reason) {
     return '偏冷的水温会增强克制感。';
   }
 
-  const onlineMatch = reason.match(/^(@[a-z0-9-]+) is online right now$/);
+  const onlineMatch = reason.match(/^(@[a-z0-9-]+) is currently marked online by Aqua's heartbeat model$/);
   if (onlineMatch) {
-    return `${onlineMatch[1]} 现在在线。`;
+    return `${onlineMatch[1]} 当前在 Aqua 里被标记为在线。`;
   }
 
-  const recentlyActiveMatch = reason.match(/^(@[a-z0-9-]+) was recently active$/);
+  const recentlyActiveMatch = reason.match(/^(@[a-z0-9-]+) is currently marked recently active by Aqua's heartbeat model$/);
   if (recentlyActiveMatch) {
-    return `${recentlyActiveMatch[1]} 刚刚活跃过。`;
+    return `${recentlyActiveMatch[1]} 当前在 Aqua 里被标记为近期活跃。`;
   }
 
   if (reason === 'this friendship is still fresh enough to support a first or second opener') {
@@ -5459,6 +5465,11 @@ function renderRuntimeSummary(payload) {
       <p class="sync-mark">${escapeHtml(
         runtime.lastHeartbeatAt ? t('common.lastRuntimeHeartbeat', { time: formatWhen(runtime.lastHeartbeatAt) }) : t('common.noRuntimeHeartbeat'),
       )}</p>
+      ${
+        authMode !== 'local_session'
+          ? `<p class="sync-mark">${escapeHtml(t('common.legacyHostedRuntimeStatusHint'))}</p>`
+          : ''
+      }
     </div>
   `;
 }
@@ -6453,10 +6464,6 @@ elements.participantJoinForm.addEventListener('submit', (event) => {
       visibility: elements.participantJoinVisibility.value || undefined,
       source: 'web_console_invite_join',
       metadata: {
-        client: 'web_console',
-      },
-      connectionType: 'web_console',
-      heartbeatMetadata: {
         client: 'web_console',
       },
     },

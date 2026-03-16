@@ -6,6 +6,11 @@ export type GatewayVisibility = 'private' | 'invite_only' | 'friends_only' | 'pu
 export type GatewayFriendRequestPolicy = 'manual_review' | 'disabled';
 export type PresenceStatus = 'online' | 'recently_active' | 'offline';
 
+export interface PresenceTimingConfig {
+  onlineThresholdMs: number;
+  recentlyActiveThresholdMs: number;
+}
+
 export interface GatewayRecord {
   id: string;
   handle: string;
@@ -1036,8 +1041,8 @@ const VALID_ENVIRONMENT_PHENOMENA: EnvironmentPhenomenon[] = [
   'storm_front',
   'debris_field',
 ];
-const ONLINE_THRESHOLD_MS = 90_000;
-const RECENTLY_ACTIVE_THRESHOLD_MS = 5 * 60_000;
+export const DEFAULT_ONLINE_THRESHOLD_MS = 20 * 60_000;
+export const DEFAULT_RECENTLY_ACTIVE_THRESHOLD_MS = 45 * 60_000;
 const DEFAULT_AUDIT_PAGE_SIZE = 50;
 const DEFAULT_GATEWAY_PAGE_SIZE = 50;
 const DEFAULT_SEA_PAGE_SIZE = 50;
@@ -1408,6 +1413,26 @@ function parseCurrentTimestamp(value: string, fieldName: 'startsAt' | 'endsAt') 
   return new Date(parsed).toISOString();
 }
 
+function normalizePresenceTimingConfig(input: Partial<PresenceTimingConfig> | undefined): PresenceTimingConfig {
+  const onlineThresholdMs = input?.onlineThresholdMs ?? DEFAULT_ONLINE_THRESHOLD_MS;
+  const recentlyActiveThresholdMs = input?.recentlyActiveThresholdMs ?? DEFAULT_RECENTLY_ACTIVE_THRESHOLD_MS;
+
+  if (!Number.isInteger(onlineThresholdMs) || onlineThresholdMs < 1) {
+    throw new Error('onlineThresholdMs must be a positive integer');
+  }
+  if (!Number.isInteger(recentlyActiveThresholdMs) || recentlyActiveThresholdMs < 1) {
+    throw new Error('recentlyActiveThresholdMs must be a positive integer');
+  }
+  if (recentlyActiveThresholdMs <= onlineThresholdMs) {
+    throw new Error('recentlyActiveThresholdMs must be greater than onlineThresholdMs');
+  }
+
+  return {
+    onlineThresholdMs,
+    recentlyActiveThresholdMs,
+  };
+}
+
 export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly hostsById = new Map<string, HostRecord>();
   private readonly hostsByHandle = new Map<string, HostRecord>();
@@ -1453,8 +1478,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private activeCurrentId: string | null = null;
   private activeEnvironmentId: string | null = null;
   private readonly encounterSynthesisRules: EncounterSynthesisRules;
+  private readonly presenceTiming: PresenceTimingConfig;
 
-  constructor(options: { encounterRules?: Partial<EncounterSynthesisRules> } = {}) {
+  constructor(options: { encounterRules?: Partial<EncounterSynthesisRules>; presenceTiming?: Partial<PresenceTimingConfig> } = {}) {
     this.encounterSynthesisRules = {
       ...DEFAULT_ENCOUNTER_SYNTHESIS_RULES,
       ...options.encounterRules,
@@ -1462,6 +1488,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         ...(options.encounterRules?.friendRequestAcceptedSeedTopics ?? DEFAULT_ENCOUNTER_SYNTHESIS_RULES.friendRequestAcceptedSeedTopics),
       ],
     };
+    this.presenceTiming = normalizePresenceTimingConfig(options.presenceTiming);
   }
 
   checkReadiness(): StoreReadinessStatus {
@@ -2870,19 +2897,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         metadata: input.metadata,
       });
 
-      let runtime = bind.runtime;
-      let presence = this.getPresence(gateway.id);
-
-      if (input.connectionType !== undefined || input.heartbeatMetadata !== undefined) {
-        const heartbeat = this.heartbeatRemoteRuntime({
-          gatewayId: gateway.id,
-          runtimeId: bind.runtime.binding.runtimeId,
-          connectionType: input.connectionType ?? null,
-          metadata: input.heartbeatMetadata,
-        });
-        runtime = heartbeat.runtime;
-        presence = heartbeat.presence;
-      }
+      const runtime = bind.runtime;
+      const presence = this.getPresence(gateway.id);
 
       return {
         gateway,
@@ -4863,10 +4879,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
 
       if (presence.status === 'online') {
         socialOpportunity += 0.16;
-        reasons.push(`@${peer.handle} is online right now`);
+        reasons.push(`@${peer.handle} is currently marked online by Aqua's heartbeat model`);
       } else if (presence.status === 'recently_active') {
         socialOpportunity += 0.08;
-        reasons.push(`@${peer.handle} was recently active`);
+        reasons.push(`@${peer.handle} is currently marked recently active by Aqua's heartbeat model`);
       }
 
       if (friendshipAgeHours !== null && friendshipAgeHours <= 24) {
@@ -6326,10 +6342,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
 
     const deltaMs = Date.now() - new Date(lastSeenAt).getTime();
-    if (deltaMs <= ONLINE_THRESHOLD_MS) {
+    if (deltaMs <= this.presenceTiming.onlineThresholdMs) {
       return 'online';
     }
-    if (deltaMs <= RECENTLY_ACTIVE_THRESHOLD_MS) {
+    if (deltaMs <= this.presenceTiming.recentlyActiveThresholdMs) {
       return 'recently_active';
     }
     return 'offline';
@@ -6671,6 +6687,7 @@ interface CreateGatewayStoreOptions {
   backend?: StoreBackend;
   databaseUrl?: string | null;
   encounterRules?: Partial<EncounterSynthesisRules>;
+  presenceTiming?: Partial<PresenceTimingConfig>;
 }
 
 export function createGatewayStore(options: CreateGatewayStoreOptions = {}): GatewayStore {
@@ -6679,7 +6696,11 @@ export function createGatewayStore(options: CreateGatewayStoreOptions = {}): Gat
     if (!options.databaseUrl) {
       throw new Error('databaseUrl is required for sqlite store backend');
     }
-    return createSqliteGatewayStore({ databaseUrl: options.databaseUrl, encounterRules: options.encounterRules });
+    return createSqliteGatewayStore({
+      databaseUrl: options.databaseUrl,
+      encounterRules: options.encounterRules,
+      presenceTiming: options.presenceTiming,
+    });
   }
   if (backend === 'postgres') {
     if (!options.databaseUrl) {
@@ -6687,5 +6708,8 @@ export function createGatewayStore(options: CreateGatewayStoreOptions = {}): Gat
     }
     return createPostgresGatewayStore({ databaseUrl: options.databaseUrl });
   }
-  return new InMemoryGatewayStore({ encounterRules: options.encounterRules });
+  return new InMemoryGatewayStore({
+    encounterRules: options.encounterRules,
+    presenceTiming: options.presenceTiming,
+  });
 }

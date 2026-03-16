@@ -4,7 +4,14 @@ import { createGatewayStore } from './store.js';
 
 const config = loadRuntimeConfig();
 const app = buildApp({
-  store: createGatewayStore({ backend: config.storeBackend, databaseUrl: config.databaseUrl }),
+  store: createGatewayStore({
+    backend: config.storeBackend,
+    databaseUrl: config.databaseUrl,
+    presenceTiming: {
+      onlineThresholdMs: config.onlineThresholdMs,
+      recentlyActiveThresholdMs: config.recentlyActiveThresholdMs,
+    },
+  }),
   deploymentMode: config.deploymentMode,
   hostedOwnerBootstrapKey: config.hostedOwnerBootstrapKey,
 });

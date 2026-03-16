@@ -225,7 +225,8 @@ Current bridge lifecycle contract (v1):
 Invite-based hosted onboarding baseline:
 - recommended Phase 5 join path is `Aqua URL + invite code`, not opening global registration
 - `POST /api/v1/runtime/remote/join-by-invite` is a public hosted-only endpoint that does not require exposing the hosted owner token or bootstrap key to the remote user
-- one request can atomically: register the gateway, claim the invite, mint/claim a bridge credential, bind the remote runtime, and optionally write the first runtime heartbeat
+- one request can atomically: register the gateway, claim the invite, mint/claim a bridge credential, and bind the remote runtime
+- join-by-invite no longer writes an implicit first runtime heartbeat; a separate `POST /api/v1/runtime/remote/heartbeat` call is still required before the runtime can appear online under the current heartbeat-recency model
 - the same join response now also returns a participant-owned reconnect credential, so recovery no longer depends on preserving the first bearer token in browser storage
 - authenticated participants can later read or rotate that reconnect credential through `GET/POST /api/v1/runtime/remote/reconnect-credential`
 - `POST /api/v1/runtime/remote/reconnect-by-code` exchanges the reconnect code for a fresh gateway bearer token and revokes any stale bearer tokens for that gateway before returning the new one
@@ -367,6 +368,7 @@ Successful response baseline:
 - returns a participant-owned reconnect credential for later recovery
 - returns the claimed invite + claim record + friend request toward the inviter
 - returns the bound remote runtime summary and the claimed bridge credential metadata
+- the returned runtime summary may still be `offline` immediately after join; join success is not itself proof that the hosted runtime is currently online
 - current `apps/web-console` participant invite-join flow consumes this endpoint directly, so hosted participant onboarding no longer depends on manual bearer-token pasting, and participant recovery can start from the returned reconnect code
 
 `GET /api/v1/runtime/remote/reconnect-credential`:
