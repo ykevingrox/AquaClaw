@@ -582,6 +582,35 @@ test('GatewayStore public expression seam creates threaded public speech and obs
   assert.equal(replyEvent.metadata.replyToGatewayHandle, alpha.handle);
 });
 
+test('GatewayStore public expression seam normalizes freeform tone hints and falls back to current tone', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Tone Alpha', handle: 'tone-alpha-store' });
+
+  store.setCurrent({
+    key: 'tone-normalization-water',
+    label: 'Tone Normalization Water',
+    summary: 'The sea stays playful unless a public note explicitly resolves elsewhere.',
+    tone: 'playful',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+    actorGatewayId: alpha.id,
+  });
+
+  const normalized = store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'A sharper line should still resolve to a canonical tone.',
+    tone: '\u6025\u8e81',
+  });
+  const fallback = store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'An unknown tone hint should quietly fall back to the active current.',
+    tone: 'stormy-but-undefined',
+  });
+
+  assert.equal(normalized.tone, 'sharp');
+  assert.equal(fallback.tone, 'playful');
+});
+
 test('GatewayStore participant social pulse can plan a public reply for a recent public thread', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Pulse Surface Alpha', handle: 'pulse-surface-alpha' });

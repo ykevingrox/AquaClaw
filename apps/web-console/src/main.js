@@ -1228,6 +1228,8 @@ const COPY = {
       participantReconnectCodeRotated: 'Rotated the participant reconnect code.',
       participantReconnectRequired: 'Participant auth expired or was revoked. Reconnect by code to mint a fresh token.',
       bearerAuthExpired: 'Bearer token expired or was revoked. Paste a fresh token, or use reconnect by code if you are a participant.',
+      hostConsoleParticipantBridge:
+        'This web console is host-only now. Participant claws should use the OpenClaw bridge instead of browser auth here.',
       hostedSessionExpired: 'Hosted owner session expired or was revoked. Enter as Host again, or paste a fresh hosted session token.',
       readingSea: 'Reading the sea...',
       bootstrappingClaw: 'Bootstrapping the local host session...',
@@ -1967,6 +1969,7 @@ const COPY = {
       participantReconnectCodeRotated: '已轮换参与者重连码。',
       participantReconnectRequired: '参与者认证已过期或被撤销。请通过重连码换取新的 token。',
       bearerAuthExpired: 'bearer token 已过期或被撤销。请粘贴新的 token；如果你是参与者，也可以直接用重连码恢复。',
+      hostConsoleParticipantBridge: '这个 web 控制台现在只接受 host。参与者小龙虾请改走 OpenClaw bridge，而不是在这里做浏览器认证。',
       hostedSessionExpired: 'hosted owner 会话已过期或被撤销。请重新点击“以 Host 身份进入”，或粘贴新的 hosted 会话 token。',
       readingSea: '正在读取海域...',
       bootstrappingClaw: '正在引导本地 host 会话...',
@@ -2468,6 +2471,10 @@ function isHostedSessionTokenError(message) {
   return /invalid hosted session token|missing or invalid hosted session token/i.test(message);
 }
 
+function isHostOnlyConsoleParticipantError(message) {
+  return message === t('common.hostConsoleParticipantBridge');
+}
+
 function clearPersistedBearerAuth() {
   localStorage.removeItem(STORAGE_KEYS.token);
   localStorage.removeItem(STORAGE_KEYS.authMode);
@@ -2751,14 +2758,8 @@ async function resolveIdentity(apiOrigin, token) {
     };
   } catch {}
 
-  const mePayload = await requestJson('/api/v1/gateways/me', { apiOrigin, token });
-  return {
-    gateway: {
-      ...mePayload.data.gateway,
-      kind: 'gateway',
-    },
-    mode: 'bearer',
-  };
+  await requestJson('/api/v1/gateways/me', { apiOrigin, token });
+  throw new Error(t('common.hostConsoleParticipantBridge'));
 }
 
 function formatRelativeTime(value) {
@@ -6522,6 +6523,12 @@ async function loadAquarium() {
       disconnectConsoleSession({ clearPersistedToken: true });
       saveSettings();
       setStatus(wasParticipant ? t('common.participantReconnectRequired') : t('common.bearerAuthExpired'), 'warning');
+      return;
+    }
+    if (isHostOnlyConsoleParticipantError(message)) {
+      disconnectConsoleSession({ clearPersistedToken: true });
+      saveSettings();
+      setStatus(message, 'warning');
       return;
     }
 

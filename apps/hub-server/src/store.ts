@@ -827,7 +827,7 @@ export interface CreatePublicExpressionInput {
   gatewayId: string;
   body: string;
   replyToExpressionId?: string | null;
-  tone?: SeaEventTone;
+  tone?: string;
   metadata?: Record<string, unknown>;
   createdAt?: string;
 }
@@ -1032,6 +1032,52 @@ interface HeartbeatRemoteRuntimeInput {
 const VALID_VISIBILITIES: GatewayVisibility[] = ['private', 'invite_only', 'friends_only', 'public'];
 const VALID_FRIEND_REQUEST_POLICIES: GatewayFriendRequestPolicy[] = ['manual_review', 'disabled'];
 const VALID_SEA_EVENT_TONES: SeaEventTone[] = ['calm', 'playful', 'reflective', 'sharp', 'neutral'];
+const PUBLIC_EXPRESSION_TONE_HINTS: Array<{ tone: SeaEventTone; hints: string[] }> = [
+  {
+    tone: 'calm',
+    hints: ['calm', 'quiet', 'gentle', 'soft', 'serene', 'peaceful', 'steady', 'settled', 'still', 'mellow', 'placid'],
+  },
+  {
+    tone: 'playful',
+    hints: ['playful', 'lively', 'light', 'bright', 'cheerful', 'buoyant', 'bouncy', 'joyful', 'sprightly', 'whimsical'],
+  },
+  {
+    tone: 'reflective',
+    hints: ['reflective', 'thoughtful', 'contemplative', 'pensive', 'inward', 'introspective', 'wistful', 'brooding', 'moody'],
+  },
+  {
+    tone: 'sharp',
+    hints: ['sharp', 'tense', 'urgent', 'agitated', 'irritated', 'impatient', 'angry', 'anxious', 'restless', 'edgy', 'heated'],
+  },
+  {
+    tone: 'neutral',
+    hints: ['neutral', 'plain', 'flat', 'matter of fact', 'matter-of-fact', 'even', 'ordinary', 'objective'],
+  },
+];
+const PUBLIC_EXPRESSION_TONE_HINT_ALIASES = new Map<string, SeaEventTone>([
+  ['\u5e73\u9759', 'calm'],
+  ['\u5b89\u9759', 'calm'],
+  ['\u6e29\u548c', 'calm'],
+  ['\u67d4\u548c', 'calm'],
+  ['\u5b89\u7a33', 'calm'],
+  ['\u8f7b\u5feb', 'playful'],
+  ['\u6d3b\u6cfc', 'playful'],
+  ['\u6b22\u5feb', 'playful'],
+  ['\u96c0\u8dc3', 'playful'],
+  ['\u70ed\u95f9', 'playful'],
+  ['\u6c89\u601d', 'reflective'],
+  ['\u6df1\u601d', 'reflective'],
+  ['\u5185\u7701', 'reflective'],
+  ['\u5fd9\u5ff5', 'reflective'],
+  ['\u9510\u5229', 'sharp'],
+  ['\u6025\u8e81', 'sharp'],
+  ['\u7126\u8e81', 'sharp'],
+  ['\u70e6\u8e81', 'sharp'],
+  ['\u7d27\u7ef7', 'sharp'],
+  ['\u4e2d\u6027', 'neutral'],
+  ['\u5e73\u5b9e', 'neutral'],
+  ['\u5ba2\u89c2', 'neutral'],
+]);
 const VALID_ENVIRONMENT_CLARITIES: EnvironmentClarity[] = ['murky', 'hazy', 'clear', 'crystalline'];
 const VALID_ENVIRONMENT_TIDE_DIRECTIONS: EnvironmentTideDirection[] = ['slack', 'incoming', 'outgoing', 'crosswind'];
 const VALID_ENVIRONMENT_SURFACE_STATES: EnvironmentSurfaceState[] = ['glassy', 'rippled', 'choppy', 'surging'];
@@ -1069,6 +1115,39 @@ const PUBLIC_OBSERVER_EVENT_TYPES = new Set([
   'public_expression.created',
   'public_expression.replied',
 ]);
+
+function normalizePublicExpressionToneHint(value: string | null | undefined): SeaEventTone | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  if (VALID_SEA_EVENT_TONES.includes(raw as SeaEventTone)) {
+    return raw as SeaEventTone;
+  }
+
+  const exactAlias = PUBLIC_EXPRESSION_TONE_HINT_ALIASES.get(raw);
+  if (exactAlias) {
+    return exactAlias;
+  }
+
+  const normalized = raw.toLowerCase().replaceAll(/[_-]+/g, ' ').replaceAll(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  if (VALID_SEA_EVENT_TONES.includes(normalized as SeaEventTone)) {
+    return normalized as SeaEventTone;
+  }
+
+  for (const entry of PUBLIC_EXPRESSION_TONE_HINTS) {
+    if (entry.hints.includes(normalized)) {
+      return entry.tone;
+    }
+  }
+
+  return null;
+}
 const DEFAULT_LOCAL_INSTALLATION_ID = 'local-installation';
 const DEFAULT_LOCAL_RUNTIME_ID = 'openclaw-local-runtime';
 const DEFAULT_LOCAL_RUNTIME_LABEL = 'Local OpenClaw Runtime';
@@ -3601,10 +3680,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       throw new Error('body is required');
     }
 
-    const tone = input.tone ?? this.getCurrent().tone;
-    if (!VALID_SEA_EVENT_TONES.includes(tone)) {
-      throw new Error('invalid public expression tone');
-    }
+    const tone = normalizePublicExpressionToneHint(input.tone) ?? this.getCurrent().tone;
 
     const replyToExpressionId = input.replyToExpressionId?.trim() || null;
     let replyTarget: PublicExpressionRecord | null = null;

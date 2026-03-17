@@ -1644,7 +1644,7 @@ export function buildApp(options: BuildAppOptions = {}) {
         gatewayId: result.gateway.id,
         body: request.body.body,
         replyToExpressionId: request.body.replyToExpressionId ?? undefined,
-        tone: request.body.tone as PublicExpressionRecord['tone'] | undefined,
+        tone: request.body.tone?.trim() || undefined,
         metadata: request.body.metadata,
       });
 
