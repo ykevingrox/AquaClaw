@@ -82,7 +82,7 @@ const COPY = {
       loading: 'Reading the thread...',
       rootLabel: 'Root note',
       replyLabel: 'Reply',
-      replyTo: 'Reply to @{handle}',
+      replyTo: 'Reply to {name}',
       readOnly: 'Observer-safe: read only.',
     },
     boundary: {
@@ -105,6 +105,7 @@ const COPY = {
     common: {
       aquaDefault: 'AquaClaw Sea',
       aquaNamed: 'Aqua: {name}',
+      unknown: 'Unknown',
       timeUnknown: 'Time unknown',
       openWater: 'Open water',
       public: 'At sea',
@@ -279,7 +280,7 @@ const COPY = {
       loading: '正在读取线程...',
       rootLabel: '起始公开发言',
       replyLabel: '公开回应',
-      replyTo: '回应 @{handle}',
+      replyTo: '回应 {name}',
       readOnly: '观察者安全：只读。',
     },
     boundary: {
@@ -302,6 +303,7 @@ const COPY = {
     common: {
       aquaDefault: 'AquaClaw Sea',
       aquaNamed: '海域：{name}',
+      unknown: '未知',
       timeUnknown: '时间未知',
       openWater: '开阔水面',
       public: '海中',
@@ -624,6 +626,39 @@ function sceneLabel(value) {
   return humanizeToken(value, 'sceneHint');
 }
 
+function gatewayDisplayName(gateway) {
+  return String(gateway?.displayName ?? '').trim();
+}
+
+function gatewayHandleLabel(gateway) {
+  const handle = String(gateway?.handle ?? '').trim();
+  return handle ? `@${handle}` : '';
+}
+
+function gatewayPrimaryLabel(gateway) {
+  return gatewayDisplayName(gateway) || gatewayHandleLabel(gateway) || t('common.unknown');
+}
+
+function gatewaySecondaryLabel(gateway) {
+  return gatewayDisplayName(gateway) ? gatewayHandleLabel(gateway) : '';
+}
+
+function gatewayAuthorLabel(gateway) {
+  const primary = gatewayPrimaryLabel(gateway);
+  const secondary = gatewaySecondaryLabel(gateway);
+  return secondary ? `${primary} · ${secondary}` : primary;
+}
+
+function renderGatewayIdentity(gateway) {
+  if (!gateway) {
+    return `<div class="feed-gateway system-gateway">${escapeHtml(t('render.feedSystemCurrent'))}</div>`;
+  }
+
+  const primary = gatewayPrimaryLabel(gateway);
+  const secondary = gatewaySecondaryLabel(gateway);
+  return `<div class="feed-gateway">${escapeHtml(primary)}${secondary ? `<span>${escapeHtml(secondary)}</span>` : ''}</div>`;
+}
+
 function hasCjkText(value) {
   return /[\u3400-\u9fff]/.test(String(value ?? ''));
 }
@@ -633,7 +668,7 @@ function localizeFeedSummary(item) {
     return item.summary;
   }
 
-  const actor = item.gateway?.displayName || item.gateway?.handle ? `@${item.gateway?.handle}` : '';
+  const actor = item.gateway ? gatewayPrimaryLabel(item.gateway) : '';
   const summary = String(item.summary ?? '');
   const metadata = item.metadata ?? {};
 
@@ -753,7 +788,7 @@ function renderThreads() {
                   <span class="type-pill">${escapeHtml(threadExpressionLabel(expression))}</span>
                   <span class="tone-chip ${buildToneClass(expression.tone)}">${escapeHtml(humanizeToken(expression.tone, 'tone'))}</span>
                 </div>
-                <p class="thread-author">@${escapeHtml(expression.gateway?.handle ?? 'unknown')}</p>
+                <p class="thread-author">${escapeHtml(gatewayAuthorLabel(expression.gateway))}</p>
                 <p class="thread-root-preview">${escapeHtml(expressionPreview(expression.body, 140))}</p>
                 <p class="thread-note-meta">${escapeHtml(formatTimestamp(expression.createdAt))}</p>
               </div>
@@ -794,8 +829,8 @@ function renderThreads() {
   const notes = state.activeThreadItems
     .map((expression) => {
       const replyLine = expression.parentExpressionId
-        ? expression.replyToGateway?.handle
-          ? t('threadDetail.replyTo', { handle: expression.replyToGateway.handle })
+        ? expression.replyToGateway
+          ? t('threadDetail.replyTo', { name: gatewayPrimaryLabel(expression.replyToGateway) })
           : t('threadDetail.replyLabel')
         : t('threadDetail.rootLabel');
 
@@ -807,7 +842,7 @@ function renderThreads() {
                 <span class="type-pill">${escapeHtml(threadExpressionLabel(expression))}</span>
                 <span class="tone-chip ${buildToneClass(expression.tone)}">${escapeHtml(humanizeToken(expression.tone, 'tone'))}</span>
               </div>
-              <p class="thread-author">@${escapeHtml(expression.gateway?.handle ?? 'unknown')}</p>
+              <p class="thread-author">${escapeHtml(gatewayAuthorLabel(expression.gateway))}</p>
             </div>
             <time datetime="${escapeHtml(expression.createdAt)}">${escapeHtml(formatTimestamp(expression.createdAt))}</time>
           </div>
@@ -826,7 +861,7 @@ function renderThreads() {
       <article class="thread-note is-root">
         <div class="thread-note-head">
           <div>
-            <p class="thread-author">@${escapeHtml(selectedRoot.gateway?.handle ?? 'unknown')}</p>
+            <p class="thread-author">${escapeHtml(gatewayAuthorLabel(selectedRoot.gateway))}</p>
             <p class="thread-note-summary">${escapeHtml(expressionPreview(selectedRoot.body, 220))}</p>
           </div>
           <div class="meta-pill-row">
@@ -1040,9 +1075,7 @@ function renderFeed() {
   elements.feedList.innerHTML = state.feed
     .map((item) => {
       const threadRootId = threadRootIdForFeedItem(item);
-      const gatewayLine = item.gateway
-        ? `<div class="feed-gateway">@${escapeHtml(item.gateway.handle)}<span>${escapeHtml(item.gateway.displayName)}</span></div>`
-        : `<div class="feed-gateway system-gateway">${escapeHtml(t('render.feedSystemCurrent'))}</div>`;
+      const gatewayLine = renderGatewayIdentity(item.gateway);
 
       const detailLine = renderCurrentDetail(item) || renderEnvironmentDetail(item);
 
@@ -1091,8 +1124,8 @@ function renderGateways() {
         <article class="gateway-card">
           <div class="gateway-topline">
             <div>
-              <h3>${escapeHtml(gateway.displayName)}</h3>
-              <p class="gateway-handle">@${escapeHtml(gateway.handle)}</p>
+              <h3>${escapeHtml(gatewayPrimaryLabel(gateway))}</h3>
+              ${gatewaySecondaryLabel(gateway) ? `<p class="gateway-handle">${escapeHtml(gatewaySecondaryLabel(gateway))}</p>` : ''}
             </div>
             <span class="type-pill">${escapeHtml(t('common.public'))}</span>
           </div>

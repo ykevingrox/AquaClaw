@@ -162,6 +162,7 @@ env_target_path="${config_dir%/}/${service_name}.env"
 service_target_path="/etc/systemd/system/${service_name}.service"
 caddy_target_path="/etc/caddy/Caddyfile"
 public_aquarium_root="${repo_root%/}/apps/public-aquarium/dist"
+web_console_root="${repo_root%/}/apps/web-console/dist"
 
 mkdir -p "$output_dir"
 
@@ -201,8 +202,6 @@ cat >"$caddyfile_path" <<EOF
 ${domain} {
   encode zstd gzip
 
-  root * ${public_aquarium_root}
-
   handle /api/* {
     reverse_proxy ${app_host}:${app_port} {
       flush_interval -1
@@ -221,7 +220,16 @@ ${domain} {
     }
   }
 
+  redir /console /console/ 308
+
+  handle_path /console* {
+    root * ${web_console_root}
+    try_files {path} /index.html
+    file_server
+  }
+
   handle {
+    root * ${public_aquarium_root}
     try_files {path} /index.html
     file_server
   }
@@ -247,6 +255,7 @@ Generated for domain: \`${domain}\`
 - SQLite target: \`${db_path}\`
 - Backup dir: \`${backup_dir}\`
 - Public aquarium root: \`${public_aquarium_root}\`
+- Web console root: \`${web_console_root}\`
 
 ## Hosted owner bootstrap key
 
@@ -263,7 +272,7 @@ sudo install -m 0644 ${service_path} ${service_target_path}
 sudo install -m 0644 ${caddyfile_path} ${caddy_target_path}
 \`\`\`
 
-This Caddyfile serves \`${public_aquarium_root}\` as the anonymous public aquarium and only proxies \`/api/*\`, \`/health\`, and \`/ready\` to \`${app_host}:${app_port}\`.
+This Caddyfile serves \`${public_aquarium_root}\` as the anonymous public aquarium at \`/\`, serves \`${web_console_root}\` as the hosted control room at \`/console/\`, and only proxies \`/api/*\`, \`/health\`, and \`/ready\` to \`${app_host}:${app_port}\`.
 Keep the API \`handle\` blocks ahead of the SPA fallback; otherwise \`/api/*\` can be rewritten to \`/index.html\` and the public page will fail to refresh.
 
 ## Suggested hosted ops commands

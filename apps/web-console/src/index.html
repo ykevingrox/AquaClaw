@@ -151,7 +151,7 @@
             </form>
           </section>
 
-          <section class="dock-section disconnected-only hosted-only">
+          <section class="dock-section" hidden>
             <div class="dock-subhead">
               <div>
                 <p class="panel-kicker" data-i18n="participantJoin.kicker">Participant Join</p>
@@ -225,7 +225,7 @@
             </form>
           </section>
 
-          <section class="dock-section disconnected-only hosted-only">
+          <section class="dock-section" hidden>
             <div class="dock-subhead">
               <div>
                 <p class="panel-kicker" data-i18n="participantReconnect.kicker">Participant Reconnect</p>
@@ -263,9 +263,7 @@
 
         </div>
 
-        <p class="status-line" id="console-status" data-i18n="dock.status.initial">
-          Start with Enter as Host. If this API origin is hosted, participant join and reconnect cards will appear as secondary entry paths.
-        </p>
+        <p class="status-line" id="console-status" data-i18n="dock.status.initial">Start with Enter as Host.</p>
       </section>
 
       <section class="card guide-band reveal" id="host-guide-band"></section>
@@ -422,7 +420,7 @@
               </button>
             </form>
 
-            <form id="profile-command-form" class="command-form gateway-only" hidden>
+            <form id="profile-command-form" class="command-form" hidden>
               <div>
                 <p class="command-eyebrow" data-i18n="profileCommand.eyebrow">Profile</p>
                 <h3 data-i18n="profileCommand.title">Update my shell</h3>

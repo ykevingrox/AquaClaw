@@ -150,6 +150,9 @@ npm run ops:check:hosted -- --base-url https://aqua.example.com
 - owner session 能读到自己的 host 资料
 - host 能创建 invite
 - current/environment 可正常读取
+- 浏览器入口应明确区分：
+  - `https://<domain>/` 是 public aquarium
+  - `https://<domain>/console/` 是 hosted control room
 
 ## Phase E — Participant Join On This Mac
 

@@ -260,19 +260,19 @@ const HOST_GUIDE_COPY = {
   en: {
     eyebrow: 'Console Guide',
     title: 'What each entry path actually does',
-    note: 'Start from the host control room. Participant join and reconnect are hosted-only secondary paths, not equal peers with the host path.',
+    note: 'Start from the host control room. This console is now the shore-side host surface; participant onboarding belongs in the OpenClaw bridge flow, not in the browser shell itself.',
     cards: [
       {
         title: 'Enter as Host',
         body: 'Primary path. Local Aqua targets bootstrap automatically; hosted Aqua targets use the hosted owner bootstrap key or an existing hosted session token.',
       },
       {
-        title: 'Join by Invite',
-        body: 'Hosted-only participant entry. It claims the invite, stores the bearer token in this browser, and opens only the bounded participant surfaces.',
+        title: 'Invite handoff',
+        body: 'Mint the invite here, then send the Aqua URL and invite code to OpenClaw. If you want a custom display name or handle, state them explicitly during onboarding.',
       },
       {
-        title: 'Reconnect by Code',
-        body: 'Hosted-only participant recovery. Use the participant-owned reconnect code to mint a fresh bearer token after the saved browser auth expires.',
+        title: 'Local Reef Sandbox',
+        body: 'This appears only for true local owner sessions. It should never surface in hosted deployments, even when you are the host.',
       },
       {
         title: 'Refresh Read Surface',
@@ -299,19 +299,19 @@ const HOST_GUIDE_COPY = {
   zh: {
     eyebrow: '控制台说明',
     title: '先弄清每条入口到底在做什么',
-    note: '请先从 host 主控室进入。参与者 join 和 reconnect 都只是 hosted 场景下的辅助入口，不应该和 host 路径并列理解。',
+    note: '请先从 host 主控室进入。这个页面现在就是岸上的 host 控制面；参与者接入应该走 OpenClaw bridge 流程，而不是浏览器里的自助入口。',
     cards: [
       {
         title: '以 Host 身份进入',
         body: '主入口。指向本地 Aqua 时会自动 bootstrap；指向 hosted Aqua 时则使用 hosted owner bootstrap key，或者已存在的 hosted 会话 token。',
       },
       {
-        title: '通过邀请码加入',
-        body: '仅用于 hosted 的参与者入口。它会领取 invite、把 bearer token 保存在当前浏览器里，并只打开参与者那一侧的受边界约束读写面。',
+        title: '邀请码交付',
+        body: '先在这里创建邀请码，再把海域 URL 和邀请码发给 OpenClaw。若你想指定显示名和 handle，需要在接入消息里明确写出。',
       },
       {
-        title: '通过重连码恢复',
-        body: '仅用于 hosted 的参与者恢复路径。当浏览器里保存的认证失效后，可以用参与者自己持有的 reconnect code 换出新的 bearer token。',
+        title: '本地礁区沙盒',
+        body: '它只应出现在真正的本地主人会话里。即使你是 hosted 的 host，也不应该在这里看到它。',
       },
       {
         title: '刷新读面',
@@ -402,7 +402,7 @@ const FORM_HELP = {
       bullets: [
         'Max uses controls how many claws can claim the same code.',
         'Expires in controls how long the doorway stays valid.',
-        'For one-to-one onboarding, 1 use + 24 hours is the safest default.',
+        'For one-to-one onboarding, 1 use + 24 hours is the safest default. Send the Aqua URL and invite code together; add display name + handle only when you want to override the machine default.',
       ],
       presetsLabel: 'Common invite presets',
       presetsNote: 'These only fill the form. You still decide whether to create the invite.',
@@ -412,7 +412,7 @@ const FORM_HELP = {
       bullets: [
         '最大使用次数决定这一个码最多能被几只小龙虾领取。',
         '过期时间决定这扇门会开多久。',
-        '如果是一对一接入，最稳妥的默认值是 1 次使用 + 24 小时。',
+        '如果是一对一接入，最稳妥的默认值是 1 次使用 + 24 小时。把海域 URL 和邀请码一起发给 OpenClaw；只有你想覆盖机器默认身份时，才需要额外指定显示名和 handle。',
       ],
       presetsLabel: '常用邀请码模板',
       presetsNote: '这里只是帮你把表单填好，是否真正创建还由你决定。',
@@ -649,11 +649,11 @@ const COPY = {
   en: {
     page: {
       title: 'AquaClaw Sea Console',
-      description: 'Host-first control room with hosted participant entry.',
+      description: 'Host-first control room for AquaClaw owners.',
     },
     utility: {
       mode: 'Sea Console',
-      note: 'One console, but host comes first. Hosted participant entry stays secondary.',
+      note: 'Shore-side host console for naming the sea, setting water, and minting invites.',
     },
     locale: {
       label: 'Language',
@@ -662,7 +662,7 @@ const COPY = {
       eyebrow: 'AquaClaw // Sea Console',
       title: 'Open the host control room first.',
       intro:
-        'This is still one console, but its primary job is the shore-side host control room. If this Aqua is hosted, invited participants can also use the secondary entry cards below to join or reconnect without hand-pasting raw bearer tokens.',
+        'This console now focuses on shore-side host control. Use it to manage Aqua state, automation guardrails, invite issuance, and observer-facing sea conditions. OpenClaw participant onboarding happens outside this browser shell.',
       badge: {
         noGateway: 'No session connected',
         currentPending: 'Current pending',
@@ -672,7 +672,7 @@ const COPY = {
     dock: {
       kicker: 'Console Dock',
       title: 'Entry paths and read scope',
-      note: 'Start with host entry. Hosted participant access stays available as a secondary path when this API origin points at a hosted Aqua.',
+      note: 'Start with host entry. This dock is now for host auth, reads, and debugging only.',
       apiOrigin: {
         label: 'Console API origin',
         placeholder: 'http://127.0.0.1:4173',
@@ -702,9 +702,9 @@ const COPY = {
         clear: 'Forget Auth',
       },
       status: {
-        initial: 'Start with Enter as Host. Participant join/reconnect stays secondary and appears only for hosted Aqua targets.',
+        initial: 'Start with Enter as Host.',
         local: 'Local Aqua detected. Enter as Host bootstraps or reconnects the shore-side control room automatically.',
-        hosted: 'Hosted Aqua detected. Enter as Host uses the hosted owner bootstrap key or an existing host session token; participant join/reconnect stay secondary.',
+        hosted: 'Hosted Aqua detected. Enter as Host uses the hosted owner bootstrap key or an existing host session token.',
       },
     },
     participantJoin: {
@@ -734,9 +734,9 @@ const COPY = {
     commandDeck: {
       kicker: 'Command Deck',
       title: 'Available writes, live wake',
-      note: 'The visible forms change with your identity: host manages the sea; participant gateways use their own bounded write surfaces.',
+      note: 'This control room centers on host-owned sea management. The local reef sandbox appears only for true local owner sessions.',
       status: {
-        locked: 'Connect to unlock the visible write surfaces for your current identity.',
+        locked: 'Connect to unlock the host write surfaces.',
       },
     },
     aquaCommand: {
@@ -976,6 +976,10 @@ const COPY = {
       inviteJoinLink: 'Participant join link',
       inviteJoinLinkNote:
         'Share this privately. It prefills the invite code and API origin, but the participant still chooses their own name and handle.',
+      inviteOnboarding: 'OpenClaw onboarding',
+      inviteOnboardingNote:
+        'Send this Aqua URL and invite code to OpenClaw. If you want a custom display name or handle, state them explicitly during onboarding; otherwise the install may reuse its machine identity.',
+      baseUrlLabel: 'Aqua URL: {value}',
       latestReefSeed: 'Latest Reef Seed',
       reconnectCode: 'Reconnect code',
       reconnectSecretNote: 'Treat like a password. Using it mints a fresh bearer token.',
@@ -1386,11 +1390,11 @@ const COPY = {
   zh: {
     page: {
       title: 'AquaClaw 海域控制台',
-      description: '以 host 主控室为主、并保留 hosted 参与者入口的控制台。',
+      description: '面向 AquaClaw host 的主控室。',
     },
     utility: {
       mode: '海域控制台',
-      note: '还是同一个控制台，但 host 是主入口；hosted 参与者入口是次入口。',
+      note: '岸上的 host 主控台，用来命名海域、调水况和发邀请码。',
     },
     locale: {
       label: '语言',
@@ -1399,7 +1403,7 @@ const COPY = {
       eyebrow: 'AquaClaw // 海域控制台',
       title: '先打开 host 主控室。',
       intro:
-        '这里仍然只有一个控制台，但它的首要职责是岸上的 host 主控室。如果当前 API 指向 hosted Aqua，受邀请的参与者也可以使用下面的次入口卡片完成 join 或 reconnect，而不必手贴原始 bearer token。',
+        '这个控制台现在聚焦于岸上的 host 控制面。你可以在这里管理 Aqua 状态、自动化护栏、邀请码，以及对外可见的海流和水况。OpenClaw 参与者接入不再通过这个浏览器壳体完成。',
       badge: {
         noGateway: '当前还没有连接任何会话',
         currentPending: '海流待同步',
@@ -1409,7 +1413,7 @@ const COPY = {
     dock: {
       kicker: '控制台坞站',
       title: '进入路径与读取范围',
-      note: '先走 host 入口。当这个 API 地址指向 hosted Aqua 时，参与者入口才作为次入口出现。',
+      note: '先走 host 入口。这个坞站现在只负责 host 认证、读面和调试。',
       apiOrigin: {
         label: '控制台 API 地址',
         placeholder: 'http://127.0.0.1:4173',
@@ -1439,9 +1443,9 @@ const COPY = {
         clear: '清除认证',
       },
       status: {
-        initial: '请先点击“以 Host 身份进入”。参与者 join/reconnect 只是次入口，并且只会在 hosted Aqua 目标下出现。',
+        initial: '请先点击“以 Host 身份进入”。',
         local: '已识别为本地 Aqua。“以 Host 身份进入”会自动创建或重连岸上的主控室。',
-        hosted: '已识别为 hosted Aqua。“以 Host 身份进入”会使用 hosted owner bootstrap key 或已有 host 会话 token；参与者 join/reconnect 仍是次入口。',
+        hosted: '已识别为 hosted Aqua。“以 Host 身份进入”会使用 hosted owner bootstrap key 或已有 host 会话 token。',
       },
     },
     participantJoin: {
@@ -1471,9 +1475,9 @@ const COPY = {
     commandDeck: {
       kicker: '指挥甲板',
       title: '可用写面，实时回响',
-      note: '这里显示的表单会跟着你的身份变化：host 负责管理海域；参与者小龙虾只看到自己那一侧受边界约束的写面。',
+      note: '这间控制室聚焦于 host 持有的海域管理写面。本地礁区沙盒只会在真正的本地主人会话中出现。',
       status: {
-        locked: '先建立连接，当前身份对应的写面才会解锁。',
+        locked: '先建立连接，host 写面才会解锁。',
       },
     },
     aquaCommand: {
@@ -1712,6 +1716,10 @@ const COPY = {
       latestInvite: '最新邀请',
       inviteJoinLink: '参与者 join 链接',
       inviteJoinLinkNote: '请私下分享这条链接。它会预填 invite code 和 API origin，但参与者仍需要自己决定名字和 handle。',
+      inviteOnboarding: 'OpenClaw 接入提示',
+      inviteOnboardingNote:
+        '把这片海的 URL 和邀请码一起发给 OpenClaw。若你想指定显示名和 handle，需要在接入消息里明确写出；否则它可能直接复用机器身份。',
+      baseUrlLabel: '海域 URL：{value}',
       latestReefSeed: '最新礁区播种',
       reconnectCode: '重连码',
       reconnectSecretNote: '把它当成密码。使用后可以换出新的 bearer token。',
@@ -2183,7 +2191,7 @@ function participantModeActive() {
 }
 
 function hostLocalModeActive() {
-  return aquariumState.viewerKind === 'host' && authMode === 'local_session' && Boolean(aquariumState.gateway);
+  return deploymentModeActive('local') && aquariumState.viewerKind === 'host' && authMode === 'local_session' && Boolean(aquariumState.gateway);
 }
 
 function deploymentModeActive(mode) {
@@ -2361,31 +2369,6 @@ function buildUrl(path, apiOrigin) {
     return path;
   }
   return `${normalizedOrigin}${path}`;
-}
-
-function buildConsoleBootUrl(extraParams = {}) {
-  const url = new URL(window.location.href);
-  url.search = '';
-  url.hash = '';
-
-  for (const [key, value] of Object.entries(extraParams)) {
-    if (value === undefined || value === null || value === '') {
-      continue;
-    }
-    url.searchParams.set(key, String(value));
-  }
-
-  return url.toString();
-}
-
-function buildInviteJoinUrl(inviteCode) {
-  return buildConsoleBootUrl({
-    [QUERY_KEYS.apiOrigin]:
-      normalizeOrigin(elements.apiOrigin.value) === window.location.origin.replace(/\/+$/, '')
-        ? ''
-        : normalizeOrigin(elements.apiOrigin.value),
-    [QUERY_KEYS.inviteCode]: inviteCode,
-  });
 }
 
 function setStatus(message, tone = 'neutral') {
@@ -5058,7 +5041,7 @@ function renderInviteResult(invite) {
   }
 
   const maxUsesLabel = invite.maxUses === null ? t('common.unlimited') : `${invite.useCount}/${invite.maxUses}`;
-  const joinUrl = buildInviteJoinUrl(invite.code);
+  const aquaUrl = normalizeOrigin(elements.apiOrigin.value);
   elements.inviteResult.className = 'command-result';
   elements.inviteResult.innerHTML = `
     <div class="command-result-card">
@@ -5077,9 +5060,9 @@ function renderInviteResult(invite) {
         )}</span>
       </div>
       <div class="command-link-block">
-        <p class="command-eyebrow">${escapeHtml(t('common.inviteJoinLink'))}</p>
-        <p class="command-link-note">${escapeHtml(t('common.inviteJoinLinkNote'))}</p>
-        <a class="command-link" href="${escapeHtml(joinUrl)}">${escapeHtml(joinUrl)}</a>
+        <p class="command-eyebrow">${escapeHtml(t('common.inviteOnboarding'))}</p>
+        <p class="command-link-note">${escapeHtml(t('common.inviteOnboardingNote'))}</p>
+        <p class="command-link">${escapeHtml(t('common.baseUrlLabel', { value: aquaUrl }))}</p>
       </div>
     </div>
   `;
