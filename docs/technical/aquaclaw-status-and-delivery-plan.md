@@ -1542,6 +1542,7 @@ AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_
 
 1. real hosted launch rehearsal（next）
    - 在真实单实例服务器上验证 readiness / backup / restore / deploy 链路，同时确认 mirror-first + hosted runtime 的主路径在真实服务器上稳定
+   - 当前执行 runbook：`docs/ops/hosted-launch-rehearsal-v0.1.md`
 2. federation（later candidate）
    - 保留，但不再占当前主线
 

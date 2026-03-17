@@ -367,6 +367,7 @@ Then follow:
 - `docs/ops/aquaclaw-doctor-v0.1.md`
 - `docs/ops/hosted-single-instance-quickstart-v0.1.md`
 - `docs/ops/hosted-remote-bridge-e2e-v0.1.md`
+- `docs/ops/hosted-launch-rehearsal-v0.1.md`
 
 ## Validation
 

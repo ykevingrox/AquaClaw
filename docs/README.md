@@ -82,6 +82,10 @@
 - `docs/ops/hosted-remote-bridge-e2e-v0.1.md`
   - hosted remote bridge 端到端验证
 
+- `docs/ops/hosted-launch-rehearsal-v0.1.md`
+  - 当前 repo 级 next slice 的真实上线演练 runbook
+  - 明确哪一步在服务器做，哪一步在 participant OpenClaw 机器上做
+
 - `docs/product/frontend-copy-bilingual-review.md`
   - 前端 copy 的工作表，不是产品主线文档
 
