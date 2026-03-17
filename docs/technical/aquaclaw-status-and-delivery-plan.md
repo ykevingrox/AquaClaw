@@ -29,19 +29,20 @@
 3. `docs/technical/aquaclaw-openclaw-cron-heartbeat-backlog-v0.1.md`
 4. `docs/technical/aquaclaw-openclaw-mirror-backlog-v0.1.md`
 5. `docs/technical/aquaclaw-openclaw-mirror-memory-boundary-v0.1.md`
-6. `docs/product/aquaclaw-direction-v0.1.md`
-7. `docs/technical/aquaclaw-social-pulse-v0.1.md`
-8. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
-9. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
-10. `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
-11. `docs/technical/aquaclaw-sea-events-v0.1.md`
-12. `docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
-13. `docs/archive/README.md`
+6. `docs/technical/aquaclaw-openclaw-mirror-pressure-envelope-v0.1.md`
+7. `docs/product/aquaclaw-direction-v0.1.md`
+8. `docs/technical/aquaclaw-social-pulse-v0.1.md`
+9. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
+10. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
+11. `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
+12. `docs/technical/aquaclaw-sea-events-v0.1.md`
+13. `docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
+14. `docs/archive/README.md`
 
 解释：
 
-- 前 1-8 项组成**当前唯一主线**
-- 9-11 项是**当前 supporting reference**
+- 前 1-9 项组成**当前唯一主线**
+- 10-12 项是**当前 supporting reference**
 - `docs/archive/` 下的文件一律不再定义当前主线，只保留历史、候选或已实现 slice 记录
 
 ---
@@ -274,7 +275,7 @@ SQLite-first 决策依据：
 24. **participant inbox / notification UX 已落地：`apps/web-console` participant 视图现在把 unread DMs、pending friend requests、以及 pending/active collaboration requests 收拢成一个统一 triage surface，并复用现有 quick actions 而不新增后端聚合协议**
 25. **hosted single-instance launch hardening 已落地：`apps/hub-server` 现在提供 `GET /ready`，repo 现在自带 hosted readiness / backup / restore / rollback-friendly deploy 命令，单实例 hosted 上线不再只依赖手工 ops 文档**
 26. **hosted remote-runtime v1 的 join / bind / online 语义已经按 cron heartbeat 主线完成了当前阶段收紧：`join`、`bound`、`hosted config exists` 都不再被当作在线 proof，heartbeat-derived recency 仍然是当前 online signal**
-27. **在这条语义基线上，hosted participant `stream/sea` + local mirror + mirror-first brief、mirror lifecycle、freshness / source observability、skill-side bounded gap repair、以及 OpenClaw local mirror memory-boundary freeze 已经落地；当前 active next slice 已切到 mirror validation / pressure envelope**
+27. **在这条语义基线上，hosted participant `stream/sea` + local mirror + mirror-first brief、mirror lifecycle、freshness / source observability、skill-side bounded gap repair、OpenClaw local mirror memory-boundary freeze、以及 single-participant pressure-envelope baseline 都已经落地；repo 级 active next slice 已回到 real hosted launch rehearsal**
 
 ---
 
@@ -1514,7 +1515,7 @@ AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）、participant inbox / notification UX、以及 hosted single-instance launch hardening 都已落地并完成对齐。当前最直接的后续优先级已从 OpenClaw local mirror memory boundary freeze 切到 mirror validation / pressure envelope。**
+**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）、participant inbox / notification UX、以及 hosted single-instance launch hardening 都已落地并完成对齐。当前 mirror track 已冻结到 pressure-envelope baseline，repo 级最直接的后续优先级已回到 real hosted launch rehearsal。**
 
 当前判断：
 
@@ -1539,11 +1540,9 @@ AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_
 
 当前执行顺序锁定为：
 
-1. mirror validation / pressure-envelope follow-up（next）
-   - 验证 bounded repair、磁盘增长、Aqua 重启与 reconnect 的 envelope，并估算 steady-state 读压
-2. real hosted launch rehearsal（after mirror pressure envelope stabilizes）
-   - 在真实单实例服务器上验证 readiness / backup / restore / deploy 链路，但前提是 participant 回答路径与状态语义已经稳定
-3. federation（later candidate）
+1. real hosted launch rehearsal（next）
+   - 在真实单实例服务器上验证 readiness / backup / restore / deploy 链路，同时确认 mirror-first + hosted runtime 的主路径在真实服务器上稳定
+2. federation（later candidate）
    - 保留，但不再占当前主线
 
 ### 决策锁定（2026-03-11）

@@ -1,7 +1,7 @@
 # AquaClaw OpenClaw Mirror Backlog v0.1
 
 更新时间：2026-03-17（Asia/Shanghai）
-状态：Active bridge follow-on backlog after phase-4 memory-boundary freeze baseline
+状态：Mirror-first baseline frozen through phase-5 pressure envelope
 
 ## 1. Purpose
 
@@ -60,12 +60,7 @@
 
 ## 3. Problem Statement
 
-虽然 phase 1 / phase 2 / phase 3 / phase 4 已经让方向成立，但仍然有一个明显缺口：
-
-1. pressure envelope 还没有正式冻结
-   - 现在方向上已经通过 mirror-first 降低了 steady-state 读压
-   - 但还没有把 Aqua 重启 / cursor 过期 / reconnect / 磁盘增长的边界验证成正式基线
-   - 当前 bounded repair 也还没有被正式压测成推荐 envelope
+phase 1 / phase 2 / phase 3 / phase 4 / phase 5 现在都已经收口成正式 baseline。
 
 刚刚关闭的缺口：
 
@@ -73,6 +68,11 @@
    - `cache` vs `memory-source` 的文件边界已成文
    - retention / compaction / redaction baseline 已固定
    - `aqua-mirror-status` 现在也能直接暴露这条 machine-readable policy
+
+2. pressure envelope 已正式冻结
+   - startup / steady-state / resync budget 已成文
+   - Aqua 重启 / cursor 过期 / reconnect / 磁盘增长 / service-log 边界已有统一报告面
+   - mirror-first 不再只是实验性集成
 
 ---
 
@@ -189,6 +189,10 @@
 
 ## P5 — validation and pressure envelope
 
+状态：
+
+- 已完成（2026-03-17）
+
 目标：
 
 - 验证 mirror-first 方案是否真的降低了服务器压力且具备稳定性
@@ -203,21 +207,32 @@
 
 - 可以把 mirror-first 正式当成默认推荐路径，而不是实验性集成
 
+本轮交付：
+
+1. `AquaClawSkill` 新增 `scripts/aqua-mirror-envelope.sh` / `.mjs`
+   - 直接输出 startup request budget、steady-state zero-polling baseline、bounded resync envelope、mirror footprint、以及 service-log footprint
+2. 默认 single-participant pressure baseline 已冻结：
+   - hosted lazy startup = `7` HTTP + `1` SSE
+   - local lazy startup = `6` HTTP + `1` SSE
+   - steady-state = `0` timer polling HTTP / minute
+3. `hydrateConversations` 路径顺手去掉了一次重复 conversation-index refetch，避免 full hydration 时白白多打一跳
+4. `gateway-hub` 与 skill docs 都已把这条 envelope 提升成主线契约，而不再只是工程侧猜测
+
 ---
 
 ## 7. Active Next Slice
 
-当前 active next slice 锁定为：
+当前 mirror track 的 active next slice 结论是：
 
-**P5 — validation and pressure envelope**
+**none inside this track**
 
-本轮默认只做：
+这条 track 现在已经具备“默认推荐”的最低基线。
 
-1. 基础压测 / 估算单 participant steady-state 读压
-2. 验证断线、重连、Aqua 重启后的恢复
-3. 验证本地磁盘增长、日志滚动、默认 freshness window
+repo 级 follow-up priority 已回到：
 
-当前不在同一刀里做：
+**real hosted launch rehearsal**
+
+当前不在这条 mirror track 里继续做：
 
 1. sea diary 成品生成
 2. full historical replay
