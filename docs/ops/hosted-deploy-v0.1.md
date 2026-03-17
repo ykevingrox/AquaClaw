@@ -218,7 +218,7 @@ curl -i -X GET https://<your-domain>/api/v1/currents/current
 ```bash
 cd /opt/gateway-hub
 npm run ops:backup:hosted -- \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --backup-dir /var/backups/gateway-hub \
   --service gateway-hub
 ```
@@ -228,7 +228,7 @@ npm run ops:backup:hosted -- \
 ```bash
 cd /opt/gateway-hub
 npm run ops:restore:hosted -- \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --snapshot /var/backups/gateway-hub/<snapshot>.sqlite \
   --service gateway-hub \
   --owner gateway-hub \
@@ -248,7 +248,7 @@ npm run ops:restore:hosted -- \
 cd /opt/gateway-hub
 npm run ops:deploy:hosted -- \
   --repo-root /opt/gateway-hub \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --service gateway-hub \
   --backup-dir /var/backups/gateway-hub \
   --base-url https://<your-domain>

@@ -12,8 +12,8 @@
 ```bash
 cd /opt/gateway-hub
 npm run ops:init:hosted -- --domain aqua.example.com
-npm run ops:bootstrap:hosted -- --base-url https://aqua.example.com --env-file /etc/gateway-hub/gateway-hub.env
-npm run ops:doctor -- --mode hosted --env-file /etc/gateway-hub/gateway-hub.env --base-url https://aqua.example.com
+npm run ops:bootstrap:hosted -- --base-url https://aqua.example.com --config-env-file /etc/gateway-hub/gateway-hub.env
+npm run ops:doctor -- --mode hosted --config-env-file /etc/gateway-hub/gateway-hub.env --base-url https://aqua.example.com
 ```
 
 这条路径会把“渲染 bundle / 安装 env + systemd + Caddy / 启动服务 / 跑 repo 内置 hosted check”收成更少的命令；详细行为、参数、以及安全边界见：
@@ -21,6 +21,22 @@ npm run ops:doctor -- --mode hosted --env-file /etc/gateway-hub/gateway-hub.env 
 - `docs/ops/hosted-init-script-v0.1.md`
 - `docs/ops/hosted-owner-bootstrap-script-v0.1.md`
 - `docs/ops/aquaclaw-doctor-v0.1.md`
+
+如果这台机器还要继续承载别的网站，不要直接把这条路径理解成“覆盖现有 Caddy 配置”。
+shared-host 情况下，优先改走：
+
+```bash
+cd /opt/gateway-hub
+npm run ops:init:hosted -- --domain aqua.example.com --skip-caddy-install --skip-check
+```
+
+然后手工把 `./.deploy/hosted-single-instance/Caddyfile` 里的 AquaClaw 站点配置合并进你现有的 Caddy 布局，再执行：
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+npm run ops:check:hosted -- --base-url https://aqua.example.com
+```
 
 ## 1. 推荐配置
 
@@ -199,6 +215,7 @@ sudo install -m 0644 ./.deploy/hosted-single-instance/Caddyfile /etc/caddy/Caddy
 ```
 
 如果 `/etc/caddy/Caddyfile` 已经有别的网站，不要直接覆盖，把生成的站点块合并进去。
+当前 repo 生成的是完整站点文件，不是自动 include 片段；shared-host 上应由操作者把等价站点块并入现有 Caddy 结构，而不是盲目 `--overwrite-caddyfile`。
 
 ---
 
@@ -401,7 +418,7 @@ npm run aqua:bridge:hosted
 ```bash
 cd /opt/gateway-hub
 npm run ops:backup:hosted -- \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --backup-dir /var/backups/gateway-hub \
   --service gateway-hub
 ```
@@ -413,7 +430,7 @@ npm run ops:backup:hosted -- \
 ```bash
 cd /opt/gateway-hub
 npm run ops:restore:hosted -- \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --snapshot /var/backups/gateway-hub/<snapshot>.sqlite \
   --service gateway-hub \
   --owner gateway-hub \

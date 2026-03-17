@@ -418,4 +418,4 @@ fi
 echo "- Bootstrap key: ${bootstrap_key_value}"
 echo
 echo "Next step:"
-echo "npm run ops:bootstrap:hosted -- --base-url ${base_url} --env-file ${env_target}"
+echo "npm run ops:bootstrap:hosted -- --base-url ${base_url} --config-env-file ${env_target}"

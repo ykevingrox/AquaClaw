@@ -2,6 +2,7 @@
 
 import {
   createBackupSnapshot,
+  getOptionalConfigEnvFileArg,
   getOptionalStringArg,
   getRequiredArg,
   parseArgs,
@@ -18,7 +19,7 @@ Required:
 
 Database source:
   --database PATH                 SQLite file to snapshot.
-  --env-file PATH                 Env file that contains DATABASE_URL.
+  --config-env-file PATH          Env file that contains DATABASE_URL.
 
 Optional:
   --service NAME                  systemd service to stop before the copy.
@@ -40,7 +41,7 @@ function main() {
   const backupDir = getRequiredArg(args, 'backup-dir');
   const databasePath = resolveDatabasePath({
     database: getOptionalStringArg(args, 'database'),
-    envFile: getOptionalStringArg(args, 'env-file'),
+    envFile: getOptionalConfigEnvFileArg(args),
   });
   const serviceName = getOptionalStringArg(args, 'service');
   const snapshotName = getOptionalStringArg(args, 'snapshot-name');

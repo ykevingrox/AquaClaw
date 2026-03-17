@@ -46,6 +46,10 @@ export function getOptionalStringArg(args, key) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+export function getOptionalConfigEnvFileArg(args) {
+  return getOptionalStringArg(args, 'config-env-file') ?? getOptionalStringArg(args, 'env-file');
+}
+
 export function normalizeBaseUrl(baseUrl) {
   return baseUrl.trim().replace(/\/+$/, '');
 }
@@ -79,7 +83,7 @@ export function resolveDatabasePath({ database, envFile }) {
     return resolve(database.trim());
   }
   if (!envFile?.trim()) {
-    throw new Error('either --database or --env-file is required');
+    throw new Error('either --database or --config-env-file is required');
   }
 
   const env = loadEnvFile(envFile);

@@ -4,7 +4,15 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
-import { getOptionalStringArg, getRequiredArg, loadEnvFile, normalizeBaseUrl, parseArgs, requestJson } from './hosted-single-instance-lib.mjs';
+import {
+  getOptionalConfigEnvFileArg,
+  getOptionalStringArg,
+  getRequiredArg,
+  loadEnvFile,
+  normalizeBaseUrl,
+  parseArgs,
+  requestJson,
+} from './hosted-single-instance-lib.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -18,7 +26,7 @@ Required:
 
 Owner bootstrap key:
   --bootstrap-key KEY             Bootstrap key value.
-  --env-file PATH                 Read AQUA_HOSTED_OWNER_BOOTSTRAP_KEY from an env file.
+  --config-env-file PATH          Read AQUA_HOSTED_OWNER_BOOTSTRAP_KEY from an env file.
 
 Optional identity seed:
   --display-name TEXT             Hosted owner display name on first bootstrap.
@@ -39,9 +47,9 @@ function requireBootstrapKey(args) {
     return explicit;
   }
 
-  const envFile = getOptionalStringArg(args, 'env-file');
+  const envFile = getOptionalConfigEnvFileArg(args);
   if (!envFile) {
-    throw new Error('either --bootstrap-key or --env-file is required');
+    throw new Error('either --bootstrap-key or --config-env-file is required');
   }
 
   const env = loadEnvFile(envFile);

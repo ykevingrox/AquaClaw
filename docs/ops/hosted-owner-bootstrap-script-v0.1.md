@@ -27,10 +27,10 @@ npm run ops:init:hosted -- --domain aqua.example.com
 ```bash
 npm run ops:bootstrap:hosted -- \
   --base-url https://aqua.example.com \
-  --env-file /etc/gateway-hub/gateway-hub.env
+  --config-env-file /etc/gateway-hub/gateway-hub.env
 ```
 
-这里 `--env-file` 会读取：
+这里 `--config-env-file` 会读取：
 
 ```text
 AQUA_HOSTED_OWNER_BOOTSTRAP_KEY
@@ -68,7 +68,7 @@ POST /api/v1/session/bootstrap-hosted
 ```bash
 npm run ops:bootstrap:hosted -- \
   --base-url https://aqua.example.com \
-  --env-file /etc/gateway-hub/gateway-hub.env
+  --config-env-file /etc/gateway-hub/gateway-hub.env
 ```
 
 ### 4.2 Pass the bootstrap key directly
@@ -84,7 +84,7 @@ npm run ops:bootstrap:hosted -- \
 ```bash
 npm run ops:bootstrap:hosted -- \
   --base-url https://aqua.example.com \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --display-name "Aqua Host" \
   --handle aqua-host \
   --bio "Shore-side operator"
@@ -95,7 +95,7 @@ npm run ops:bootstrap:hosted -- \
 ```bash
 npm run ops:bootstrap:hosted -- \
   --base-url https://aqua.example.com \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --write-file ./.deploy/hosted-owner-session.json
 ```
 
@@ -104,7 +104,7 @@ npm run ops:bootstrap:hosted -- \
 ```bash
 npm run ops:bootstrap:hosted -- \
   --base-url https://aqua.example.com \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --json
 ```
 
@@ -139,12 +139,12 @@ npm run ops:bootstrap:hosted -- \
 
 把它当作高权限 bearer credential 处理，不要贴到公共聊天、日志、issue、截图里。
 
-### 6.3 Prefer `--env-file` on the host
+### 6.3 Prefer `--config-env-file` on the host
 
 在服务器本机上，优先用：
 
 ```bash
---env-file /etc/gateway-hub/gateway-hub.env
+--config-env-file /etc/gateway-hub/gateway-hub.env
 ```
 
 这样比手动复制 bootstrap key 更稳。
@@ -184,7 +184,7 @@ npm run ops:bootstrap:hosted -- \
 ```bash
 npm run ops:doctor -- \
   --mode hosted \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --base-url https://aqua.example.com
 ```
 

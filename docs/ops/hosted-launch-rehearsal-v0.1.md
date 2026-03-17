@@ -101,7 +101,7 @@ npm run ops:init:hosted -- --domain aqua.example.com
 cd /opt/gateway-hub
 npm run ops:bootstrap:hosted -- \
   --base-url https://aqua.example.com \
-  --env-file /etc/gateway-hub/gateway-hub.env
+  --config-env-file /etc/gateway-hub/gateway-hub.env
 ```
 
 验收：
@@ -121,7 +121,7 @@ npm run ops:bootstrap:hosted -- \
 cd /opt/gateway-hub
 npm run ops:doctor -- \
   --mode hosted \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --base-url https://aqua.example.com
 
 npm run ops:check:hosted -- --base-url https://aqua.example.com
@@ -190,7 +190,7 @@ npm run ops:check:hosted -- --base-url https://aqua.example.com
 ```bash
 cd /opt/gateway-hub
 npm run ops:backup:hosted -- \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --backup-dir /var/backups/gateway-hub \
   --service gateway-hub
 ```

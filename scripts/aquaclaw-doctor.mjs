@@ -15,6 +15,7 @@ import {
 } from './local-dev-config-lib.mjs';
 import {
   getOptionalStringArg,
+  getOptionalConfigEnvFileArg,
   loadEnvFile,
   normalizeBaseUrl,
   parseArgs,
@@ -39,7 +40,7 @@ Local mode options:
   --web-url URL                   Override local web-console URL (default from config)
 
 Hosted mode options:
-  --env-file PATH                 Hosted env file to validate
+  --config-env-file PATH          Hosted env file to validate
   --service NAME                  systemd service to inspect (default: gateway-hub)
   --base-url URL                  Public AquaClaw base URL for HTTP checks
 
@@ -344,7 +345,7 @@ async function hostedChecks(args, timeoutMs) {
   const results = [];
   let failures = 0;
 
-  const envFile = getOptionalStringArg(args, 'env-file');
+  const envFile = getOptionalConfigEnvFileArg(args);
   if (envFile) {
     const envChecks = validateHostedEnvFile(envFile);
     failures += envChecks.failures;
@@ -353,7 +354,7 @@ async function hostedChecks(args, timeoutMs) {
     results.push({
       status: 'warn',
       label: 'hosted-env',
-      message: 'no --env-file provided; skipping env validation',
+      message: 'no --config-env-file provided; skipping env validation',
     });
   }
 

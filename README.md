@@ -336,8 +336,8 @@ Fastest fresh-host path:
 
 ```bash
 npm run ops:init:hosted -- --domain aqua.example.com
-npm run ops:bootstrap:hosted -- --base-url https://aqua.example.com --env-file /etc/gateway-hub/gateway-hub.env
-npm run ops:doctor -- --mode hosted --env-file /etc/gateway-hub/gateway-hub.env --base-url https://aqua.example.com
+npm run ops:bootstrap:hosted -- --base-url https://aqua.example.com --config-env-file /etc/gateway-hub/gateway-hub.env
+npm run ops:doctor -- --mode hosted --config-env-file /etc/gateway-hub/gateway-hub.env --base-url https://aqua.example.com
 ```
 
 `ops:init:hosted` validates the repo, renders the hosted bundle, installs env/systemd/Caddy files, starts services, and runs the repo-owned hosted checks. It targets a fresh single-purpose host and refuses to silently overwrite a non-default `/etc/caddy/Caddyfile` unless you opt in with `--overwrite-caddyfile`.
@@ -352,12 +352,12 @@ Hosted single-instance ops are now first-class repo commands:
 
 ```bash
 npm run ops:init:hosted -- --domain aqua.example.com
-npm run ops:bootstrap:hosted -- --base-url https://aqua.example.com --env-file /etc/gateway-hub/gateway-hub.env
-npm run ops:doctor -- --mode hosted --env-file /etc/gateway-hub/gateway-hub.env --base-url https://aqua.example.com
+npm run ops:bootstrap:hosted -- --base-url https://aqua.example.com --config-env-file /etc/gateway-hub/gateway-hub.env
+npm run ops:doctor -- --mode hosted --config-env-file /etc/gateway-hub/gateway-hub.env --base-url https://aqua.example.com
 npm run ops:check:hosted -- --base-url https://aqua.example.com
-npm run ops:backup:hosted -- --env-file /etc/gateway-hub/gateway-hub.env --backup-dir /var/backups/gateway-hub --service gateway-hub
-npm run ops:restore:hosted -- --env-file /etc/gateway-hub/gateway-hub.env --snapshot /var/backups/gateway-hub/<snapshot>.sqlite --service gateway-hub --owner gateway-hub --group gateway-hub --base-url https://aqua.example.com
-npm run ops:deploy:hosted -- --repo-root /opt/gateway-hub --env-file /etc/gateway-hub/gateway-hub.env --service gateway-hub --backup-dir /var/backups/gateway-hub --base-url https://aqua.example.com
+npm run ops:backup:hosted -- --config-env-file /etc/gateway-hub/gateway-hub.env --backup-dir /var/backups/gateway-hub --service gateway-hub
+npm run ops:restore:hosted -- --config-env-file /etc/gateway-hub/gateway-hub.env --snapshot /var/backups/gateway-hub/<snapshot>.sqlite --service gateway-hub --owner gateway-hub --group gateway-hub --base-url https://aqua.example.com
+npm run ops:deploy:hosted -- --repo-root /opt/gateway-hub --config-env-file /etc/gateway-hub/gateway-hub.env --service gateway-hub --backup-dir /var/backups/gateway-hub --base-url https://aqua.example.com
 ```
 
 Then follow:

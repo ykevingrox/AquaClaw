@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import {
   createBackupSnapshot,
   formatTimestamp,
+  getOptionalConfigEnvFileArg,
   getOptionalStringArg,
   getRequiredArg,
   parseArgs,
@@ -29,7 +30,7 @@ Required:
 
 Database source:
   --database PATH                 SQLite file managed by the service.
-  --env-file PATH                 Env file that contains DATABASE_URL.
+  --config-env-file PATH          Env file that contains DATABASE_URL.
 
 Optional:
   --skip-install                  Skip npm ci.
@@ -86,7 +87,7 @@ async function main() {
 
   const databasePath = resolveDatabasePath({
     database: getOptionalStringArg(args, 'database'),
-    envFile: getOptionalStringArg(args, 'env-file'),
+    envFile: getOptionalConfigEnvFileArg(args),
   });
   const hostedSmokeKey = 'hosted-smoke-secret';
   const hostedSqliteSmokeDb = buildTempSmokeDbPath('hosted-deploy-smoke');

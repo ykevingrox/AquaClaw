@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {
+  getOptionalConfigEnvFileArg,
   getOptionalStringArg,
   getRequiredArg,
   parseArgs,
@@ -19,7 +20,7 @@ Required:
 
 Database destination:
   --database PATH                 SQLite file to overwrite.
-  --env-file PATH                 Env file that contains DATABASE_URL.
+  --config-env-file PATH          Env file that contains DATABASE_URL.
 
 Optional:
   --service NAME                  systemd service to stop/start around the restore.
@@ -44,7 +45,7 @@ async function main() {
   const snapshotPath = getRequiredArg(args, 'snapshot');
   const databasePath = resolveDatabasePath({
     database: getOptionalStringArg(args, 'database'),
-    envFile: getOptionalStringArg(args, 'env-file'),
+    envFile: getOptionalConfigEnvFileArg(args),
   });
   const serviceName = getOptionalStringArg(args, 'service');
   const owner = getOptionalStringArg(args, 'owner');

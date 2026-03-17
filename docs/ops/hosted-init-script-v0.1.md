@@ -15,6 +15,9 @@
 
 这个脚本的目标不是替代所有高级运维，而是收口“第一次把单实例 AquaClaw 正确跑起来”的主路径。
 
+这条主路径是**专用 host 优先**的。
+如果同一台机器还要承载别的网站或 API，不要把它当成“无脑一键安装”脚本来理解。
+
 ---
 
 ## 2. Intended Host Shape
@@ -38,6 +41,14 @@
 - 多实例 / 多节点 / 负载均衡
 - Postgres 或 federation 路径
 
+如果你的机器属于“已有别的站点也要继续跑”的 shared-host 形态，推荐做法是：
+
+1. 仍然使用 repo 生成 env / systemd / Caddy 站点配置
+2. 不让脚本直接覆盖 `/etc/caddy/Caddyfile`
+3. 由你手工把生成出来的 AquaClaw 站点块合并进现有 Caddy 配置
+4. 手工 `caddy validate` + `systemctl reload caddy`
+5. 最后再跑 `npm run ops:check:hosted`
+
 ---
 
 ## 3. Fastest Path
@@ -52,7 +63,7 @@ npm run ops:init:hosted -- --domain aqua.example.com
 ```bash
 npm run ops:bootstrap:hosted -- \
   --base-url https://aqua.example.com \
-  --env-file /etc/gateway-hub/gateway-hub.env
+  --config-env-file /etc/gateway-hub/gateway-hub.env
 ```
 
 然后用 doctor 再检查一遍：
@@ -60,7 +71,7 @@ npm run ops:bootstrap:hosted -- \
 ```bash
 npm run ops:doctor -- \
   --mode hosted \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --base-url https://aqua.example.com
 ```
 
@@ -162,6 +173,37 @@ npm run ops:init:hosted -- \
   --skip-check
 ```
 
+这是当前最推荐的 shared-host 路径，也就是：
+
+- app 侧仍由脚本安装
+- `/etc/gateway-hub/gateway-hub.env` 与 `gateway-hub.service` 仍由脚本管理
+- 但 `/etc/caddy/Caddyfile` 由你自己合并和 reload
+
+建议顺序：
+
+```bash
+cd /opt/gateway-hub
+
+npm run ops:init:hosted -- \
+  --domain aqua.example.com \
+  --bootstrap-key your-secret-bootstrap-key \
+  --skip-caddy-install \
+  --skip-check
+
+sed -n '1,240p' ./.deploy/hosted-single-instance/Caddyfile
+sudo editor /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+
+npm run ops:check:hosted -- --base-url https://aqua.example.com
+```
+
+注意：
+
+- `./.deploy/hosted-single-instance/Caddyfile` 当前是**完整站点文件**，不是自动可插拔 include 片段
+- 如果你的 Caddy 已经有自己的 include / sites.d 体系，可以把里面对应的站点块改写成你自己的结构
+- 不要直接把 repo 生成文件整份覆盖到一个已经承载别站的 `/etc/caddy/Caddyfile`
+
 ### 6.5 Force overwrite of an existing Caddyfile
 
 ```bash
@@ -240,8 +282,8 @@ npm run ops:init:hosted -- \
 
 初始化完成后，推荐顺序：
 
-1. `npm run ops:bootstrap:hosted -- --base-url ... --env-file ...`
-2. `npm run ops:doctor -- --mode hosted --env-file ... --base-url ...`
+1. `npm run ops:bootstrap:hosted -- --base-url ... --config-env-file ...`
+2. `npm run ops:doctor -- --mode hosted --config-env-file ... --base-url ...`
 3. 之后日常运维再使用：
    - `ops:check:hosted`
    - `ops:backup:hosted`
@@ -258,6 +300,11 @@ npm run ops:init:hosted -- \
 - 你不想让脚本碰 `/etc/caddy/Caddyfile`
 - 你有自己的 systemd/Caddy 模板体系
 - 你要做非标准目录布局
+
+对于这种 shared-host 情况，更准确的理解不是“这个脚本不能用”，而是：
+
+- 用它来收敛 app / env / service 侧安装
+- 不用它接管你整台机器的 Caddy 主配置
 
 这时请改看：
 

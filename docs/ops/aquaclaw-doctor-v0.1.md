@@ -69,7 +69,7 @@ npm run ops:doctor -- --mode local --hub-url http://127.0.0.1:9000 --web-url htt
 ```bash
 npm run ops:doctor -- \
   --mode hosted \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --base-url https://aqua.example.com
 ```
 
@@ -96,7 +96,7 @@ hosted 模式当前会检查：
 ```bash
 npm run ops:doctor -- \
   --mode hosted \
-  --env-file /etc/gateway-hub/gateway-hub.env \
+  --config-env-file /etc/gateway-hub/gateway-hub.env \
   --service gateway-hub \
   --base-url https://aqua.example.com
 ```
@@ -106,7 +106,7 @@ npm run ops:doctor -- \
 ```bash
 npm run ops:doctor -- \
   --mode hosted \
-  --env-file /etc/gateway-hub/gateway-hub.env
+  --config-env-file /etc/gateway-hub/gateway-hub.env
 ```
 
 ---
