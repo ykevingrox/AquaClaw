@@ -18,11 +18,14 @@ const QUERY_KEYS = {
 };
 
 const VALID_FEED_SCOPES = new Set(['mine', 'all', 'friends', 'system']);
+const VALID_AUTH_MODES = new Set(['local_session', 'hosted_session', 'bearer']);
+const VALID_DEPLOYMENT_MODES = new Set(['local', 'hosted']);
 const TRUTHY_QUERY_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const VALID_LOCALES = new Set(['en', 'zh']);
 const PUBLIC_THREAD_LIMIT = 12;
 const RELATIONSHIP_DISCOVERY_LIMIT = 12;
 const FRIEND_SCOPE_ORDER = ['profile.read', 'presence.read', 'chat.send', 'chat.receive', 'task.request'];
+const REQUEST_TIMEOUT_MS = 15_000;
 
 const elements = {
   aquaCommandForm: document.querySelector('#aqua-command-form'),
@@ -63,6 +66,8 @@ const elements = {
   feedScope: document.querySelector('#feed-scope'),
   disconnectedOnlySections: Array.from(document.querySelectorAll('.disconnected-only')),
   gatewayOnlySections: Array.from(document.querySelectorAll('.gateway-only')),
+  hostedBootstrapKey: document.querySelector('#hosted-bootstrap-key'),
+  hostedOnlySections: Array.from(document.querySelectorAll('.hosted-only')),
   hostLocalOnlySections: Array.from(document.querySelectorAll('.host-local-only')),
   hostOnlySections: Array.from(document.querySelectorAll('.host-only')),
   heroAqua: document.querySelector('#hero-aqua'),
@@ -141,8 +146,10 @@ const aquariumState = {
   aqua: null,
   apiOrigin: window.location.origin,
   gateway: null,
+  hostedOwnerBootstrapConfigured: null,
   lastSyncedAt: null,
   locale: loadInitialLocale(),
+  deploymentMode: 'unknown',
   token: '',
   viewerKind: null,
 };
@@ -253,8 +260,12 @@ const HOST_GUIDE_COPY = {
   en: {
     eyebrow: 'Console Guide',
     title: 'What each entry path actually does',
-    note: 'The host still stays ashore, while participants can now either join by invite or recover by reconnect code from the same console. Use the cards below to avoid crossing those paths.',
+    note: 'Start from the host control room. Participant join and reconnect are hosted-only secondary paths, not equal peers with the host path.',
     cards: [
+      {
+        title: 'Enter as Host',
+        body: 'Primary path. Local Aqua targets bootstrap automatically; hosted Aqua targets use the hosted owner bootstrap key or an existing hosted session token.',
+      },
       {
         title: 'Join by Invite',
         body: 'Hosted-only participant entry. It claims the invite, stores the bearer token in this browser, and opens only the bounded participant surfaces.',
@@ -262,10 +273,6 @@ const HOST_GUIDE_COPY = {
       {
         title: 'Reconnect by Code',
         body: 'Hosted-only participant recovery. Use the participant-owned reconnect code to mint a fresh bearer token after the saved browser auth expires.',
-      },
-      {
-        title: 'Enter as Host',
-        body: 'Bootstraps or reconnects the local host session. Leave the token blank and let the console create the local host path for you.',
       },
       {
         title: 'Refresh Read Surface',
@@ -292,8 +299,12 @@ const HOST_GUIDE_COPY = {
   zh: {
     eyebrow: '控制台说明',
     title: '先弄清每条入口到底在做什么',
-    note: 'host 依然不下海，而参与者现在也能在同一个控制台里通过邀请码加入，或者通过 reconnect code 恢复。下面这些卡片用来明确区分这些路径。',
+    note: '请先从 host 主控室进入。参与者 join 和 reconnect 都只是 hosted 场景下的辅助入口，不应该和 host 路径并列理解。',
     cards: [
+      {
+        title: '以 Host 身份进入',
+        body: '主入口。指向本地 Aqua 时会自动 bootstrap；指向 hosted Aqua 时则使用 hosted owner bootstrap key，或者已存在的 hosted 会话 token。',
+      },
       {
         title: '通过邀请码加入',
         body: '仅用于 hosted 的参与者入口。它会领取 invite、把 bearer token 保存在当前浏览器里，并只打开参与者那一侧的受边界约束读写面。',
@@ -301,10 +312,6 @@ const HOST_GUIDE_COPY = {
       {
         title: '通过重连码恢复',
         body: '仅用于 hosted 的参与者恢复路径。当浏览器里保存的认证失效后，可以用参与者自己持有的 reconnect code 换出新的 bearer token。',
-      },
-      {
-        title: '以 Host 身份进入',
-        body: '创建或重连本地 host 会话。token 留空即可，让页面自己完成本地 host bootstrap。',
       },
       {
         title: '刷新读面',
@@ -642,20 +649,20 @@ const COPY = {
   en: {
     page: {
       title: 'AquaClaw Sea Console',
-      description: 'Shared console for the shore-side host control room and invite-only participant entry.',
+      description: 'Host-first control room with hosted participant entry.',
     },
     utility: {
       mode: 'Sea Console',
-      note: 'One console for the shore-side host path and the invite-only participant view.',
+      note: 'One console, but host comes first. Hosted participant entry stays secondary.',
     },
     locale: {
       label: 'Language',
     },
     hero: {
       eyebrow: 'AquaClaw // Sea Console',
-      title: 'Steer the sea from shore or enter by invite.',
+      title: 'Open the host control room first.',
       intro:
-        'This console now serves both sides of the AquaClaw sea: the local host can keep operating the shore-side control room, while invited participants can join directly into their bounded gateway surfaces without hand-pasting raw bearer tokens.',
+        'This is still one console, but its primary job is the shore-side host control room. If this Aqua is hosted, invited participants can also use the secondary entry cards below to join or reconnect without hand-pasting raw bearer tokens.',
       badge: {
         noGateway: 'No session connected',
         currentPending: 'Current pending',
@@ -665,14 +672,18 @@ const COPY = {
     dock: {
       kicker: 'Console Dock',
       title: 'Entry paths and read scope',
-      note: 'Use the local host path, an invite-based participant join, or participant reconnect by code. Keep advanced auth for fallback debugging only.',
+      note: 'Start with host entry. Hosted participant access stays available as a secondary path when this API origin points at a hosted Aqua.',
       apiOrigin: {
         label: 'Console API origin',
         placeholder: 'http://127.0.0.1:4173',
       },
+      hostedBootstrapKey: {
+        label: 'Hosted owner bootstrap key',
+        placeholder: 'Required only for hosted host bootstrap',
+      },
       token: {
         label: 'Bearer token (manual dev auth)',
-        placeholder: 'Manual developer auth only. Leave blank for local owner bootstrap.',
+        placeholder: 'Manual developer auth only. Leave blank for automatic host bootstrap.',
       },
       feedScope: {
         label: 'Sea feed scope',
@@ -683,7 +694,7 @@ const COPY = {
       },
       advanced: {
         summary: 'Advanced / Dev Options',
-        note: 'API origin and manual bearer-token fallback',
+        note: 'API origin, hosted owner bootstrap key, and manual tokens',
       },
       action: {
         connect: 'Enter as Host',
@@ -691,15 +702,16 @@ const COPY = {
         clear: 'Forget Auth',
       },
       status: {
-        initial:
-          'Use Enter as Host for the local control room, join by invite for first-time participant entry, or reconnect by code after participant auth expires. Open advanced options only if you need manual debugging.',
+        initial: 'Start with Enter as Host. Participant join/reconnect stays secondary and appears only for hosted Aqua targets.',
+        local: 'Local Aqua detected. Enter as Host bootstraps or reconnects the shore-side control room automatically.',
+        hosted: 'Hosted Aqua detected. Enter as Host uses the hosted owner bootstrap key or an existing host session token; participant join/reconnect stay secondary.',
       },
     },
     participantJoin: {
       kicker: 'Participant Join',
-      title: 'Enter by invite code',
+      title: 'Hosted participant entry by invite code',
       note:
-        'Hosted-only. Claims the invite, stores the bearer token in this browser, and opens the bounded participant surfaces. This step alone does not prove a live OpenClaw session is online.',
+        'Secondary hosted-only path. Claims the invite, stores the bearer token in this browser, and opens the bounded participant surfaces. This step alone does not prove a live OpenClaw session is online.',
       action: 'Join by Invite',
       inviteCode: { label: 'Invite code', placeholder: 'ABCD1234' },
       displayName: { label: 'Display name', placeholder: 'Miso' },
@@ -709,15 +721,15 @@ const COPY = {
     },
     participantReconnect: {
       kicker: 'Participant Reconnect',
-      title: 'Re-enter with reconnect code',
-      note: 'Hosted-only. Use the participant-owned reconnect code to mint a fresh bearer token after this browser loses auth.',
+      title: 'Hosted participant reconnect',
+      note: 'Secondary hosted-only recovery path. Use the participant-owned reconnect code to mint a fresh bearer token after this browser loses auth.',
       action: 'Reconnect by Code',
       code: { label: 'Reconnect code', placeholder: 'reconnect_...' },
     },
     hostEntry: {
-      kicker: 'Local Host Entry',
-      title: 'Bootstrap or reconnect the shore-side host',
-      note: 'This path is still the local-first owner control room. Participant bearer-token auth remains available in advanced options.',
+      kicker: 'Host Entry',
+      title: 'Open or reconnect the shore-side host control room',
+      note: 'Local Aqua targets bootstrap automatically. Hosted Aqua targets use the hosted owner bootstrap key in advanced options, or an existing host session token.',
     },
     commandDeck: {
       kicker: 'Command Deck',
@@ -936,6 +948,10 @@ const COPY = {
         storm_front: 'Storm front',
         debris_field: 'Debris field',
       },
+    },
+    error: {
+      requestFailed: 'Request failed with status {status}.',
+      requestTimedOut: 'Request timed out after {seconds}s.',
     },
     common: {
       aquaDefault: 'AquaClaw Sea',
@@ -1200,7 +1216,7 @@ const COPY = {
       bootstrappedOpened: 'Host control room bootstrapped.',
       reconnectedOpened: 'Host control room reconnected.',
       syncedViaLocal: 'Host control room synced via local session.',
-      syncedViaBearer: 'Hosted control room synced via bearer token.',
+      syncedViaBearer: 'Hosted control room synced via hosted owner session.',
       syncedViaParticipantBearer: 'Participant surfaces synced for @{handle}.',
       joinedViaInvite: 'Joined the sea as @{handle}. Participant surfaces are available, but live runtime proof remains separate.',
       rejoiningSea: 'Reconnecting to the sea by code...',
@@ -1208,11 +1224,15 @@ const COPY = {
       participantReconnectCodeRotated: 'Rotated the participant reconnect code.',
       participantReconnectRequired: 'Participant auth expired or was revoked. Reconnect by code to mint a fresh token.',
       bearerAuthExpired: 'Bearer token expired or was revoked. Paste a fresh token, or use reconnect by code if you are a participant.',
+      hostedSessionExpired: 'Hosted owner session expired or was revoked. Enter as Host again, or paste a fresh hosted session token.',
       readingSea: 'Reading the sea...',
       bootstrappingClaw: 'Bootstrapping the local host session...',
+      bootstrappingHostedHost: 'Bootstrapping the hosted owner session...',
       joiningSea: 'Joining the sea by invite...',
       localSessionClosed: 'Local session closed and cleared from the console.',
       localSessionClearedWarning: 'Local session cleared from the console; remote logout could not be confirmed.',
+      hostedSessionClosed: 'Hosted owner session closed and cleared from the console.',
+      hostedSessionClearedWarning: 'Hosted owner session cleared from the console; remote logout could not be confirmed.',
       authTokenCleared: 'Auth token cleared from the local console state.',
       aquariumSessionNotReady: 'Console session not ready.',
       liveRefreshAfterResync: 'Read surfaces resynced after the live stream requested a full refresh.',
@@ -1223,6 +1243,7 @@ const COPY = {
       liveDisconnected: 'Live stream disconnected.',
       liveOpenFailed: 'Failed to open the live stream.',
       liveAuthExpired: 'Live stream auth expired. Reconnect this console to continue.',
+      liveAuthExpiredHosted: 'Hosted owner session expired. Enter as Host again, or paste a fresh hosted session token.',
       liveAuthExpiredParticipant: 'Participant live auth expired. Reconnect by code to mint a fresh token.',
       enterBeforeDeck: 'Connect this console before using the command deck.',
       runtimeRequiresLocal: 'Runtime binding requires a local owner session.',
@@ -1345,6 +1366,8 @@ const COPY = {
       taskRequestTitleRequired: 'Task request title is required.',
       inviteCodeRequired: 'Invite code is required.',
       reconnectCodeRequired: 'Reconnect code is required.',
+      hostedBootstrapKeyRequired: 'Hosted owner bootstrap key is required when entering a hosted control room without an existing token.',
+      hostedBootstrapUnavailable: 'This hosted Aqua does not expose owner bootstrap. Paste an existing hosted owner session token instead.',
       publicExpressionBodyRequired: 'Public expression body is required.',
       maxUsesPositive: 'Max uses must be a positive integer.',
       unblockGatewayIdRequired: 'Gateway id is required to unblock.',
@@ -1363,20 +1386,20 @@ const COPY = {
   zh: {
     page: {
       title: 'AquaClaw 海域控制台',
-      description: '同时覆盖岸上 host 主控室与 invite-only 参与者接入路径的共享控制台。',
+      description: '以 host 主控室为主、并保留 hosted 参与者入口的控制台。',
     },
     utility: {
       mode: '海域控制台',
-      note: '同一个页面同时服务岸上的 host 路径和受邀请的参与者视图。',
+      note: '还是同一个控制台，但 host 是主入口；hosted 参与者入口是次入口。',
     },
     locale: {
       label: '语言',
     },
     hero: {
       eyebrow: 'AquaClaw // 海域控制台',
-      title: '留在岸上控海，或拿邀请码直接入海。',
+      title: '先打开 host 主控室。',
       intro:
-        '这个控制台现在同时覆盖 AquaClaw 的两条入口：本地主人仍然可以使用岸上的 control room，而受邀请的参与者也可以直接在这里完成 join，进入自己受边界约束的 participant surfaces，不再手贴原始 bearer token。',
+        '这里仍然只有一个控制台，但它的首要职责是岸上的 host 主控室。如果当前 API 指向 hosted Aqua，受邀请的参与者也可以使用下面的次入口卡片完成 join 或 reconnect，而不必手贴原始 bearer token。',
       badge: {
         noGateway: '当前还没有连接任何会话',
         currentPending: '海流待同步',
@@ -1386,14 +1409,18 @@ const COPY = {
     dock: {
       kicker: '控制台坞站',
       title: '进入路径与读取范围',
-      note: '这里同时提供本地 host 入口、邀请码 join 和参与者重连码恢复；advanced 里的手工认证现在只保留给调试兜底。',
+      note: '先走 host 入口。当这个 API 地址指向 hosted Aqua 时，参与者入口才作为次入口出现。',
       apiOrigin: {
         label: '控制台 API 地址',
         placeholder: 'http://127.0.0.1:4173',
       },
+      hostedBootstrapKey: {
+        label: 'Hosted owner bootstrap key',
+        placeholder: '只在 hosted host bootstrap 时需要',
+      },
       token: {
         label: 'Bearer token（手动开发认证）',
-        placeholder: '只在手动开发认证时使用。留空即可自动引导本地主人会话。',
+        placeholder: '只在手动开发认证时使用。留空即可自动走 host bootstrap。',
       },
       feedScope: {
         label: '海洋动态范围',
@@ -1404,7 +1431,7 @@ const COPY = {
       },
       advanced: {
         summary: '高级 / 开发选项',
-        note: 'API 地址与手动 bearer-token 兜底',
+        note: 'API 地址、hosted owner bootstrap key 与手动 token',
       },
       action: {
         connect: '以 Host 身份进入',
@@ -1412,14 +1439,16 @@ const COPY = {
         clear: '清除认证',
       },
       status: {
-        initial: '本地 host 走“以 Host 身份进入”；参与者第一次入海走邀请码；认证失效后走重连码恢复。只有调试时才需要展开 advanced 手工认证。',
+        initial: '请先点击“以 Host 身份进入”。参与者 join/reconnect 只是次入口，并且只会在 hosted Aqua 目标下出现。',
+        local: '已识别为本地 Aqua。“以 Host 身份进入”会自动创建或重连岸上的主控室。',
+        hosted: '已识别为 hosted Aqua。“以 Host 身份进入”会使用 hosted owner bootstrap key 或已有 host 会话 token；参与者 join/reconnect 仍是次入口。',
       },
     },
     participantJoin: {
       kicker: '参与者加入',
-      title: '通过邀请码入海',
+      title: '通过邀请码进入 hosted 参与者入口',
       note:
-        '仅用于 hosted。它会领取 invite、把 bearer token 保存在当前浏览器里，然后直接打开 participant 视图。但这一步本身不等于 live OpenClaw 会话已经在线。',
+        '仅用于 hosted，而且是次入口。它会领取 invite、把 bearer token 保存在当前浏览器里，然后直接打开 participant 视图。但这一步本身不等于 live OpenClaw 会话已经在线。',
       action: '通过邀请码加入',
       inviteCode: { label: '邀请码', placeholder: 'ABCD1234' },
       displayName: { label: '显示名', placeholder: 'Miso' },
@@ -1429,15 +1458,15 @@ const COPY = {
     },
     participantReconnect: {
       kicker: '参与者重连',
-      title: '通过重连码重新入海',
-      note: '仅用于 hosted。浏览器丢失认证后，可以用参与者自己持有的 reconnect code 换取新的 bearer token。',
+      title: 'hosted 参与者重连',
+      note: '仅用于 hosted，而且是次入口恢复路径。浏览器丢失认证后，可以用参与者自己持有的 reconnect code 换取新的 bearer token。',
       action: '通过重连码重连',
       code: { label: '重连码', placeholder: 'reconnect_...' },
     },
     hostEntry: {
-      kicker: '本地 Host 入口',
-      title: '引导或重连岸上的 host',
-      note: '这条路径仍然是 local-first 的主人主控室；参与者 bearer-token 认证只在 advanced 里保留为兜底。',
+      kicker: 'Host 入口',
+      title: '打开或重连岸上的 host 主控室',
+      note: '指向本地 Aqua 时会自动 bootstrap；指向 hosted Aqua 时则使用高级选项里的 hosted owner bootstrap key，或者已有 host 会话 token。',
     },
     commandDeck: {
       kicker: '指挥甲板',
@@ -1656,6 +1685,10 @@ const COPY = {
         storm_front: '风暴锋面',
         debris_field: '漂浮残片带',
       },
+    },
+    error: {
+      requestFailed: '请求失败，状态码 {status}。',
+      requestTimedOut: '请求在 {seconds} 秒后超时。',
     },
     common: {
       aquaDefault: 'AquaClaw Sea',
@@ -1918,7 +1951,7 @@ const COPY = {
       bootstrappedOpened: '已引导 host 主控室。',
       reconnectedOpened: '已重新接入 host 主控室。',
       syncedViaLocal: '已通过本地会话同步 host 主控室。',
-      syncedViaBearer: '已通过 bearer token 同步 hosted 主控室。',
+      syncedViaBearer: '已通过 hosted owner 会话同步主控室。',
       syncedViaParticipantBearer: '已为 @{handle} 同步参与者读写面。',
       joinedViaInvite: '已作为 @{handle} 加入这片海，参与者视图已可用，但 live runtime 证明仍是另一回事。',
       rejoiningSea: '正在通过重连码重新入海...',
@@ -1926,11 +1959,15 @@ const COPY = {
       participantReconnectCodeRotated: '已轮换参与者重连码。',
       participantReconnectRequired: '参与者认证已过期或被撤销。请通过重连码换取新的 token。',
       bearerAuthExpired: 'bearer token 已过期或被撤销。请粘贴新的 token；如果你是参与者，也可以直接用重连码恢复。',
+      hostedSessionExpired: 'hosted owner 会话已过期或被撤销。请重新点击“以 Host 身份进入”，或粘贴新的 hosted 会话 token。',
       readingSea: '正在读取海域...',
       bootstrappingClaw: '正在引导本地 host 会话...',
+      bootstrappingHostedHost: '正在引导 hosted owner 会话...',
       joiningSea: '正在通过邀请码入海...',
       localSessionClosed: '本地会话已关闭，并已从控制台清除。',
       localSessionClearedWarning: '本地会话已从控制台清除，但远端登出没有被确认。',
+      hostedSessionClosed: 'hosted owner 会话已关闭，并已从控制台清除。',
+      hostedSessionClearedWarning: 'hosted owner 会话已从控制台清除，但远端登出没有被确认。',
       authTokenCleared: '认证 token 已从本地控制台状态中清除。',
       aquariumSessionNotReady: '控制台会话尚未就绪。',
       liveRefreshAfterResync: '实时流请求全量刷新后，可见读取面已重新同步。',
@@ -1941,6 +1978,7 @@ const COPY = {
       liveDisconnected: '实时流已断开。',
       liveOpenFailed: '打开实时流失败。',
       liveAuthExpired: '实时流认证已过期，请重新连接当前控制台。',
+      liveAuthExpiredHosted: 'hosted owner 会话已过期。请重新点击“以 Host 身份进入”，或粘贴新的 hosted 会话 token。',
       liveAuthExpiredParticipant: '参与者实时认证已过期，请通过重连码换取新的 token。',
       enterBeforeDeck: '请先让这个控制台建立连接，再使用指挥甲板。',
       runtimeRequiresLocal: '绑定 runtime 需要本地主人会话。',
@@ -2063,6 +2101,8 @@ const COPY = {
       taskRequestTitleRequired: '协作请求标题不能为空。',
       inviteCodeRequired: '邀请码不能为空。',
       reconnectCodeRequired: '重连码不能为空。',
+      hostedBootstrapKeyRequired: '如果你要在 hosted 控制室中以 host 身份进入，且当前没有现成 token，就必须填写 hosted owner bootstrap key。',
+      hostedBootstrapUnavailable: '这个 hosted Aqua 没有开放 owner bootstrap。请改为粘贴一个现成的 hosted owner 会话 token。',
       publicExpressionBodyRequired: '公开发言正文不能为空。',
       maxUsesPositive: '最大使用次数必须是正整数。',
       unblockGatewayIdRequired: '要解除屏蔽，必须填写 gateway id。',
@@ -2146,13 +2186,22 @@ function hostLocalModeActive() {
   return aquariumState.viewerKind === 'host' && authMode === 'local_session' && Boolean(aquariumState.gateway);
 }
 
+function deploymentModeActive(mode) {
+  return aquariumState.deploymentMode === mode;
+}
+
 function syncViewerScopedVisibility() {
   const isParticipant = participantModeActive();
   const isHostLocal = hostLocalModeActive();
   const isConnected = Boolean(aquariumState.gateway);
+  const isHostedDeployment = deploymentModeActive('hosted');
 
   for (const element of elements.gatewayOnlySections) {
     element.hidden = !isParticipant;
+  }
+
+  for (const element of elements.hostedOnlySections) {
+    element.hidden = !isHostedDeployment;
   }
 
   for (const element of elements.hostOnlySections) {
@@ -2395,9 +2444,19 @@ function setCommandDeckEnabled(enabled) {
   syncCommandDeckInteractivity();
 }
 
+function resolveConsoleStatusKey() {
+  if (deploymentModeActive('local')) {
+    return 'dock.status.local';
+  }
+  if (deploymentModeActive('hosted')) {
+    return 'dock.status.hosted';
+  }
+  return 'dock.status.initial';
+}
+
 function setDefaultConsoleStatus() {
   delete elements.consoleStatus.dataset.runtimeText;
-  elements.consoleStatus.textContent = t('dock.status.initial');
+  elements.consoleStatus.textContent = t(resolveConsoleStatusKey());
   elements.consoleStatus.dataset.tone = 'neutral';
 }
 
@@ -2420,6 +2479,10 @@ function setLoadingState(loading) {
 
 function isBearerTokenError(message) {
   return /invalid bearer token|missing or invalid bearer token/i.test(message);
+}
+
+function isHostedSessionTokenError(message) {
+  return /invalid hosted session token|missing or invalid hosted session token/i.test(message);
 }
 
 function clearPersistedBearerAuth() {
@@ -2454,7 +2517,8 @@ function saveSettings() {
 function loadSettings() {
   elements.apiOrigin.value = localStorage.getItem(STORAGE_KEYS.apiOrigin) || window.location.origin;
   elements.token.value = localStorage.getItem(STORAGE_KEYS.token) || '';
-  authMode = localStorage.getItem(STORAGE_KEYS.authMode) === 'local_session' ? 'local_session' : 'bearer';
+  const storedAuthMode = localStorage.getItem(STORAGE_KEYS.authMode);
+  authMode = VALID_AUTH_MODES.has(storedAuthMode) ? storedAuthMode : 'bearer';
   elements.feedScope.value = localStorage.getItem(STORAGE_KEYS.feedScope) || 'mine';
   elements.activityGatewayId.value = localStorage.getItem(STORAGE_KEYS.activityGatewayId) || '';
   const locale = localStorage.getItem(STORAGE_KEYS.locale);
@@ -2486,7 +2550,7 @@ function consumeBootQueryParams() {
   const authModeParam = params.get(QUERY_KEYS.authMode);
   if (authModeParam !== null) {
     shouldStrip = true;
-    if (authModeParam === 'local_session' || authModeParam === 'bearer') {
+    if (VALID_AUTH_MODES.has(authModeParam)) {
       authMode = authModeParam;
     }
   }
@@ -2558,11 +2622,24 @@ async function requestJson(path, { apiOrigin, token, method = 'GET', payload } =
     headers['content-type'] = 'application/json';
   }
 
-  const response = await fetch(buildUrl(path, apiOrigin), {
-    method,
-    headers,
-    body: payload === undefined ? undefined : JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(buildUrl(path, apiOrigin), {
+      method,
+      headers,
+      body: payload === undefined ? undefined : JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(t('error.requestTimedOut', { seconds: Math.round(REQUEST_TIMEOUT_MS / 1000) }));
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     throw new Error(await describeFailedResponse(response));
@@ -2572,7 +2649,27 @@ async function requestJson(path, { apiOrigin, token, method = 'GET', payload } =
   return text ? JSON.parse(text) : null;
 }
 
-async function ensureConsoleToken(apiOrigin) {
+function applyDeploymentMetadata(payload) {
+  const deploymentMode = VALID_DEPLOYMENT_MODES.has(payload?.data?.deploymentMode) ? payload.data.deploymentMode : 'unknown';
+  aquariumState.deploymentMode = deploymentMode;
+  aquariumState.hostedOwnerBootstrapConfigured =
+    typeof payload?.data?.hostedOwnerBootstrapConfigured === 'boolean' ? payload.data.hostedOwnerBootstrapConfigured : null;
+  syncViewerScopedVisibility();
+  if (!aquariumState.gateway) {
+    setDefaultConsoleStatus();
+  }
+  return {
+    mode: deploymentMode,
+    hostedOwnerBootstrapConfigured: aquariumState.hostedOwnerBootstrapConfigured,
+  };
+}
+
+async function refreshConsoleDeployment(apiOrigin) {
+  const healthPayload = await requestJson('/health', { apiOrigin });
+  return applyDeploymentMetadata(healthPayload);
+}
+
+async function ensureConsoleToken(apiOrigin, deployment) {
   const existingToken = elements.token.value.trim();
   if (existingToken) {
     return {
@@ -2582,12 +2679,33 @@ async function ensureConsoleToken(apiOrigin) {
     };
   }
 
-  const bootstrapPayload = await requestJson('/api/v1/session/bootstrap-local', {
-    apiOrigin,
-    method: 'POST',
-  });
+  let bootstrapPayload;
+  if (deployment.mode === 'hosted') {
+    if (deployment.hostedOwnerBootstrapConfigured === false) {
+      throw new Error(t('validation.hostedBootstrapUnavailable'));
+    }
 
-  authMode = 'local_session';
+    const bootstrapKey = elements.hostedBootstrapKey?.value.trim() || '';
+    if (!bootstrapKey) {
+      throw new Error(t('validation.hostedBootstrapKeyRequired'));
+    }
+
+    bootstrapPayload = await requestJson('/api/v1/session/bootstrap-hosted', {
+      apiOrigin,
+      method: 'POST',
+      payload: {
+        bootstrapKey,
+      },
+    });
+    authMode = 'hosted_session';
+  } else {
+    bootstrapPayload = await requestJson('/api/v1/session/bootstrap-local', {
+      apiOrigin,
+      method: 'POST',
+    });
+    authMode = 'local_session';
+  }
+
   elements.token.value = bootstrapPayload.data.credential.token;
   saveSettings();
 
@@ -2599,6 +2717,26 @@ async function ensureConsoleToken(apiOrigin) {
 }
 
 async function resolveIdentity(apiOrigin, token) {
+  if (authMode === 'hosted_session') {
+    try {
+      const hostedSessionPayload = await requestJson('/api/v1/session/hosted/me', { apiOrigin, token });
+      return {
+        gateway: {
+          ...hostedSessionPayload.data.host,
+          kind: 'host',
+        },
+        mode: 'hosted_session',
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('common.unknown');
+      if (!isHostedSessionTokenError(message)) {
+        throw error;
+      }
+      authMode = 'bearer';
+      saveSettings();
+    }
+  }
+
   if (authMode === 'local_session') {
     try {
       const sessionPayload = await requestJson('/api/v1/session/me', { apiOrigin, token });
@@ -2626,7 +2764,7 @@ async function resolveIdentity(apiOrigin, token) {
         ...hostedSessionPayload.data.host,
         kind: 'host',
       },
-      mode: 'bearer',
+      mode: 'hosted_session',
     };
   } catch {}
 
@@ -6241,6 +6379,12 @@ async function connectLiveStream() {
       setStatus(t('common.liveAuthExpired'), 'warning');
       return;
     }
+    if (isHostedSessionTokenError(message)) {
+      disconnectConsoleSession({ clearPersistedToken: true });
+      saveSettings();
+      setStatus(t('common.liveAuthExpiredHosted'), 'warning');
+      return;
+    }
     if (isBearerTokenError(message)) {
       const wasParticipant = participantModeActive();
       disconnectConsoleSession({ clearPersistedToken: true });
@@ -6329,10 +6473,19 @@ async function loadAquarium() {
   saveSettings();
 
   const apiOrigin = normalizeOrigin(elements.apiOrigin.value);
-  setStatus(elements.token.value.trim() ? t('common.readingSea') : t('common.bootstrappingClaw'), 'neutral');
 
   try {
-    const auth = await ensureConsoleToken(apiOrigin);
+    const deployment = await refreshConsoleDeployment(apiOrigin);
+    setStatus(
+      elements.token.value.trim()
+        ? t('common.readingSea')
+        : deployment.mode === 'hosted'
+          ? t('common.bootstrappingHostedHost')
+          : t('common.bootstrappingClaw'),
+      'neutral',
+    );
+
+    const auth = await ensureConsoleToken(apiOrigin, deployment);
     const token = auth.token;
     const identity = await resolveIdentity(apiOrigin, token);
 
@@ -6376,6 +6529,12 @@ async function loadAquarium() {
     if (authMode === 'local_session' && /local session token/i.test(message)) {
       clearPersistedBearerAuth();
     }
+    if (authMode === 'hosted_session' && isHostedSessionTokenError(message)) {
+      disconnectConsoleSession({ clearPersistedToken: true });
+      saveSettings();
+      setStatus(t('common.hostedSessionExpired'), 'warning');
+      return;
+    }
     if (authMode !== 'local_session' && isBearerTokenError(message)) {
       disconnectConsoleSession({ clearPersistedToken: true });
       saveSettings();
@@ -6407,6 +6566,17 @@ async function clearConsoleAuth() {
       setStatus(t('common.localSessionClosed'), 'neutral');
     } catch {
       setStatus(t('common.localSessionClearedWarning'), 'warning');
+    }
+  } else if (previousMode === 'hosted_session' && token) {
+    try {
+      await requestJson('/api/v1/session/hosted/logout', {
+        apiOrigin,
+        token,
+        method: 'POST',
+      });
+      setStatus(t('common.hostedSessionClosed'), 'neutral');
+    } catch {
+      setStatus(t('common.hostedSessionClearedWarning'), 'warning');
     }
   } else {
     setStatus(t('common.authTokenCleared'), 'neutral');
@@ -7556,11 +7726,33 @@ for (const button of elements.localeButtons) {
   });
 }
 
+elements.apiOrigin?.addEventListener('change', () => {
+  const apiOrigin = normalizeOrigin(elements.apiOrigin.value);
+  elements.apiOrigin.value = apiOrigin;
+  saveSettings();
+  void refreshConsoleDeployment(apiOrigin).catch(() => {
+    aquariumState.deploymentMode = 'unknown';
+    aquariumState.hostedOwnerBootstrapConfigured = null;
+    syncViewerScopedVisibility();
+    if (!aquariumState.gateway) {
+      setDefaultConsoleStatus();
+    }
+  });
+});
+
 loadSettings();
 const bootQuery = consumeBootQueryParams();
 applyTranslations();
 setDefaultConsoleStatus();
 resetAquariumSurface();
+void refreshConsoleDeployment(normalizeOrigin(elements.apiOrigin.value)).catch(() => {
+  aquariumState.deploymentMode = 'unknown';
+  aquariumState.hostedOwnerBootstrapConfigured = null;
+  syncViewerScopedVisibility();
+  if (!aquariumState.gateway) {
+    setDefaultConsoleStatus();
+  }
+});
 if (bootQuery.autostart || elements.token.value.trim()) {
   void loadAquarium();
 }

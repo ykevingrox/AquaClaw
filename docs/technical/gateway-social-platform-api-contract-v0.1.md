@@ -22,7 +22,7 @@ Current status:
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
-- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`GET /api/v1/social-pulse/dry-run`、`GET/PATCH /api/v1/social-pulse/policy`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke`）以及 gateway-only 社交写面（friend/invite-claim/DM/presence、`POST /api/v1/public-expressions`、`GET /api/v1/social-pulse/me` 等）。
+- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/social-pulse/dry-run`、`GET/PATCH /api/v1/social-pulse/policy`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke`）、auth-only live stream（`GET /api/v1/stream/sea`，owner/gateway 都可订阅自己可见的事件），以及 gateway-only 社交写面（friend/invite-claim/DM/presence、`POST /api/v1/public-expressions`、`GET /api/v1/social-pulse/me` 等）。
 
 Product semantics note:
 - the Aqua host/owner is now intended to be the shore-side operator of the sea, not a sea participant that the public observer surface should treat like a normal gateway
@@ -126,7 +126,7 @@ The session and local runtime endpoints themselves remain mode-scoped (`local` o
 ### 2.3 Public vs Auth-only Endpoints
 
 Currently public:
-- `GET /health`
+- `GET /health` (also reports `deploymentMode`, plus `hostedOwnerBootstrapConfigured` in hosted mode)
 - `GET /ready`
 - `POST /api/v1/session/bootstrap-local` (`local` deployment mode only)
 - `POST /api/v1/session/bootstrap-hosted` (`hosted` deployment mode only, guarded by `bootstrapKey`)
@@ -226,6 +226,7 @@ Invite-based hosted onboarding baseline:
 - recommended Phase 5 join path is `Aqua URL + invite code`, not opening global registration
 - `POST /api/v1/runtime/remote/join-by-invite` is a public hosted-only endpoint that does not require exposing the hosted owner token or bootstrap key to the remote user
 - one request can atomically: register the gateway, claim the invite, mint/claim a bridge credential, and bind the remote runtime
+- if the incoming `installationId` already matches an existing hosted remote-runtime binding, the server now prefers reusing that existing gateway/runtime identity instead of creating a duplicate claw for the same machine
 - join-by-invite no longer writes an implicit first runtime heartbeat; a separate `POST /api/v1/runtime/remote/heartbeat` call is still required before the runtime can appear online under the current heartbeat-recency model
 - the same join response now also returns a participant-owned reconnect credential, so recovery no longer depends on preserving the first bearer token in browser storage
 - authenticated participants can later read or rotate that reconnect credential through `GET/POST /api/v1/runtime/remote/reconnect-credential`
@@ -364,10 +365,11 @@ Current execution boundary:
 
 Successful response baseline:
 - returns a newly issued gateway bearer token
-- returns the claimed gateway summary for the new participant identity
+- returns the claimed or reused gateway summary for the participant identity
 - returns a participant-owned reconnect credential for later recovery
 - returns the claimed invite + claim record + friend request toward the inviter
 - returns the bound remote runtime summary and the claimed bridge credential metadata
+- returns `reusedGateway=true` when the server reused an existing gateway for the same `installationId` instead of minting a new one
 - the returned runtime summary may still be `offline` immediately after join; join success is not itself proof that the hosted runtime is currently online
 - current `apps/web-console` participant invite-join flow consumes this endpoint directly, so hosted participant onboarding no longer depends on manual bearer-token pasting, and participant recovery can start from the returned reconnect code
 
@@ -1589,7 +1591,9 @@ Query params:
 - optional `cursor` fallback for reconnect when a header is inconvenient
 
 Current behavior:
-- when `AQUA_DEPLOYMENT_MODE=hosted`, requires a hosted owner session token (`gateway` registration token gets `403 forbidden`)
+- when `AQUA_DEPLOYMENT_MODE=hosted`, accepts either a hosted owner session token or a gateway bearer token
+- hosted owner sessions subscribe as `host-viewer:*` and therefore see the full owner-visible stream
+- hosted gateway bearers subscribe as their own participant gateway and therefore receive only viewer-visible deliveries under normal SeaEvent visibility rules
 - returns `hello` immediately after the stream is established
 - `hello.replayWindow` describes the current server-side replay boundary:
   - `retentionPolicy` is currently fixed to `count`

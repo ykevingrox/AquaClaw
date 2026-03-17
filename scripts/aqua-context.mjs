@@ -183,6 +183,18 @@ function formatRuntimeMarkdown(runtime) {
   ].join('\n');
 }
 
+function formatAquaMarkdown(aqua) {
+  if (!aqua) {
+    return ['## Aqua', '- Name: unavailable'].join('\n');
+  }
+
+  return [
+    '## Aqua',
+    `- Name: ${aqua.displayName}`,
+    `- Updated at: ${formatTimestamp(aqua.updatedAt)}`,
+  ].join('\n');
+}
+
 function formatCurrentMarkdown(current) {
   if (!current) {
     return ['## Current', '- Current: unavailable'].join('\n');
@@ -195,6 +207,24 @@ function formatCurrentMarkdown(current) {
     `- Source: ${current.source}`,
     `- Window: ${formatTimestamp(current.startsAt)} -> ${formatTimestamp(current.endsAt)}`,
     `- Summary: ${current.summary}`,
+  ].join('\n');
+}
+
+function formatEnvironmentMarkdown(environment) {
+  if (!environment) {
+    return ['## Environment', '- Environment: unavailable'].join('\n');
+  }
+
+  return [
+    '## Environment',
+    `- Water temperature: ${environment.waterTemperatureC}C`,
+    `- Clarity: ${environment.clarity}`,
+    `- Tide: ${environment.tideDirection}`,
+    `- Surface: ${environment.surfaceState}`,
+    `- Phenomenon: ${environment.phenomenon}`,
+    `- Source: ${environment.source}`,
+    `- Updated at: ${formatTimestamp(environment.updatedAt)}`,
+    `- Summary: ${environment.summary}`,
   ].join('\n');
 }
 
@@ -224,7 +254,11 @@ function renderMarkdown(snapshot) {
     `- Session: ${snapshot.owner.session.id} (${snapshot.owner.session.kind})`,
     `- Local host created this run: ${snapshot.owner.owner.created ? 'yes' : 'no'}`,
     '',
+    formatAquaMarkdown(snapshot.aqua),
+    '',
     formatRuntimeMarkdown(snapshot.runtime),
+    '',
+    formatEnvironmentMarkdown(snapshot.environment),
     '',
     formatCurrentMarkdown(snapshot.current),
     '',
@@ -301,6 +335,12 @@ async function main() {
     }
   }
 
+  const aqua = await requestJson(`${options.hubUrl}/api/v1/public/aqua`);
+  const environment = await requestJson(`${options.hubUrl}/api/v1/environment/current`, {
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+  });
   const current = await requestJson(`${options.hubUrl}/api/v1/currents/current`);
   const seaFeed = await requestJson(
     `${options.hubUrl}/api/v1/sea/feed?scope=${encodeURIComponent(options.scope)}&limit=${options.limit}`,
@@ -332,7 +372,9 @@ async function main() {
       owner: bootstrap.data.owner,
       session: bootstrap.data.session,
     },
+    aqua: aqua?.data?.aqua ?? null,
     runtime,
+    environment: environment?.data?.environment ?? null,
     current: current?.data?.current ?? null,
     sea: {
       items: seaFeed?.data?.items ?? [],

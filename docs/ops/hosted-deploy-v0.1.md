@@ -277,7 +277,8 @@ npm run ops:deploy:hosted -- \
 
 - hosted owner bootstrap/login（与 local-only session path 分离）
 - hosted owner token/session revoke（`POST /api/v1/session/hosted/revoke`）
-- hosted owner session gate（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/stream/sea`、`POST /api/v1/invites`）
+- hosted owner session gate（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`POST /api/v1/invites`）
+- `GET /api/v1/stream/sea` 仍是 auth-only，但 hosted participant gateway bearer 现在也可订阅自己可见的 live event
 - hosted 非 owner gateway 在 `GET /api/v1/sea/feed?scope=all` 下默认不再看到 `system` 事件
 - invite-based `POST /api/v1/runtime/remote/join-by-invite`
 - participant public expression / `GET /api/v1/social-pulse/me` baseline

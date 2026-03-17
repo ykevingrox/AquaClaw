@@ -792,6 +792,7 @@ test('GatewayStore hosted invite join registers, claims, and binds without imply
   assert.equal(joined.runtime.binding.source, 'hosted_join_store_test');
   assert.equal(joined.runtime.status, 'offline');
   assert.equal(joined.presence.status, 'offline');
+  assert.equal(joined.reusedGateway, false);
 
   const runtime = store.getRemoteRuntimeBindingByGatewayId(joined.gateway.id);
   assert.ok(runtime);
@@ -807,6 +808,56 @@ test('GatewayStore hosted invite join registers, claims, and binds without imply
       }),
     /invite exhausted/,
   );
+});
+
+test('GatewayStore hosted invite join reuses an existing remote runtime identity for the same installation', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapHostedSession({
+    displayName: 'Hosted Rejoin Owner',
+    handle: 'hosted-rejoin-owner-store',
+  }).host;
+
+  const firstInvite = store.createInvite({
+    createdByHostId: host.id,
+    maxUses: 1,
+  });
+
+  const firstJoin = store.joinHostedRuntimeWithInvite({
+    inviteCode: firstInvite.code,
+    displayName: 'Hosted Rejoin Gateway',
+    handle: 'hosted-rejoin-gateway-store',
+    installationId: 'hosted-rejoin-install-store',
+    runtimeId: 'hosted-rejoin-runtime-store',
+    label: 'Hosted Rejoin Runtime Store',
+    source: 'hosted_rejoin_store_test',
+  });
+
+  const secondInvite = store.createInvite({
+    createdByHostId: host.id,
+    maxUses: 1,
+  });
+
+  const secondJoin = store.joinHostedRuntimeWithInvite({
+    inviteCode: secondInvite.code,
+    displayName: 'Hosted Rejoin Gateway Two',
+    handle: 'hosted-rejoin-gateway-store-two',
+    installationId: 'hosted-rejoin-install-store',
+    runtimeId: 'hosted-rejoin-runtime-store-two',
+    label: 'Hosted Rejoin Runtime Store Two',
+    source: 'hosted_rejoin_store_test_again',
+  });
+
+  assert.equal(secondJoin.reusedGateway, true);
+  assert.equal(secondJoin.gateway.id, firstJoin.gateway.id);
+  assert.equal(secondJoin.gateway.handle, firstJoin.gateway.handle);
+  assert.notEqual(secondJoin.token, firstJoin.token);
+  assert.equal(store.findByToken(firstJoin.token), null);
+  assert.equal(store.findByToken(secondJoin.token)?.id, firstJoin.gateway.id);
+  assert.equal(secondJoin.runtime.binding.gatewayId, firstJoin.gateway.id);
+  assert.equal(secondJoin.runtime.binding.installationId, 'hosted-rejoin-install-store');
+  assert.equal(secondJoin.runtime.binding.runtimeId, 'hosted-rejoin-runtime-store-two');
+  assert.equal(secondJoin.runtime.binding.source, 'hosted_rejoin_store_test_again');
+  assert.equal(secondJoin.claim.inviteId, secondInvite.id);
 });
 
 test('GatewayStore hosted invite join rolls back cleanly on handle conflict', () => {

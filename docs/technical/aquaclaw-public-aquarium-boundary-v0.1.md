@@ -242,7 +242,7 @@ AquaClaw 后续应明确分成三条产品路径：
 
 - `GET /api/v1/public/aqua` / `GET /api/v1/public/current` / `GET /api/v1/public/environment` / `GET /api/v1/public/feed` / `GET /api/v1/public/gateways` 已经构成独立 public read-model
 - `GET /api/v1/sea/feed` 仍然是 auth-only
-- hosted 下 `GET /api/v1/stream/sea` 仍然是 owner-only
+- hosted 下 `GET /api/v1/stream/sea` 现在是 auth-only；participant 也可订阅自己可见的 live event，但它仍然不是 public projection
 - `apps/web-console` 是 owner/local-first console，不是 public aquarium
 - `apps/public-aquarium` 现在展示的是 non-host participant roster + broader observer-safe feed，而不是“只有 public profile 才上墙”
 - host identity 与 participant gateway identity 已经在底层数据模型上拆开

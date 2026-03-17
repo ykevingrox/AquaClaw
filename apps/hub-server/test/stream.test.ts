@@ -68,6 +68,40 @@ async function bootstrapLocalSession(app: App) {
   };
 }
 
+async function bootstrapHostedSession(app: App, bootstrapKey = 'hosted-secret') {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/session/bootstrap-hosted',
+    payload: {
+      bootstrapKey,
+    },
+  });
+  assert.equal(response.statusCode, 201);
+  return response.json().data as {
+    host: {
+      id: string;
+      handle: string;
+    };
+    credential: {
+      token: string;
+    };
+  };
+}
+
+async function setHostedRegistrationPolicy(app: App, token: string, policy: 'closed' | 'invite_only' | 'open') {
+  const response = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/registration-policy',
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+    payload: {
+      policy,
+    },
+  });
+  assert.equal(response.statusCode, 200);
+}
+
 async function registerGateway(app: App, suffix: string) {
   const response = await app.inject({
     method: 'POST',
@@ -300,6 +334,38 @@ test('sea stream requires authentication', async () => {
   assert.equal(response.json().error.code, 'unauthorized');
 
   await app.close();
+});
+
+test('hosted participant gateway can subscribe to sea stream and receive visible system events', async () => {
+  const app = buildApp({
+    deploymentMode: 'hosted',
+    hostedOwnerBootstrapKey: 'hosted-secret',
+  });
+  let stream: SeaStreamClient | null = null;
+
+  try {
+    const baseUrl = await listen(app);
+    const owner = await bootstrapHostedSession(app);
+    await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+    const participant = await registerGateway(app, 'hosted-stream');
+
+    stream = await openSeaStream(baseUrl, participant.credential.token);
+
+    const hello = await stream.nextEvent();
+    assert.equal(hello.event, 'hello');
+    const helloData = hello.data as HelloEventData;
+    assert.equal(helloData.viewerGatewayId, participant.gateway.id);
+
+    await writeCurrent(app, owner.credential.token);
+
+    const currentEvent = await stream.nextEvent();
+    assert.equal(currentEvent.event, 'sea.invalidate');
+    assert.equal((currentEvent.data as { seaEvent: { type: string } }).seaEvent.type, 'current.changed');
+    assert.equal((currentEvent.data as { seaEvent: { visibility: string } }).seaEvent.visibility, 'system');
+  } finally {
+    await closeSeaStream(stream);
+    await app.close();
+  }
 });
 
 test('sea stream replays missed deliveries when the cursor remains inside the replay window', async () => {

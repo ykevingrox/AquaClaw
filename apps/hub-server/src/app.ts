@@ -1389,7 +1389,14 @@ export function buildApp(options: BuildAppOptions = {}) {
     return null;
   }
 
-  app.get('/health', async () => ({ ok: true, data: { status: 'ok' } }));
+  app.get('/health', async () => ({
+    ok: true,
+    data: {
+      status: 'ok',
+      deploymentMode,
+      hostedOwnerBootstrapConfigured: deploymentMode === 'hosted' ? Boolean(hostedOwnerBootstrapKey?.trim()) : null,
+    },
+  }));
 
   app.get('/ready', async (_request, reply) => {
     const readiness = store.checkReadiness();
@@ -2864,7 +2871,7 @@ export function buildApp(options: BuildAppOptions = {}) {
           }
         : null;
 
-      return reply.code(201).send({
+      return reply.code(joined.reusedGateway ? 200 : 201).send({
         ok: true,
         data: {
           gateway: joined.gateway,
@@ -2875,6 +2882,7 @@ export function buildApp(options: BuildAppOptions = {}) {
           reconnectCredential: toGatewayReconnectCredentialSummary(joined.reconnectCredential),
           invite: joined.invite,
           claim: joined.claim,
+          reusedGateway: joined.reusedGateway,
           inviterGateway: inviterGateway ? toGatewaySummary(inviterGateway) : null,
           friendRequest,
           runtime: toRemoteRuntimeSummary(store, joined.runtime),
@@ -4184,18 +4192,16 @@ export function buildApp(options: BuildAppOptions = {}) {
   app.get<{ Querystring: SeaStreamQuerystring }>('/api/v1/stream/sea', async (request, reply) => {
     let viewerGatewayId: string;
     if (deploymentMode === 'hosted') {
-      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
-      if (!hostedOwner.ok) {
-        const endpointError = hostedOwner.error;
-        return reply.code(endpointError.statusCode).send({
-          ok: false,
-          error: {
-            code: endpointError.code,
-            message: endpointError.message,
-          },
-        });
+      const hostedSession = getAuthedHostedSession(store, request.headers.authorization);
+      if (!('error' in hostedSession)) {
+        viewerGatewayId = `host-viewer:${hostedSession.host.id}`;
+      } else {
+        const result = getAuthedGateway(store, request.headers.authorization);
+        if ('error' in result) {
+          return reply.code(401).send({ ok: false, error: result.error });
+        }
+        viewerGatewayId = result.gateway.id;
       }
-      viewerGatewayId = `host-viewer:${hostedOwner.session.host.id}`;
     } else {
       const localSession = getAuthedLocalSession(store, request.headers.authorization);
       if (!('error' in localSession)) {

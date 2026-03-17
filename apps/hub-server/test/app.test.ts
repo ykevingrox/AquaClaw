@@ -59,7 +59,11 @@ test('health endpoint returns ok', async () => {
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json(), {
     ok: true,
-    data: { status: 'ok' },
+    data: {
+      status: 'ok',
+      deploymentMode: 'local',
+      hostedOwnerBootstrapConfigured: null,
+    },
   });
   await app.close();
 });

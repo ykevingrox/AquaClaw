@@ -7,7 +7,7 @@
     <meta
       id="page-description"
       name="description"
-      content="Shared console for the shore-side host control room and invite-only participant entry."
+      content="Host-first control room with hosted participant entry."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -16,7 +16,7 @@
       <section class="utility-bar reveal">
         <div class="utility-copy">
           <span class="utility-pill" data-i18n="utility.mode">Sea Console</span>
-          <p class="utility-note" data-i18n="utility.note">One console for the shore-side host path and the invite-only participant view.</p>
+          <p class="utility-note" data-i18n="utility.note">One console, but host comes first. Hosted participant entry stays secondary.</p>
         </div>
 
         <div class="locale-switch">
@@ -31,11 +31,11 @@
       <header class="masthead reveal">
         <div class="masthead-copy">
           <p class="eyebrow" data-i18n="hero.eyebrow">AquaClaw // Sea Console</p>
-          <h1 data-i18n="hero.title">Steer the sea from shore or enter by invite.</h1>
+          <h1 data-i18n="hero.title">Open the host control room first.</h1>
           <p class="intro" data-i18n="hero.intro">
-            This console now serves both sides of the AquaClaw sea: the local host can keep operating the shore-side
-            control room, while invited participants can join directly into their bounded gateway surfaces without
-            hand-pasting raw bearer tokens.
+            This is still one console, but its primary job is the shore-side host control room. If this Aqua is hosted,
+            invited participants can also use the secondary entry cards below to join or reconnect without hand-pasting
+            raw bearer tokens.
           </p>
           <div class="hero-badges">
             <span class="badge" id="hero-aqua">Aqua: AquaClaw Sea</span>
@@ -57,18 +57,108 @@
             <p class="panel-kicker" data-i18n="dock.kicker">Console Dock</p>
             <h2 data-i18n="dock.title">Entry paths and read scope</h2>
           </div>
-          <p class="panel-note" data-i18n="dock.note">Use the local host path or an invite-based participant join, then keep advanced auth for fallback debugging only.</p>
+          <p class="panel-note" data-i18n="dock.note">Start with host entry. Hosted participant access stays available as a secondary path when this API origin points at a hosted Aqua.</p>
         </div>
 
         <div class="dock-stack">
-          <section class="dock-section disconnected-only">
+          <section class="dock-section">
+            <div class="dock-subhead">
+              <div>
+                <p class="panel-kicker" data-i18n="hostEntry.kicker">Host Entry</p>
+                <h3 data-i18n="hostEntry.title">Open or reconnect the shore-side host control room</h3>
+              </div>
+              <p class="panel-note" data-i18n="hostEntry.note">
+                Local Aqua targets bootstrap automatically. Hosted Aqua targets use the hosted owner bootstrap key in advanced options, or an existing host session token.
+              </p>
+            </div>
+
+            <form id="console-form" class="dock-form">
+              <label class="field">
+                <span data-i18n="dock.feedScope.label">Sea feed scope</span>
+                <select id="feed-scope" name="feedScope">
+                  <option value="mine" data-i18n="option.feedScope.mine">Mine</option>
+                  <option value="all" data-i18n="option.feedScope.all">All</option>
+                  <option value="friends" data-i18n="option.feedScope.friends">Friends</option>
+                  <option value="system" data-i18n="option.feedScope.system">System</option>
+                </select>
+              </label>
+
+              <label class="field gateway-only" hidden>
+                <span data-i18n="dock.activityGateway.label">Activity gateway id</span>
+                <input
+                  id="activity-gateway-id"
+                  name="activityGatewayId"
+                  type="text"
+                  placeholder="Defaults to your gateway id"
+                  data-i18n-placeholder="dock.activityGateway.placeholder"
+                />
+              </label>
+
+              <details class="advanced-dock">
+                <summary class="advanced-summary">
+                  <span class="advanced-summary-title" data-i18n="dock.advanced.summary">Advanced / Dev Options</span>
+                  <span class="advanced-summary-note" data-i18n="dock.advanced.note">API origin, hosted owner bootstrap key, and manual tokens</span>
+                </summary>
+
+                <div class="advanced-grid">
+                  <label class="field">
+                    <span data-i18n="dock.apiOrigin.label">Console API origin</span>
+                    <input
+                      id="api-origin"
+                      name="apiOrigin"
+                      type="url"
+                      placeholder="http://127.0.0.1:4173"
+                      data-i18n-placeholder="dock.apiOrigin.placeholder"
+                    />
+                  </label>
+
+                  <label class="field hosted-only">
+                    <span data-i18n="dock.hostedBootstrapKey.label">Hosted owner bootstrap key</span>
+                    <input
+                      id="hosted-bootstrap-key"
+                      name="hostedBootstrapKey"
+                      type="password"
+                      autocomplete="off"
+                      placeholder="Required only for hosted host bootstrap"
+                      data-i18n-placeholder="dock.hostedBootstrapKey.placeholder"
+                    />
+                  </label>
+
+                  <label class="field field-token">
+                    <span data-i18n="dock.token.label">Bearer token (manual dev auth)</span>
+                    <textarea
+                      id="bearer-token"
+                      name="bearerToken"
+                      rows="3"
+                      placeholder="Manual developer auth only. Leave blank for automatic host bootstrap."
+                      data-i18n-placeholder="dock.token.placeholder"
+                    ></textarea>
+                  </label>
+                </div>
+              </details>
+
+              <div class="dock-actions">
+                <button class="button button-primary" id="connect-button" type="submit" data-i18n="dock.action.connect">
+                  Enter as Host
+                </button>
+                <button class="button button-ghost" id="refresh-button" type="button" data-i18n="dock.action.refresh">
+                  Refresh Read Surface
+                </button>
+                <button class="button button-soft" id="clear-button" type="button" data-i18n="dock.action.clear">
+                  Forget Auth
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section class="dock-section disconnected-only hosted-only">
             <div class="dock-subhead">
               <div>
                 <p class="panel-kicker" data-i18n="participantJoin.kicker">Participant Join</p>
-                <h3 data-i18n="participantJoin.title">Enter by invite code</h3>
+                <h3 data-i18n="participantJoin.title">Hosted participant entry by invite code</h3>
               </div>
               <p class="panel-note" data-i18n="participantJoin.note">
-                Hosted-only. Claims the invite, stores the bearer token in this browser, and opens the bounded participant surfaces.
+                Secondary hosted-only path. Claims the invite, stores the bearer token in this browser, and opens the bounded participant surfaces.
               </p>
             </div>
 
@@ -135,14 +225,14 @@
             </form>
           </section>
 
-          <section class="dock-section disconnected-only">
+          <section class="dock-section disconnected-only hosted-only">
             <div class="dock-subhead">
               <div>
                 <p class="panel-kicker" data-i18n="participantReconnect.kicker">Participant Reconnect</p>
-                <h3 data-i18n="participantReconnect.title">Re-enter with reconnect code</h3>
+                <h3 data-i18n="participantReconnect.title">Hosted participant reconnect</h3>
               </div>
               <p class="panel-note" data-i18n="participantReconnect.note">
-                Hosted-only. Use the participant-owned reconnect code to mint a fresh bearer token after this browser loses auth.
+                Secondary hosted-only recovery path. Use the participant-owned reconnect code to mint a fresh bearer token after this browser loses auth.
               </p>
             </div>
 
@@ -171,87 +261,10 @@
             </form>
           </section>
 
-          <section class="dock-section">
-            <div class="dock-subhead">
-              <div>
-                <p class="panel-kicker" data-i18n="hostEntry.kicker">Local Host Entry</p>
-                <h3 data-i18n="hostEntry.title">Bootstrap or reconnect the shore-side host</h3>
-              </div>
-              <p class="panel-note" data-i18n="hostEntry.note">
-                This path is still the local-first owner control room. Participant bearer-token auth remains available in advanced options.
-              </p>
-            </div>
-
-            <form id="console-form" class="dock-form">
-              <label class="field">
-                <span data-i18n="dock.feedScope.label">Sea feed scope</span>
-                <select id="feed-scope" name="feedScope">
-                  <option value="mine" data-i18n="option.feedScope.mine">Mine</option>
-                  <option value="all" data-i18n="option.feedScope.all">All</option>
-                  <option value="friends" data-i18n="option.feedScope.friends">Friends</option>
-                  <option value="system" data-i18n="option.feedScope.system">System</option>
-                </select>
-              </label>
-
-              <label class="field gateway-only" hidden>
-                <span data-i18n="dock.activityGateway.label">Activity gateway id</span>
-                <input
-                  id="activity-gateway-id"
-                  name="activityGatewayId"
-                  type="text"
-                  placeholder="Defaults to your gateway id"
-                  data-i18n-placeholder="dock.activityGateway.placeholder"
-                />
-              </label>
-
-              <details class="advanced-dock">
-                <summary class="advanced-summary">
-                  <span class="advanced-summary-title" data-i18n="dock.advanced.summary">Advanced / Dev Options</span>
-                  <span class="advanced-summary-note" data-i18n="dock.advanced.note">API origin and manual bearer-token auth</span>
-                </summary>
-
-                <div class="advanced-grid">
-                  <label class="field">
-                    <span data-i18n="dock.apiOrigin.label">Console API origin</span>
-                    <input
-                      id="api-origin"
-                      name="apiOrigin"
-                      type="url"
-                      placeholder="http://127.0.0.1:4173"
-                      data-i18n-placeholder="dock.apiOrigin.placeholder"
-                    />
-                  </label>
-
-                  <label class="field field-token">
-                    <span data-i18n="dock.token.label">Bearer token (manual dev auth)</span>
-                    <textarea
-                      id="bearer-token"
-                      name="bearerToken"
-                      rows="3"
-                      placeholder="Manual developer auth only. Leave blank for local owner bootstrap."
-                      data-i18n-placeholder="dock.token.placeholder"
-                    ></textarea>
-                  </label>
-                </div>
-              </details>
-
-              <div class="dock-actions">
-                <button class="button button-primary" id="connect-button" type="submit" data-i18n="dock.action.connect">
-                  Enter as Host
-                </button>
-                <button class="button button-ghost" id="refresh-button" type="button" data-i18n="dock.action.refresh">
-                  Refresh Read Surface
-                </button>
-                <button class="button button-soft" id="clear-button" type="button" data-i18n="dock.action.clear">
-                  Forget Auth
-                </button>
-              </div>
-            </form>
-          </section>
         </div>
 
         <p class="status-line" id="console-status" data-i18n="dock.status.initial">
-          Use Enter as Host for the local control room, or join by invite to enter participant mode. Open advanced options only if you need manual debugging.
+          Start with Enter as Host. If this API origin is hosted, participant join and reconnect cards will appear as secondary entry paths.
         </p>
       </section>
 

@@ -788,6 +788,7 @@ interface JoinHostedRuntimeWithInviteResult {
   runtime: RemoteRuntimeBindingState;
   bridgeCredential: RemoteRuntimeBridgeCredentialRecord;
   presence: GatewayPresenceRecord;
+  reusedGateway: boolean;
 }
 
 interface CreateFriendRequestInput {
@@ -2868,13 +2869,34 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         throw new Error('hosted invite requires the hosted owner host');
       }
 
-      const { gateway, token } = this.register({
-        displayName: input.displayName,
-        handle: input.handle,
-        bio: input.bio,
-        visibility: input.visibility,
-      });
-      const reconnectCredential = this.getOrCreateGatewayReconnectCredential(gateway.id);
+      const existingRemoteGateway = input.installationId
+        ? this.findPreferredRemoteRuntimeGatewayByInstallationId(input.installationId)
+        : null;
+
+      let gateway: GatewayRecord;
+      let token: string;
+      let reconnectCredential: GatewayReconnectCredentialRecord;
+      let reusedGateway = false;
+
+      if (existingRemoteGateway) {
+        const reauthenticated = this.reconnectGatewayByReconnectToken(
+          this.getOrCreateGatewayReconnectCredential(existingRemoteGateway.gateway.id).token,
+        );
+        gateway = reauthenticated.gateway;
+        token = reauthenticated.token;
+        reconnectCredential = reauthenticated.reconnectCredential;
+        reusedGateway = true;
+      } else {
+        const registered = this.register({
+          displayName: input.displayName,
+          handle: input.handle,
+          bio: input.bio,
+          visibility: input.visibility,
+        });
+        gateway = registered.gateway;
+        token = registered.token;
+        reconnectCredential = this.getOrCreateGatewayReconnectCredential(gateway.id);
+      }
 
       const claimed = this.claimInvite({
         code: invite.code,
@@ -2910,11 +2932,55 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         runtime,
         bridgeCredential: bind.bridgeCredential,
         presence,
+        reusedGateway,
       };
     } catch (error) {
       this.importSnapshot(snapshot);
       throw error;
     }
+  }
+
+  private findPreferredRemoteRuntimeGatewayByInstallationId(installationId: string) {
+    const normalizedInstallationId = installationId.trim();
+    if (!normalizedInstallationId) {
+      return null;
+    }
+
+    let preferredBinding: RemoteRuntimeBindingRecord | null = null;
+    let preferredRank = -1;
+    for (const binding of this.remoteRuntimeBindingsByGatewayId.values()) {
+      if (binding.installationId !== normalizedInstallationId) {
+        continue;
+      }
+
+      const rank = this.parseRemoteRuntimeBindingRank(binding);
+      if (preferredBinding && rank <= preferredRank) {
+        continue;
+      }
+
+      preferredBinding = binding;
+      preferredRank = rank;
+    }
+
+    if (!preferredBinding) {
+      return null;
+    }
+
+    const gateway = this.gatewaysById.get(preferredBinding.gatewayId);
+    if (!gateway) {
+      throw new Error('remote runtime gateway not found');
+    }
+
+    return {
+      gateway,
+      binding: preferredBinding,
+    };
+  }
+
+  private parseRemoteRuntimeBindingRank(binding: RemoteRuntimeBindingRecord) {
+    const preferredTimestamp = binding.lastHeartbeatAt ?? binding.updatedAt ?? binding.createdAt;
+    const parsed = Date.parse(preferredTimestamp);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   createFriendRequest(input: CreateFriendRequestInput): FriendRequestRecord {

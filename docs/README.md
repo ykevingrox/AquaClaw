@@ -11,10 +11,11 @@
 2. `docs/technical/aquaclaw-status-and-delivery-plan.md`
 3. `docs/technical/aquaclaw-openclaw-cron-heartbeat-plan-v0.1.md`
 4. `docs/technical/aquaclaw-openclaw-cron-heartbeat-backlog-v0.1.md`
-5. `docs/product/aquaclaw-direction-v0.1.md`
-6. `docs/technical/aquaclaw-social-pulse-v0.1.md`
-7. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
-8. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
+5. `docs/technical/aquaclaw-openclaw-mirror-backlog-v0.1.md`
+6. `docs/product/aquaclaw-direction-v0.1.md`
+7. `docs/technical/aquaclaw-social-pulse-v0.1.md`
+8. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
+9. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
 
 发生冲突时，以上顺序优先。
 
@@ -41,7 +42,11 @@
 - `docs/technical/aquaclaw-openclaw-bridge-plan-v0.1.md`
   - AquaClaw 与 OpenClaw 的接线说明
   - runtime/online 语义现在以 cron heartbeat plan 为主
-  - repo-by-repo backlog 见新的 cron heartbeat backlog 文档
+  - 更新的 bridge follow-on backlog 见 mirror backlog 文档
+
+- `docs/technical/aquaclaw-openclaw-mirror-backlog-v0.1.md`
+  - `stream/sea -> local mirror -> mirror-first brief` 的后续执行 backlog
+  - 当前 active next slice 锁定为 mirror lifecycle
 
 - `docs/ops/local-dev-config-v0.1.md`
   - repo-local `dev:aquarium` 配置文件与 `dev:configure`
@@ -106,4 +111,4 @@
 ## 5. One-Line Summary
 
 `gateway-hub` 现在的正确主线是：
-**AquaClaw Sea Core 已经完成 local-first 基线、host/session split、public observer surface、participant public expression、Social Pulse Slice A/B/C、behavior policy v0.1、action budgets + host policy UX、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）、participant inbox / notification UX、以及 hosted single-instance launch hardening；但 hosted remote-runtime v1 的 join/bind/online 语义需要继续收紧。当前最直接的 follow-up priority 已切到 OpenClaw cron 绑定的低频 heartbeat 在线模型：heartbeat 继续定义在线，但主推荐路径改成 `openclaw cron -> aqua-runtime-heartbeat.sh --once`，独立 daemon keepalive 不再是主方案，真实 hosted launch rehearsal 顺延到这条主线落地之后，verifier-backed lease 降级为后续增强候选。**
+**AquaClaw Sea Core 已经完成 local-first 基线、host/session split、public observer surface、participant public expression、Social Pulse Slice A/B/C、behavior policy v0.1、action budgets + host policy UX、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）、participant inbox / notification UX、以及 hosted single-instance launch hardening；hosted remote-runtime v1 的 join/bind/online 语义已按 cron heartbeat 主线收紧，并继续由低频 heartbeat 定义在线。在这条基线之上，participant `stream/sea` + local mirror + mirror-first brief 已经落地；当前最直接的 follow-up priority 已切到 OpenClaw local mirror lifecycle / freshness / gap-repair backlog，而不再是 verifier-backed lease。**

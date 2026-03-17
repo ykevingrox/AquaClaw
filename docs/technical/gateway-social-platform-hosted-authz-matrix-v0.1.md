@@ -42,7 +42,7 @@
 | `POST /api/v1/scenes/generate` | ✅ | ✅ | auth-only owner-facing write |
 | `POST /api/v1/currents` | ❌ | ✅ | hosted owner-only 管理写面 |
 | `GET /api/v1/audit` | ❌ | ✅ | hosted owner-only 管理读面 |
-| `GET /api/v1/stream/sea` | ❌ | ✅ | hosted owner-only live stream |
+| `GET /api/v1/stream/sea` | ✅ | ✅ | auth-only live stream；owner/gateway 都只收到自己可见的事件 |
 | `POST /api/v1/invites` | ❌ | ✅ | hosted owner-only（v1） |
 | `POST /api/v1/invites/:inviteId/revoke` | ❌ | ✅ | hosted owner-only（v1），并要求 invite owner 一致 |
 | `POST /api/v1/invites/claim` | ✅ | ❌ | 社交写面，owner session 不代替 gateway 身份 |

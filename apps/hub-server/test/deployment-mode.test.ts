@@ -406,6 +406,7 @@ test('hosted invite join lets a remote gateway enter and bind without opening gl
   assert.equal(joined.json().data.runtime.runtime.status, 'offline');
   assert.equal(joined.json().data.runtime.presence.status, 'offline');
   assert.equal(joined.json().data.friendRequest, null);
+  assert.equal(joined.json().data.reusedGateway, false);
 
   const reconnectCredential = await app.inject({
     method: 'GET',
@@ -494,6 +495,97 @@ test('hosted invite join lets a remote gateway enter and bind without opening gl
   });
   assert.equal(inviteReuse.statusCode, 409);
   assert.equal(inviteReuse.json().error.code, 'invalid_state');
+
+  await app.close();
+});
+
+test('hosted invite join reuses the same gateway when the installation rejoins with a new invite', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-rejoin-owner');
+  const ownerToken = owner.credential.token;
+
+  const firstInviteResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      maxUses: 1,
+    },
+  });
+  assert.equal(firstInviteResponse.statusCode, 201);
+
+  const firstJoin = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/join-by-invite',
+    payload: {
+      inviteCode: firstInviteResponse.json().data.invite.code,
+      displayName: 'Hosted Rejoin Gateway',
+      handle: 'hosted-rejoin-gateway',
+      installationId: 'hosted-rejoin-installation',
+      runtimeId: 'hosted-rejoin-runtime',
+      label: 'Hosted Rejoin Runtime',
+      source: 'deployment_test_rejoin_first',
+    },
+  });
+  assert.equal(firstJoin.statusCode, 201);
+  const firstToken = firstJoin.json().data.credential.token as string;
+  const firstGatewayId = firstJoin.json().data.gateway.id as string;
+
+  const secondInviteResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      maxUses: 1,
+    },
+  });
+  assert.equal(secondInviteResponse.statusCode, 201);
+
+  const secondJoin = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/join-by-invite',
+    payload: {
+      inviteCode: secondInviteResponse.json().data.invite.code,
+      displayName: 'Hosted Rejoin Gateway Again',
+      handle: 'hosted-rejoin-gateway-again',
+      installationId: 'hosted-rejoin-installation',
+      runtimeId: 'hosted-rejoin-runtime-updated',
+      label: 'Hosted Rejoin Runtime Updated',
+      source: 'deployment_test_rejoin_second',
+    },
+  });
+  assert.equal(secondJoin.statusCode, 200);
+  assert.equal(secondJoin.json().data.reusedGateway, true);
+  assert.equal(secondJoin.json().data.gateway.id, firstGatewayId);
+  assert.equal(secondJoin.json().data.gateway.handle, 'hosted-rejoin-gateway');
+  assert.equal(secondJoin.json().data.runtime.runtime.runtimeId, 'hosted-rejoin-runtime-updated');
+  assert.equal(secondJoin.json().data.runtime.runtime.source, 'deployment_test_rejoin_second');
+
+  const oldTokenRejected = await app.inject({
+    method: 'GET',
+    url: '/api/v1/gateways/me',
+    headers: {
+      authorization: `Bearer ${firstToken}`,
+    },
+  });
+  assert.equal(oldTokenRejected.statusCode, 401);
+
+  const secondToken = secondJoin.json().data.credential.token as string;
+  const remoteMe = await app.inject({
+    method: 'GET',
+    url: '/api/v1/runtime/remote/me',
+    headers: {
+      authorization: `Bearer ${secondToken}`,
+    },
+  });
+  assert.equal(remoteMe.statusCode, 200);
+  assert.equal(remoteMe.json().data.gateway.id, firstGatewayId);
+  assert.equal(remoteMe.json().data.runtime.runtimeId, 'hosted-rejoin-runtime-updated');
 
   await app.close();
 });
@@ -1678,7 +1770,7 @@ test('hosted participant social pulse endpoint returns a public reply plan while
   await app.close();
 });
 
-test('hosted owner session gate protects owner-only hosted-session/current/audit/system feed/stream/invite/remote-bridge endpoints from gateway tokens', async () => {
+test('hosted owner session gate protects owner-only hosted-session/current/audit/system feed/invite/remote-bridge endpoints from gateway tokens', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
   const hostedBootstrap = await app.inject({
@@ -1914,17 +2006,6 @@ test('hosted owner session gate protects owner-only hosted-session/current/audit
   });
   assert.equal(guestFriendsFeed.statusCode, 200);
   assert.equal(guestFriendsFeed.json().data.items.some((item: { visibility: string }) => item.visibility === 'system'), false);
-
-  const forbiddenStream = await app.inject({
-    method: 'GET',
-    url: '/api/v1/stream/sea',
-    headers: {
-      authorization: `Bearer ${guestToken}`,
-      accept: 'text/event-stream',
-    },
-  });
-  assert.equal(forbiddenStream.statusCode, 403);
-  assert.equal(forbiddenStream.json().error.code, 'forbidden');
 
   const forbiddenInvite = await app.inject({
     method: 'POST',
