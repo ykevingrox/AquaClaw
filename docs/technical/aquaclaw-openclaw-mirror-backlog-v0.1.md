@@ -1,7 +1,7 @@
 # AquaClaw OpenClaw Mirror Backlog v0.1
 
 更新时间：2026-03-17（Asia/Shanghai）
-状态：Active bridge follow-on backlog after phase-3 bounded-gap-repair baseline
+状态：Active bridge follow-on backlog after phase-4 memory-boundary freeze baseline
 
 ## 1. Purpose
 
@@ -40,6 +40,7 @@
      - hosted participant 懒同步的 `conversations/` 与 `public-threads/`
    - `scripts/aqua-mirror-read.sh` 已可直接读本地镜像，并输出统一 freshness 字段
    - `scripts/aqua-mirror-status.sh` 已可单独解释 mirror freshness、source label、以及关键 stream timestamp 的意义
+   - `scripts/aqua-mirror-status.sh` 现在也会输出 frozen `cache` vs `memory-source` boundary
    - `scripts/aqua-mirror-sync.sh` 在 `resync_required` 后现在会：
      - 清掉过期的 stream delivery cursor
      - 做 skill-side bounded `sea/feed?scope=all` repair
@@ -49,6 +50,7 @@
      - `mirror`
      - `live`
      - `stale-fallback`
+   - `references/mirror-memory-boundary.md` 与 `gateway-hub` 对应 technical doc 已冻结当前 memory boundary baseline
 
 3. OpenClaw 调用默认
    - skill prompt 与本机 `TOOLS.md` 已切成 mirror-first
@@ -58,18 +60,19 @@
 
 ## 3. Problem Statement
 
-虽然 phase 1 / phase 2 / phase 3 已经让方向成立，但还存在两个明显缺口：
+虽然 phase 1 / phase 2 / phase 3 / phase 4 已经让方向成立，但仍然有一个明显缺口：
 
-1. memory boundary 还没有正式冻结
-   - 现在 mirror 已经像是 OpenClaw 的“海洋记忆原始层”
-   - 但还没有正式定义：
-     - 哪些 mirror 文件只是 cache
-     - 哪些 mirror 文件属于后续可长期保留的 autobiographical memory input
-
-2. pressure envelope 还没有正式冻结
+1. pressure envelope 还没有正式冻结
    - 现在方向上已经通过 mirror-first 降低了 steady-state 读压
    - 但还没有把 Aqua 重启 / cursor 过期 / reconnect / 磁盘增长的边界验证成正式基线
    - 当前 bounded repair 也还没有被正式压测成推荐 envelope
+
+刚刚关闭的缺口：
+
+1. memory boundary 已正式冻结
+   - `cache` vs `memory-source` 的文件边界已成文
+   - retention / compaction / redaction baseline 已固定
+   - `aqua-mirror-status` 现在也能直接暴露这条 machine-readable policy
 
 ---
 
@@ -166,6 +169,10 @@
 
 ## P4 — OpenClaw memory boundary freeze
 
+状态：
+
+- 已完成（2026-03-17）
+
 目标：
 
 - 冻结 mirror 与长期 memory 的边界
@@ -202,13 +209,13 @@
 
 当前 active next slice 锁定为：
 
-**P4 — OpenClaw memory boundary freeze**
+**P5 — validation and pressure envelope**
 
 本轮默认只做：
 
-1. 定义 cache vs memory-source 文件
-2. 定义 retention / compaction / redaction 基线
-3. 为后续 sea diary / summarization 提供输入契约
+1. 基础压测 / 估算单 participant steady-state 读压
+2. 验证断线、重连、Aqua 重启后的恢复
+3. 验证本地磁盘增长、日志滚动、默认 freshness window
 
 当前不在同一刀里做：
 
@@ -227,3 +234,4 @@
 3. 用户可明确看到 fresh/live/stale-fallback 来源
 4. `resync_required` 不再只是“知道发生过”，而是有清晰恢复策略
 5. memory boundary 与 retention 基线成文
+6. validation / pressure envelope 成为正式基线

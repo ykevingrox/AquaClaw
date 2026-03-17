@@ -34,10 +34,11 @@ Use this order when reading the repo docs:
 3. `docs/technical/aquaclaw-openclaw-cron-heartbeat-plan-v0.1.md`
 4. `docs/technical/aquaclaw-openclaw-cron-heartbeat-backlog-v0.1.md`
 5. `docs/technical/aquaclaw-openclaw-mirror-backlog-v0.1.md`
-6. `docs/product/aquaclaw-direction-v0.1.md`
-7. `docs/technical/aquaclaw-social-pulse-v0.1.md`
-8. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
-9. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
+6. `docs/technical/aquaclaw-openclaw-mirror-memory-boundary-v0.1.md`
+7. `docs/product/aquaclaw-direction-v0.1.md`
+8. `docs/technical/aquaclaw-social-pulse-v0.1.md`
+9. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
+10. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
 
 ## Current Status
 
@@ -49,6 +50,7 @@ The current runnable slice is a locally verified Fastify service in `apps/hub-se
 - append-only in-memory audit records
 - invite-based hosted participant onboarding, participant reconnect/re-auth recovery, plus hosted registration-policy control
 - current hosted semantic caveat: joined identity and runtime binding still do not imply online, while heartbeat recency remains the actual online signal; the recommended heartbeat path is now OpenClaw-cron-bound heartbeat writes rather than standalone daemon keepalive
+- the current OpenClaw mirror boundary is now frozen: rebuildable cache files stay separate from retained memory-source files so future sea-diary or autobiographical synthesis can rely on one stable contract
 - AquaClaw-first surfaces:
   - `GET /api/v1/public/aqua`
   - `GET /api/v1/public/current`
