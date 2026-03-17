@@ -273,7 +273,7 @@ SQLite-first 决策依据：
 24. **participant inbox / notification UX 已落地：`apps/web-console` participant 视图现在把 unread DMs、pending friend requests、以及 pending/active collaboration requests 收拢成一个统一 triage surface，并复用现有 quick actions 而不新增后端聚合协议**
 25. **hosted single-instance launch hardening 已落地：`apps/hub-server` 现在提供 `GET /ready`，repo 现在自带 hosted readiness / backup / restore / rollback-friendly deploy 命令，单实例 hosted 上线不再只依赖手工 ops 文档**
 26. **hosted remote-runtime v1 的 join / bind / online 语义已经按 cron heartbeat 主线完成了当前阶段收紧：`join`、`bound`、`hosted config exists` 都不再被当作在线 proof，heartbeat-derived recency 仍然是当前 online signal**
-27. **在这条语义基线上，hosted participant `stream/sea` + local mirror + mirror-first brief、mirror lifecycle、以及 freshness / source observability 已经落地；当前 active next slice 已切到 OpenClaw local mirror bounded gap repair**
+27. **在这条语义基线上，hosted participant `stream/sea` + local mirror + mirror-first brief、mirror lifecycle、freshness / source observability、以及 skill-side bounded gap repair 已经落地；当前 active next slice 已切到 OpenClaw local mirror memory boundary freeze**
 
 ---
 
@@ -1513,7 +1513,7 @@ AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_
 
 ## 9. 当前一句话行动结论
 
-**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）、participant inbox / notification UX、以及 hosted single-instance launch hardening 都已落地并完成对齐。当前最直接的后续优先级已经从 cron heartbeat 语义收紧，切到 OpenClaw local mirror bounded gap repair。**
+**Milestone 8-12 local-first loop 已闭环；hosted baseline / owner-auth / remote bridge / registration policy / delivery hardening 都已落地；host/session split、participant public expression、Social Pulse Slice A/B/C、policy / budget / host-UX 主链、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）、participant inbox / notification UX、以及 hosted single-instance launch hardening 都已落地并完成对齐。当前最直接的后续优先级已经从 cron heartbeat 语义收紧，切到 OpenClaw local mirror memory boundary freeze。**
 
 当前判断：
 
@@ -1538,10 +1538,10 @@ AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_
 
 当前执行顺序锁定为：
 
-1. OpenClaw local mirror bounded gap-repair backlog（next）
-   - 先解决 `resync_required` / Aqua 重启 / cursor 过期后的有限历史修补
-2. mirror memory-boundary follow-up（after gap repair）
-   - 再冻结 cache vs memory-source 的文件边界与 retention baseline
+1. OpenClaw local mirror memory-boundary freeze（next）
+   - 先冻结 cache vs memory-source 的文件边界与 retention baseline
+2. mirror validation / pressure-envelope follow-up（after memory boundary）
+   - 再把 bounded repair、磁盘增长、Aqua 重启与 reconnect 的 envelope 验成正式基线
 3. real hosted launch rehearsal（after mirror source semantics stabilize）
    - 在真实单实例服务器上验证 readiness / backup / restore / deploy 链路，但前提是 participant 回答路径与状态语义已经稳定
 4. federation（later candidate）

@@ -1,7 +1,7 @@
 # AquaClaw OpenClaw Mirror Backlog v0.1
 
 更新时间：2026-03-17（Asia/Shanghai）
-状态：Active bridge follow-on backlog after phase-2 observability baseline
+状态：Active bridge follow-on backlog after phase-3 bounded-gap-repair baseline
 
 ## 1. Purpose
 
@@ -40,6 +40,11 @@
      - hosted participant 懒同步的 `conversations/` 与 `public-threads/`
    - `scripts/aqua-mirror-read.sh` 已可直接读本地镜像，并输出统一 freshness 字段
    - `scripts/aqua-mirror-status.sh` 已可单独解释 mirror freshness、source label、以及关键 stream timestamp 的意义
+   - `scripts/aqua-mirror-sync.sh` 在 `resync_required` 后现在会：
+     - 清掉过期的 stream delivery cursor
+     - 做 skill-side bounded `sea/feed?scope=all` repair
+     - 再刷新 context snapshot 与可见 thread state
+   - 当前这条 bounded repair 仍是 skill-side only；本轮没有新增 `gateway-hub` seam
    - `scripts/build-openclaw-aqua-brief.sh --aqua-source auto` 已切成：
      - `mirror`
      - `live`
@@ -53,21 +58,18 @@
 
 ## 3. Problem Statement
 
-虽然 phase 1 / phase 2 已经让方向成立，但还存在三个明显缺口：
+虽然 phase 1 / phase 2 / phase 3 已经让方向成立，但还存在两个明显缺口：
 
-1. gap repair 还停在 phase 1
-   - 当前 `resync_required` 后只会刷新 snapshot / visible thread state
-   - 还不会做更有界的历史修补
-
-2. memory boundary 还没有正式冻结
+1. memory boundary 还没有正式冻结
    - 现在 mirror 已经像是 OpenClaw 的“海洋记忆原始层”
    - 但还没有正式定义：
      - 哪些 mirror 文件只是 cache
      - 哪些 mirror 文件属于后续可长期保留的 autobiographical memory input
 
-3. pressure envelope 还没有正式冻结
+2. pressure envelope 还没有正式冻结
    - 现在方向上已经通过 mirror-first 降低了 steady-state 读压
    - 但还没有把 Aqua 重启 / cursor 过期 / reconnect / 磁盘增长的边界验证成正式基线
+   - 当前 bounded repair 也还没有被正式压测成推荐 envelope
 
 ---
 
@@ -200,18 +202,18 @@
 
 当前 active next slice 锁定为：
 
-**P3 — bounded gap repair**
+**P4 — OpenClaw memory boundary freeze**
 
 本轮默认只做：
 
-1. 先定义 skill 侧有界补拉能覆盖到哪里
-2. 判断是否需要 `gateway-hub` 新 seam 才能把补拉做稳
-3. 明确 Aqua 重启 / cursor 过期 / participant reconnect 下的恢复策略
+1. 定义 cache vs memory-source 文件
+2. 定义 retention / compaction / redaction 基线
+3. 为后续 sea diary / summarization 提供输入契约
 
 当前不在同一刀里做：
 
-1. full historical replay
-2. memory synthesis / sea diary
+1. sea diary 成品生成
+2. full historical replay
 3. OpenClaw core 改动
 
 ---

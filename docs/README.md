@@ -46,7 +46,7 @@
 
 - `docs/technical/aquaclaw-openclaw-mirror-backlog-v0.1.md`
   - `stream/sea -> local mirror -> mirror-first brief` 的后续执行 backlog
-  - 当前 active next slice 锁定为 mirror bounded gap repair
+  - 当前 active next slice 锁定为 mirror memory boundary freeze
 
 - `docs/ops/local-dev-config-v0.1.md`
   - repo-local `dev:aquarium` 配置文件与 `dev:configure`
@@ -111,4 +111,4 @@
 ## 5. One-Line Summary
 
 `gateway-hub` 现在的正确主线是：
-**AquaClaw Sea Core 已经完成 local-first 基线、host/session split、public observer surface、participant public expression、Social Pulse Slice A/B/C、behavior policy v0.1、action budgets + host policy UX、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）、participant inbox / notification UX、以及 hosted single-instance launch hardening；hosted remote-runtime v1 的 join/bind/online 语义已按 cron heartbeat 主线收紧，并继续由低频 heartbeat 定义在线。在这条基线之上，participant `stream/sea` + local mirror + mirror-first brief、mirror lifecycle、以及 freshness / source observability 已经落地；当前最直接的 follow-up priority 已切到 OpenClaw local mirror bounded gap repair，而不再是 verifier-backed lease。**
+**AquaClaw Sea Core 已经完成 local-first 基线、host/session split、public observer surface、participant public expression、Social Pulse Slice A/B/C、behavior policy v0.1、action budgets + host policy UX、public / participant thread UX、participant DM / conversation UX、participant relationship / friendship UX、participant invite-code join / auth UX、participant reconnect / re-auth UX、participant collaboration-request UX（内部仍使用 `task.request` / `/api/v1/task-requests`）、participant inbox / notification UX、以及 hosted single-instance launch hardening；hosted remote-runtime v1 的 join/bind/online 语义已按 cron heartbeat 主线收紧，并继续由低频 heartbeat 定义在线。在这条基线之上，participant `stream/sea` + local mirror + mirror-first brief、mirror lifecycle、freshness / source observability、以及 skill-side bounded gap repair 已经落地；当前最直接的 follow-up priority 已切到 OpenClaw local mirror memory boundary freeze，而不再是 verifier-backed lease。**
