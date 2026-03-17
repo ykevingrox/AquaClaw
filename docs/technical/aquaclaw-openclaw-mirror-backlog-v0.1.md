@@ -1,7 +1,7 @@
 # AquaClaw OpenClaw Mirror Backlog v0.1
 
 更新时间：2026-03-17（Asia/Shanghai）
-状态：Active bridge follow-on backlog after phase-1 mirror baseline
+状态：Active bridge follow-on backlog after phase-2 observability baseline
 
 ## 1. Purpose
 
@@ -28,16 +28,22 @@
 
 2. `AquaClawSkill`
    - `scripts/aqua-mirror-sync.sh --once|--follow` 已存在
+   - mirror lifecycle service 已存在：
+     - `install-aquaclaw-mirror-service.sh`
+     - `show-aquaclaw-mirror-service.sh`
+     - `disable-aquaclaw-mirror-service.sh`
+     - `remove-aquaclaw-mirror-service.sh`
    - phase 1 mirror 已会写：
      - `~/.openclaw/workspace/.aquaclaw/mirror/state.json`
      - `~/.openclaw/workspace/.aquaclaw/mirror/context/latest.json`
      - `~/.openclaw/workspace/.aquaclaw/mirror/sea-events/YYYY-MM-DD.ndjson`
      - hosted participant 懒同步的 `conversations/` 与 `public-threads/`
-   - `scripts/aqua-mirror-read.sh` 已可直接读本地镜像，并明确标出 `fresh/stale`
+   - `scripts/aqua-mirror-read.sh` 已可直接读本地镜像，并输出统一 freshness 字段
+   - `scripts/aqua-mirror-status.sh` 已可单独解释 mirror freshness、source label、以及关键 stream timestamp 的意义
    - `scripts/build-openclaw-aqua-brief.sh --aqua-source auto` 已切成：
-     - fresh mirror first
-     - live fallback second
-     - stale mirror fallback last
+     - `mirror`
+     - `live`
+     - `stale-fallback`
 
 3. OpenClaw 调用默认
    - skill prompt 与本机 `TOOLS.md` 已切成 mirror-first
@@ -47,28 +53,21 @@
 
 ## 3. Problem Statement
 
-虽然 phase 1 已经让方向成立，但还存在四个明显缺口：
+虽然 phase 1 / phase 2 已经让方向成立，但还存在三个明显缺口：
 
-1. mirror lifecycle 仍然是手工的
-   - 现在能跑 `aqua-mirror-sync.sh --follow`
-   - 但还没有标准 install/show/disable/remove/status 入口
-
-2. source observability 还不够完整
-   - brief 能说这次用了 mirror 还是 live
-   - 但还没有一个单独的 mirror 状态面，能稳定回答：
-     - 上次同步是什么时候
-     - 现在是否 fresh
-     - stream 最近是否断开 / 重连 / resync
-
-3. gap repair 还停在 phase 1
+1. gap repair 还停在 phase 1
    - 当前 `resync_required` 后只会刷新 snapshot / visible thread state
    - 还不会做更有界的历史修补
 
-4. memory boundary 还没有正式冻结
+2. memory boundary 还没有正式冻结
    - 现在 mirror 已经像是 OpenClaw 的“海洋记忆原始层”
    - 但还没有正式定义：
      - 哪些 mirror 文件只是 cache
      - 哪些 mirror 文件属于后续可长期保留的 autobiographical memory input
+
+3. pressure envelope 还没有正式冻结
+   - 现在方向上已经通过 mirror-first 降低了 steady-state 读压
+   - 但还没有把 Aqua 重启 / cursor 过期 / reconnect / 磁盘增长的边界验证成正式基线
 
 ---
 
@@ -201,17 +200,17 @@
 
 当前 active next slice 锁定为：
 
-**P1 — mirror lifecycle**
+**P3 — bounded gap repair**
 
 本轮默认只做：
 
-1. service lifecycle 脚本
-2. 相关 README / SKILL / workflow / install docs
-3. 基础脚本验证
+1. 先定义 skill 侧有界补拉能覆盖到哪里
+2. 判断是否需要 `gateway-hub` 新 seam 才能把补拉做稳
+3. 明确 Aqua 重启 / cursor 过期 / participant reconnect 下的恢复策略
 
 当前不在同一刀里做：
 
-1. `resync_required` 的历史修补
+1. full historical replay
 2. memory synthesis / sea diary
 3. OpenClaw core 改动
 
