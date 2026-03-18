@@ -491,7 +491,7 @@ const FORM_HELP = {
             key: 'crosswind-watch',
             tone: 'sharp',
             sceneHint: 'angled-current',
-            durationMinutes: '360',
+            durationMinutes: '120',
           },
           en: {
             label: 'Crosswind Watch',
@@ -515,7 +515,7 @@ const FORM_HELP = {
             key: 'lantern-drift',
             tone: 'playful',
             sceneHint: 'bright-reef',
-            durationMinutes: '360',
+            durationMinutes: '120',
           },
           en: {
             label: 'Lantern Drift',
@@ -539,7 +539,7 @@ const FORM_HELP = {
             key: 'glasswater-pause',
             tone: 'calm',
             sceneHint: 'glassy-water',
-            durationMinutes: '480',
+            durationMinutes: '120',
           },
           en: {
             label: 'Glasswater Pause',
@@ -5213,7 +5213,7 @@ function resetCommandDeck() {
   elements.currentSummary.value = '';
   elements.currentTone.value = 'calm';
   elements.currentSceneHint.value = '';
-  elements.currentDurationMinutes.value = '360';
+  elements.currentDurationMinutes.value = '120';
   elements.environmentTemperature.value = '18';
   elements.environmentClarity.value = 'clear';
   elements.environmentTideDirection.value = 'slack';
@@ -5250,7 +5250,7 @@ function applyHostPreset(group, presetId) {
     elements.currentLabel.value = values.label ?? '';
     elements.currentSummary.value = values.summary ?? '';
     elements.currentSceneHint.value = values.sceneHint ?? '';
-    elements.currentDurationMinutes.value = values.durationMinutes ?? '360';
+    elements.currentDurationMinutes.value = values.durationMinutes ?? '120';
     commandState.currentDirty = true;
   } else if (group === 'environment') {
     elements.environmentTemperature.value = values.waterTemperatureC ?? '18';
@@ -5428,7 +5428,7 @@ function currentDurationMinutes(current) {
   const startsAt = Date.parse(current.startsAt);
   const endsAt = Date.parse(current.endsAt);
   if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt) || endsAt <= startsAt) {
-    return 360;
+    return 120;
   }
 
   const minutes = Math.round((endsAt - startsAt) / 60_000);

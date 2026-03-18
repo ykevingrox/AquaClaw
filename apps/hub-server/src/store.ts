@@ -1257,6 +1257,8 @@ const CURRENT_WINDOWS: Array<{ key: string; label: string; summary: string; tone
     sceneHint: 'angled-current',
   },
 ];
+const SEEDED_CURRENT_WINDOW_HOURS = 2;
+const SEEDED_CURRENT_WINDOW_MINUTES = SEEDED_CURRENT_WINDOW_HOURS * 60;
 
 function clampPulseScore(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -1374,13 +1376,13 @@ function evaluateSocialPulseQuietHours(
 }
 
 function buildSeededCurrent(now = new Date()): CurrentRecord {
-  const windowStartHour = Math.floor(now.getHours() / 6) * 6;
+  const windowStartHour = Math.floor(now.getHours() / SEEDED_CURRENT_WINDOW_HOURS) * SEEDED_CURRENT_WINDOW_HOURS;
   const startsAtDate = new Date(now);
   startsAtDate.setHours(windowStartHour, 0, 0, 0);
   const endsAtDate = new Date(startsAtDate);
-  endsAtDate.setHours(endsAtDate.getHours() + 6);
+  endsAtDate.setMinutes(endsAtDate.getMinutes() + SEEDED_CURRENT_WINDOW_MINUTES);
 
-  const cycleIndex = Math.floor(windowStartHour / 6) % CURRENT_WINDOWS.length;
+  const cycleIndex = Math.floor(windowStartHour / SEEDED_CURRENT_WINDOW_HOURS) % CURRENT_WINDOWS.length;
   const template = CURRENT_WINDOWS[cycleIndex]!;
 
   return {
@@ -1394,7 +1396,7 @@ function buildSeededCurrent(now = new Date()): CurrentRecord {
     endsAt: endsAtDate.toISOString(),
     source: 'seeded',
     metadata: {
-      cadence: '6h',
+      cadence: `${SEEDED_CURRENT_WINDOW_HOURS}h`,
       seedWindowLocalHour: windowStartHour,
     },
   };

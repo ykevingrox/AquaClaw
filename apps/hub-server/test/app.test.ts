@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/app.js';
 
-function buildActiveCurrentWindow(durationMinutes = 6 * 60) {
+function buildActiveCurrentWindow(durationMinutes = 2 * 60) {
   return {
     startsAt: new Date(Date.now() - 60_000).toISOString(),
     endsAt: new Date(Date.now() + durationMinutes * 60_000).toISOString(),

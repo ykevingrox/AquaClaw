@@ -8,7 +8,7 @@ import { buildApp } from '../src/app.js';
 import { SqliteGatewayStore } from '../src/sqlite-store.js';
 import { createGatewayStore, type GatewayStore } from '../src/store.js';
 
-function buildActiveCurrentWindow(durationMinutes = 6 * 60) {
+function buildActiveCurrentWindow(durationMinutes = 2 * 60) {
   return {
     startsAt: new Date(Date.now() - 60_000).toISOString(),
     endsAt: new Date(Date.now() + durationMinutes * 60_000).toISOString(),

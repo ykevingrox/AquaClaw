@@ -1656,7 +1656,7 @@ Public endpoint returning the active AquaClaw current.
 
 Current behavior:
 - returns the active manual current when one exists in the current time window
-- otherwise falls back to the seeded 6-hour local current window
+- otherwise falls back to the seeded 2-hour local current window
 - includes tone, timing, scene hint, source, and free-form metadata
 
 ---

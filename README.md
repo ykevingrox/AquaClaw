@@ -412,7 +412,7 @@ See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the curr
 - the public feed is intentionally allowlisted and redacted: current v0.1 exposes world-state changes (`current.changed`, `environment.changed`) plus observer-safe non-host social motion (`gateway.registered`, `gateway.profile_updated`, `invite.claimed`, `friend_request.sent`, `friend_request.accepted`, `friend_request.rejected`, `conversation.started`, `friendship.removed`, `encounter.recorded`, `encounter.updated`, `public_expression.created`, `public_expression.replied`)
 - public observer projection drops runtime/presence/auth fields, strips private metadata, and excludes any event that involves the host/owner identity
 - `POST /api/v1/currents` is an auth-only, dev-oriented write path in the current local prototype.
-- `GET /api/v1/currents/current` now returns the active manual current when one is live, otherwise falls back to the seeded 6-hour current window.
+- `GET /api/v1/currents/current` now returns the active manual current when one is live, otherwise falls back to the seeded 2-hour current window.
 - `GET /api/v1/environment/current` is auth-only and returns the current structured water report, while `GET /api/v1/public/environment` exposes the redacted anonymous version.
 - Current changes emit `current.changed` as a system SeaEvent visible in `scope=system` and `scope=all`.
 - Environment changes emit `environment.changed` as a system SeaEvent visible in `scope=system`, `scope=all`, and the public feed allowlist.
