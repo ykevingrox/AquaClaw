@@ -671,7 +671,7 @@ const COPY = {
     },
     dock: {
       kicker: 'Console Dock',
-      title: 'Entry paths and read scope',
+      title: 'Host entry and read scope',
       note: 'Start with host entry. This dock is now for host auth, reads, and debugging only.',
       apiOrigin: {
         label: 'Console API origin',
@@ -1414,7 +1414,7 @@ const COPY = {
     },
     dock: {
       kicker: '控制台坞站',
-      title: '进入路径与读取范围',
+      title: 'Host 入口与读取范围',
       note: '先走 host 入口。这个坞站现在只负责 host 认证、读面和调试。',
       apiOrigin: {
         label: '控制台 API 地址',
@@ -2263,10 +2263,10 @@ function applyTranslations() {
   if (isLoading) {
     elements.connectButton.textContent = t('pending.reading');
   }
-  if (participantJoinState.busy) {
+  if (participantJoinState.busy && elements.participantJoinButton) {
     elements.participantJoinButton.textContent = t('pending.joining');
   }
-  if (participantReconnectState.busy) {
+  if (participantReconnectState.busy && elements.participantReconnectButton) {
     elements.participantReconnectButton.textContent = t('pending.reconnecting');
   }
   renderParticipantRecoveryResult();
@@ -2500,7 +2500,9 @@ function saveSettings() {
   localStorage.setItem(STORAGE_KEYS.token, elements.token.value.trim());
   localStorage.setItem(STORAGE_KEYS.authMode, authMode);
   localStorage.setItem(STORAGE_KEYS.feedScope, elements.feedScope.value);
-  localStorage.setItem(STORAGE_KEYS.activityGatewayId, elements.activityGatewayId.value.trim());
+  if (elements.activityGatewayId) {
+    localStorage.setItem(STORAGE_KEYS.activityGatewayId, elements.activityGatewayId.value.trim());
+  }
   localStorage.setItem(STORAGE_KEYS.locale, aquariumState.locale);
 }
 
@@ -2510,7 +2512,9 @@ function loadSettings() {
   const storedAuthMode = localStorage.getItem(STORAGE_KEYS.authMode);
   authMode = VALID_AUTH_MODES.has(storedAuthMode) ? storedAuthMode : 'bearer';
   elements.feedScope.value = localStorage.getItem(STORAGE_KEYS.feedScope) || 'mine';
-  elements.activityGatewayId.value = localStorage.getItem(STORAGE_KEYS.activityGatewayId) || '';
+  if (elements.activityGatewayId) {
+    elements.activityGatewayId.value = localStorage.getItem(STORAGE_KEYS.activityGatewayId) || '';
+  }
   const locale = localStorage.getItem(STORAGE_KEYS.locale);
   if (locale && VALID_LOCALES.has(locale)) {
     aquariumState.locale = locale;
@@ -2554,7 +2558,7 @@ function consumeBootQueryParams() {
   }
 
   const activityGatewayId = params.get(QUERY_KEYS.activityGatewayId);
-  if (activityGatewayId !== null) {
+  if (activityGatewayId !== null && elements.activityGatewayId) {
     shouldStrip = true;
     elements.activityGatewayId.value = activityGatewayId.trim();
   }
@@ -2566,7 +2570,7 @@ function consumeBootQueryParams() {
   }
 
   const inviteCode = params.get(QUERY_KEYS.inviteCode);
-  if (inviteCode !== null) {
+  if (inviteCode !== null && elements.participantJoinInviteCode) {
     shouldStrip = true;
     elements.participantJoinInviteCode.value = inviteCode.trim();
   }
@@ -5184,12 +5188,24 @@ function resetCommandDeck() {
   elements.policyTimeZone.value = '';
   elements.policyQuietStart.value = '';
   elements.policyQuietEnd.value = '';
-  elements.profileDisplayName.value = '';
-  elements.profileBio.value = '';
-  elements.profileVisibility.value = 'invite_only';
-  elements.publicExpressionBody.value = '';
-  elements.publicExpressionTone.value = 'calm';
-  elements.sceneType.value = 'vent';
+  if (elements.profileDisplayName) {
+    elements.profileDisplayName.value = '';
+  }
+  if (elements.profileBio) {
+    elements.profileBio.value = '';
+  }
+  if (elements.profileVisibility) {
+    elements.profileVisibility.value = 'invite_only';
+  }
+  if (elements.publicExpressionBody) {
+    elements.publicExpressionBody.value = '';
+  }
+  if (elements.publicExpressionTone) {
+    elements.publicExpressionTone.value = 'calm';
+  }
+  if (elements.sceneType) {
+    elements.sceneType.value = 'vent';
+  }
   elements.inviteMaxUses.value = '';
   elements.inviteExpiresHours.value = '';
   elements.currentKey.value = '';
@@ -5397,6 +5413,11 @@ function hydrateProfileForm(gateway, { force = false } = {}) {
     return;
   }
 
+  if (!elements.profileDisplayName || !elements.profileBio || !elements.profileVisibility) {
+    commandState.profileDirty = false;
+    return;
+  }
+
   elements.profileDisplayName.value = gateway.displayName;
   elements.profileBio.value = gateway.bio ?? '';
   elements.profileVisibility.value = gateway.visibility ?? 'invite_only';
@@ -5455,11 +5476,17 @@ function hydrateEnvironmentForm(environment, { force = false } = {}) {
 }
 
 function renderEmpty(element, message) {
+  if (!element) {
+    return;
+  }
   element.className = 'panel-body empty-state';
   element.innerHTML = escapeHtml(message);
 }
 
 function renderError(element, message) {
+  if (!element) {
+    return;
+  }
   element.className = 'panel-body error-state';
   element.innerHTML = `<p>${escapeHtml(message)}</p>`;
 }
@@ -5537,19 +5564,21 @@ function renderProfile(me, syncedAt) {
   const rolePill = me.kind === 'host'
     ? `<span class="meta-pill">${escapeHtml(t('common.hostRoleLabel'))}</span>`
     : `<span class="meta-pill">${escapeHtml(t('common.visibilityLabel', { value: translateToken(me.visibility, 'visibility') }))}</span>`;
-  elements.profilePanel.className = 'panel-body';
-  elements.profilePanel.innerHTML = `
-    <div class="identity-card">
-      <p class="identity-name">${escapeHtml(me.displayName)}</p>
-      <p class="identity-handle">@${escapeHtml(me.handle)}</p>
-      <p class="identity-bio">${escapeHtml(me.bio || t('common.noBio'))}</p>
-      <div class="identity-meta">
-        ${rolePill}
-        <span class="meta-pill">${escapeHtml(t('common.idLabel', { value: me.id }))}</span>
+  if (elements.profilePanel) {
+    elements.profilePanel.className = 'panel-body';
+    elements.profilePanel.innerHTML = `
+      <div class="identity-card">
+        <p class="identity-name">${escapeHtml(me.displayName)}</p>
+        <p class="identity-handle">@${escapeHtml(me.handle)}</p>
+        <p class="identity-bio">${escapeHtml(me.bio || t('common.noBio'))}</p>
+        <div class="identity-meta">
+          ${rolePill}
+          <span class="meta-pill">${escapeHtml(t('common.idLabel', { value: me.id }))}</span>
+        </div>
+        <p class="sync-mark">${escapeHtml(t('common.lastSync', { time: formatWhen(syncedAt) }))}</p>
       </div>
-      <p class="sync-mark">${escapeHtml(t('common.lastSync', { time: formatWhen(syncedAt) }))}</p>
-    </div>
-  `;
+    `;
+  }
   elements.heroHandle.textContent = t('common.connectedAs', { handle: me.handle });
   elements.heroSync.textContent = t('common.syncedRelative', { time: formatRelativeTime(syncedAt) });
 }
@@ -5652,6 +5681,9 @@ function renderFeed(items, scope) {
 }
 
 function renderActivity(items, gatewayId) {
+  if (!elements.activityNote || !elements.activityPanel) {
+    return;
+  }
   elements.activityNote.textContent = t('common.gatewayLabel', { gatewayId });
   if (!items.length) {
     renderEmpty(elements.activityPanel, t('common.activityEmpty'));
@@ -5679,6 +5711,9 @@ function renderActivity(items, gatewayId) {
 }
 
 function renderEncounters(items) {
+  if (!elements.encounterPanel) {
+    return;
+  }
   if (!items.length) {
     renderEmpty(elements.encounterPanel, t('common.encountersEmpty'));
     return;
@@ -5712,6 +5747,9 @@ function renderEncounters(items) {
 }
 
 function renderScenes(items) {
+  if (!elements.scenePanel) {
+    return;
+  }
   if (!items.length) {
     renderEmpty(elements.scenePanel, t('common.scenesEmpty'));
     return;
@@ -5790,7 +5828,9 @@ function resetAquariumSurface() {
   delete elements.socialPulseNote.dataset.runtimeText;
   elements.socialPulseNote.textContent = t('panel.socialPulse.note');
   elements.feedNote.textContent = t('panel.feed.note');
-  elements.activityNote.textContent = t('panel.activity.note');
+  if (elements.activityNote) {
+    elements.activityNote.textContent = t('panel.activity.note');
+  }
   renderAquaBadge();
   elements.heroHandle.textContent = t('hero.badge.noGateway');
   elements.heroCurrent.textContent = t('hero.badge.currentPending');
@@ -5820,14 +5860,17 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     taskRequestState.error = null;
     renderTaskRequestPanel();
   }
-  if (isParticipantGateway && !elements.activityGatewayId.value.trim()) {
+  if (isParticipantGateway && elements.activityGatewayId && !elements.activityGatewayId.value.trim()) {
     elements.activityGatewayId.value = gateway.id;
   }
-  if (!isParticipantGateway) {
+  if (!isParticipantGateway && elements.activityGatewayId) {
     elements.activityGatewayId.value = '';
   }
 
-  const activityGatewayId = isParticipantGateway ? (elements.activityGatewayId.value.trim() || gateway.id) : '';
+  const activityGatewayId =
+    isParticipantGateway && elements.activityGatewayId
+      ? (elements.activityGatewayId.value.trim() || gateway.id)
+      : '';
   const feedScope = elements.feedScope.value;
   const aquaRequest = requestJson('/api/v1/public/aqua', { apiOrigin });
   const currentRequest = requestJson('/api/v1/currents/current', { apiOrigin, token });
@@ -6156,10 +6199,14 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
   }
 
   if (!isParticipantGateway) {
-    elements.activityNote.textContent = t('common.participantOnlyReadSurface');
+    if (elements.activityNote) {
+      elements.activityNote.textContent = t('common.participantOnlyReadSurface');
+    }
     renderEmpty(elements.activityPanel, t('common.participantOnlyReadSurface'));
   } else if (activityResult.status === 'fulfilled') {
-    elements.activityNote.textContent = t('panel.activity.note');
+    if (elements.activityNote) {
+      elements.activityNote.textContent = t('panel.activity.note');
+    }
     renderActivity(activityResult.value.data.items, activityGatewayId);
   } else {
     renderError(elements.activityPanel, activityResult.reason.message);
@@ -6582,7 +6629,7 @@ elements.consoleForm.addEventListener('submit', (event) => {
   void loadAquarium();
 });
 
-elements.participantJoinForm.addEventListener('submit', (event) => {
+elements.participantJoinForm?.addEventListener('submit', (event) => {
   event.preventDefault();
 
   if (participantJoinState.busy || isLoading) {
@@ -6656,7 +6703,7 @@ elements.participantJoinForm.addEventListener('submit', (event) => {
     });
 });
 
-elements.participantReconnectForm.addEventListener('submit', (event) => {
+elements.participantReconnectForm?.addEventListener('submit', (event) => {
   event.preventDefault();
 
   if (participantReconnectState.busy || isLoading) {
@@ -6735,15 +6782,15 @@ for (const control of [
   });
 }
 
-elements.profileDisplayName.addEventListener('input', () => {
+elements.profileDisplayName?.addEventListener('input', () => {
   commandState.profileDirty = true;
 });
 
-elements.profileBio.addEventListener('input', () => {
+elements.profileBio?.addEventListener('input', () => {
   commandState.profileDirty = true;
 });
 
-elements.profileVisibility.addEventListener('change', () => {
+elements.profileVisibility?.addEventListener('change', () => {
   commandState.profileDirty = true;
 });
 
@@ -6891,7 +6938,7 @@ elements.policyCommandForm.addEventListener('submit', (event) => {
   });
 });
 
-elements.profileCommandForm.addEventListener('submit', (event) => {
+elements.profileCommandForm?.addEventListener('submit', (event) => {
   event.preventDefault();
   void runDeckCommand(elements.profileSaveButton, t('pending.saving'), async ({ apiOrigin, token }) => {
     if (aquariumState.gateway?.kind !== 'gateway') {
@@ -6922,7 +6969,7 @@ elements.profileCommandForm.addEventListener('submit', (event) => {
   });
 });
 
-elements.participantRecoveryForm.addEventListener('submit', (event) => {
+elements.participantRecoveryForm?.addEventListener('submit', (event) => {
   event.preventDefault();
   void runDeckCommand(elements.participantRecoveryRotateButton, t('pending.rotating'), async ({ apiOrigin, token }) => {
     if (aquariumState.gateway?.kind !== 'gateway') {
@@ -6945,7 +6992,7 @@ elements.participantRecoveryForm.addEventListener('submit', (event) => {
   });
 });
 
-elements.sceneCommandForm.addEventListener('submit', (event) => {
+elements.sceneCommandForm?.addEventListener('submit', (event) => {
   event.preventDefault();
   void runDeckCommand(elements.sceneGenerateButton, t('pending.generating'), async ({ apiOrigin, token }) => {
     if (aquariumState.gateway?.kind !== 'gateway') {
@@ -6966,13 +7013,13 @@ elements.sceneCommandForm.addEventListener('submit', (event) => {
   });
 });
 
-elements.publicExpressionClearThread.addEventListener('click', () => {
+elements.publicExpressionClearThread?.addEventListener('click', () => {
   publicThreadState.replyToExpressionId = null;
   renderPublicExpressionComposer();
   renderPublicThreads();
 });
 
-elements.publicExpressionCommandForm.addEventListener('submit', (event) => {
+elements.publicExpressionCommandForm?.addEventListener('submit', (event) => {
   event.preventDefault();
   void runDeckCommand(elements.publicExpressionSendButton, t('pending.saving'), async ({ apiOrigin, token }) => {
     if (aquariumState.gateway?.kind !== 'gateway') {
@@ -7330,7 +7377,7 @@ elements.feedScope.addEventListener('change', () => {
   }
 });
 
-elements.activityGatewayId.addEventListener('change', () => {
+elements.activityGatewayId?.addEventListener('change', () => {
   saveSettings();
   if (aquariumState.token) {
     void refreshReadSurfaces().catch((error) => {
@@ -7676,17 +7723,19 @@ document.addEventListener('click', (event) => {
     return;
   }
 
-  elements.activityGatewayId.value = trigger.dataset.activityGatewayId || '';
-  saveSettings();
-  if (aquariumState.token) {
-    void refreshReadSurfaces().catch((error) => {
-      const message = error instanceof Error ? error.message : t('common.failedActivityPanel');
-      setStatus(message, 'error');
-    });
-    return;
-  }
+  if (elements.activityGatewayId) {
+    elements.activityGatewayId.value = trigger.dataset.activityGatewayId || '';
+    saveSettings();
+    if (aquariumState.token) {
+      void refreshReadSurfaces().catch((error) => {
+        const message = error instanceof Error ? error.message : t('common.failedActivityPanel');
+        setStatus(message, 'error');
+      });
+      return;
+    }
 
-  void loadAquarium();
+    void loadAquarium();
+  }
 });
 
 for (const button of elements.localeButtons) {
