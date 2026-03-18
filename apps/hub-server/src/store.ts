@@ -547,8 +547,10 @@ export interface GatewayStoreSnapshot {
   seaEvents: SeaEvent[];
   currents: CurrentRecord[];
   activeCurrentId: string | null;
+  automaticCurrentId?: string | null;
   environments?: EnvironmentRecord[];
   activeEnvironmentId?: string | null;
+  automaticEnvironmentId?: string | null;
   encounters: EncounterRecord[];
   scenes: SceneRecord[];
   sceneOrder: GatewaySceneOrderSnapshotRecord[];
@@ -944,6 +946,7 @@ export interface SetEnvironmentInput {
   surfaceState: EnvironmentSurfaceState;
   phenomenon: EnvironmentPhenomenon;
   summary?: string;
+  expiresAt?: string | null;
   metadata?: Record<string, unknown>;
   actorGatewayId?: string | null;
 }
@@ -1259,6 +1262,143 @@ const CURRENT_WINDOWS: Array<{ key: string; label: string; summary: string; tone
 ];
 const SEEDED_CURRENT_WINDOW_HOURS = 2;
 const SEEDED_CURRENT_WINDOW_MINUTES = SEEDED_CURRENT_WINDOW_HOURS * 60;
+const SEEDED_ENVIRONMENT_WINDOW_HOURS = SEEDED_CURRENT_WINDOW_HOURS;
+const SEEDED_ENVIRONMENT_WINDOW_MINUTES = SEEDED_ENVIRONMENT_WINDOW_HOURS * 60;
+
+type SeededEnvironmentTemplate = Omit<EnvironmentRecord, 'id' | 'source' | 'updatedAt' | 'metadata'>;
+
+const SEEDED_ENVIRONMENT_VARIANTS_BY_TONE: Record<SeaEventTone, SeededEnvironmentTemplate[]> = {
+  calm: [
+    {
+      waterTemperatureC: 18,
+      clarity: 'crystalline',
+      tideDirection: 'slack',
+      surfaceState: 'glassy',
+      phenomenon: 'none',
+      summary: 'The water is clear and cool; distance carries softly and the surface stays almost glassy.',
+    },
+    {
+      waterTemperatureC: 17,
+      clarity: 'clear',
+      tideDirection: 'incoming',
+      surfaceState: 'rippled',
+      phenomenon: 'warm_bloom',
+      summary: 'The water feels mild and open; a warm bloom drifts through a gentle incoming pull.',
+    },
+    {
+      waterTemperatureC: 16,
+      clarity: 'crystalline',
+      tideDirection: 'outgoing',
+      surfaceState: 'glassy',
+      phenomenon: 'none',
+      summary: 'The sea is cool, bright, and quietly receding; the surface reads like polished glass.',
+    },
+  ],
+  playful: [
+    {
+      waterTemperatureC: 23,
+      clarity: 'clear',
+      tideDirection: 'incoming',
+      surfaceState: 'rippled',
+      phenomenon: 'lantern_swarm',
+      summary: 'The water is warm and bright; a lantern swarm makes arrivals feel easier to notice.',
+    },
+    {
+      waterTemperatureC: 24,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'choppy',
+      phenomenon: 'warm_bloom',
+      summary: 'The sea is warm and active; a bright bloom keeps motion loose even while the surface chatters.',
+    },
+    {
+      waterTemperatureC: 22,
+      clarity: 'crystalline',
+      tideDirection: 'incoming',
+      surfaceState: 'rippled',
+      phenomenon: 'lantern_swarm',
+      summary: 'The water stays bright and readable; lanterns drift in with a tide that makes contact feel easy.',
+    },
+  ],
+  reflective: [
+    {
+      waterTemperatureC: 15,
+      clarity: 'hazy',
+      tideDirection: 'outgoing',
+      surfaceState: 'glassy',
+      phenomenon: 'warm_bloom',
+      summary: 'The water is cooler and slightly hazy; a slow bloom hangs in the distance and invites quieter observation.',
+    },
+    {
+      waterTemperatureC: 14,
+      clarity: 'hazy',
+      tideDirection: 'slack',
+      surfaceState: 'glassy',
+      phenomenon: 'none',
+      summary: 'The sea feels still and cool; the haze softens edges and keeps attention close to home.',
+    },
+    {
+      waterTemperatureC: 13,
+      clarity: 'clear',
+      tideDirection: 'outgoing',
+      surfaceState: 'rippled',
+      phenomenon: 'debris_field',
+      summary: 'The water is cool and thoughtful; a thin debris field drifts slowly enough to invite careful reading.',
+    },
+  ],
+  sharp: [
+    {
+      waterTemperatureC: 11,
+      clarity: 'murky',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'storm_front',
+      summary: 'The water has turned rough and angled; a storm front makes course corrections matter more than usual.',
+    },
+    {
+      waterTemperatureC: 12,
+      clarity: 'murky',
+      tideDirection: 'incoming',
+      surfaceState: 'choppy',
+      phenomenon: 'debris_field',
+      summary: 'The sea is tense and noisy; a debris field keeps the water busy and slightly obscured.',
+    },
+    {
+      waterTemperatureC: 10,
+      clarity: 'hazy',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'storm_front',
+      summary: 'The water is cold and forceful; a storm line keeps the surface sharp and the tide angled.',
+    },
+  ],
+  neutral: [
+    {
+      waterTemperatureC: 17,
+      clarity: 'clear',
+      tideDirection: 'slack',
+      surfaceState: 'rippled',
+      phenomenon: 'none',
+      summary: 'The water is steady and readable; nothing dramatic is moving through the sea right now.',
+    },
+    {
+      waterTemperatureC: 18,
+      clarity: 'clear',
+      tideDirection: 'incoming',
+      surfaceState: 'rippled',
+      phenomenon: 'warm_bloom',
+      summary: 'The sea is even and workable; a soft bloom adds color without changing the overall balance.',
+    },
+    {
+      waterTemperatureC: 16,
+      clarity: 'hazy',
+      tideDirection: 'outgoing',
+      surfaceState: 'glassy',
+      phenomenon: 'none',
+      summary: 'The water is cool and balanced; a faint haze sits over an otherwise steady outgoing tide.',
+    },
+  ],
+};
 
 function clampPulseScore(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -1375,78 +1515,44 @@ function evaluateSocialPulseQuietHours(
   };
 }
 
-function buildSeededCurrent(now = new Date()): CurrentRecord {
-  const windowStartHour = Math.floor(now.getHours() / SEEDED_CURRENT_WINDOW_HOURS) * SEEDED_CURRENT_WINDOW_HOURS;
+function getSeededWindowInfo(now: Date, windowHours: number) {
+  const windowStartHour = Math.floor(now.getHours() / windowHours) * windowHours;
   const startsAtDate = new Date(now);
   startsAtDate.setHours(windowStartHour, 0, 0, 0);
   const endsAtDate = new Date(startsAtDate);
-  endsAtDate.setMinutes(endsAtDate.getMinutes() + SEEDED_CURRENT_WINDOW_MINUTES);
+  endsAtDate.setMinutes(endsAtDate.getMinutes() + windowHours * 60);
 
-  const cycleIndex = Math.floor(windowStartHour / SEEDED_CURRENT_WINDOW_HOURS) % CURRENT_WINDOWS.length;
+  return {
+    windowStartHour,
+    windowStartsAt: startsAtDate,
+    windowEndsAt: endsAtDate,
+    dayWindowIndex: Math.floor(windowStartHour / windowHours),
+  };
+}
+
+function buildSeededCurrent(now = new Date()): CurrentRecord {
+  const seededWindow = getSeededWindowInfo(now, SEEDED_CURRENT_WINDOW_HOURS);
+  const cycleIndex = seededWindow.dayWindowIndex % CURRENT_WINDOWS.length;
   const template = CURRENT_WINDOWS[cycleIndex]!;
 
   return {
-    id: `current-${startsAtDate.toISOString()}`,
+    id: `current-${seededWindow.windowStartsAt.toISOString()}`,
     key: template.key,
     label: template.label,
     summary: template.summary,
     tone: template.tone,
     sceneHint: template.sceneHint,
-    startsAt: startsAtDate.toISOString(),
-    endsAt: endsAtDate.toISOString(),
+    startsAt: seededWindow.windowStartsAt.toISOString(),
+    endsAt: seededWindow.windowEndsAt.toISOString(),
     source: 'seeded',
     metadata: {
       cadence: `${SEEDED_CURRENT_WINDOW_HOURS}h`,
-      seedWindowLocalHour: windowStartHour,
+      rotationWindowMinutes: SEEDED_CURRENT_WINDOW_MINUTES,
+      seedWindowLocalHour: seededWindow.windowStartHour,
+      rotationWindowIndex: seededWindow.dayWindowIndex,
     },
   };
 }
-
-const SEEDED_ENVIRONMENT_BY_TONE: Record<
-  SeaEventTone,
-  Omit<EnvironmentRecord, 'id' | 'source' | 'updatedAt' | 'metadata'>
-> = {
-  calm: {
-    waterTemperatureC: 18,
-    clarity: 'crystalline',
-    tideDirection: 'slack',
-    surfaceState: 'glassy',
-    phenomenon: 'none',
-    summary: 'The water is clear and cool; distance carries softly and the surface stays almost glassy.',
-  },
-  playful: {
-    waterTemperatureC: 23,
-    clarity: 'clear',
-    tideDirection: 'incoming',
-    surfaceState: 'rippled',
-    phenomenon: 'lantern_swarm',
-    summary: 'The water is warm and bright; a lantern swarm makes arrivals feel easier to notice.',
-  },
-  reflective: {
-    waterTemperatureC: 15,
-    clarity: 'hazy',
-    tideDirection: 'outgoing',
-    surfaceState: 'glassy',
-    phenomenon: 'warm_bloom',
-    summary: 'The water is cooler and slightly hazy; a slow bloom hangs in the distance and invites quieter observation.',
-  },
-  sharp: {
-    waterTemperatureC: 11,
-    clarity: 'murky',
-    tideDirection: 'crosswind',
-    surfaceState: 'surging',
-    phenomenon: 'storm_front',
-    summary: 'The water has turned rough and angled; a storm front makes course corrections matter more than usual.',
-  },
-  neutral: {
-    waterTemperatureC: 17,
-    clarity: 'clear',
-    tideDirection: 'slack',
-    surfaceState: 'rippled',
-    phenomenon: 'none',
-    summary: 'The water is steady and readable; nothing dramatic is moving through the sea right now.',
-  },
-};
 
 function phenomenonLabel(phenomenon: EnvironmentPhenomenon) {
   return phenomenon.replace(/_/g, ' ');
@@ -1465,15 +1571,23 @@ function synthesizeEnvironmentSummary(input: {
   return `The water sits at ${temperatureText}; ${input.clarity} visibility, ${input.tideDirection} tide, and a ${input.surfaceState} surface mean ${phenomenonText}.`;
 }
 
-function buildSeededEnvironment(current: CurrentRecord): EnvironmentRecord {
-  const template = SEEDED_ENVIRONMENT_BY_TONE[current.tone] ?? SEEDED_ENVIRONMENT_BY_TONE.neutral;
+function buildSeededEnvironment(current: CurrentRecord, now = new Date()): EnvironmentRecord {
+  const seededWindow = getSeededWindowInfo(now, SEEDED_ENVIRONMENT_WINDOW_HOURS);
+  const variants = SEEDED_ENVIRONMENT_VARIANTS_BY_TONE[current.tone] ?? SEEDED_ENVIRONMENT_VARIANTS_BY_TONE.neutral;
+  const variantIndex = Math.floor(seededWindow.dayWindowIndex / CURRENT_WINDOWS.length) % variants.length;
+  const template = variants[variantIndex] ?? variants[0]!;
 
   return {
-    id: `environment-${current.id}`,
+    id: `environment-${current.tone}-${seededWindow.windowStartsAt.toISOString()}`,
     ...template,
     source: 'seeded',
-    updatedAt: current.startsAt,
+    updatedAt: seededWindow.windowStartsAt.toISOString(),
     metadata: {
+      cadence: `${SEEDED_ENVIRONMENT_WINDOW_HOURS}h`,
+      rotationWindowMinutes: SEEDED_ENVIRONMENT_WINDOW_MINUTES,
+      seedWindowLocalHour: seededWindow.windowStartHour,
+      rotationWindowIndex: seededWindow.dayWindowIndex,
+      rotationVariantIndex: variantIndex,
       derivedFromCurrentId: current.id,
       derivedFromCurrentKey: current.key,
       derivedFromTone: current.tone,
@@ -1490,6 +1604,19 @@ function parseCurrentTimestamp(value: string, fieldName: 'startsAt' | 'endsAt') 
   const parsed = Date.parse(normalized);
   if (!Number.isFinite(parsed)) {
     throw new Error(`current ${fieldName} must be a valid datetime`);
+  }
+
+  return new Date(parsed).toISOString();
+}
+
+function parseOptionalTimestamp(value: string | null | undefined, fieldName: string) {
+  if (value === undefined || value === null || !String(value).trim()) {
+    return null;
+  }
+
+  const parsed = Date.parse(String(value).trim());
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${fieldName} must be a valid datetime`);
   }
 
   return new Date(parsed).toISOString();
@@ -1558,7 +1685,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly remoteRuntimeBindingsByGatewayId = new Map<string, RemoteRuntimeBindingRecord>();
   private readonly legacyOwnerGatewayIds = new Set<string>();
   private activeCurrentId: string | null = null;
+  private automaticCurrentId: string | null = null;
   private activeEnvironmentId: string | null = null;
+  private automaticEnvironmentId: string | null = null;
   private readonly encounterSynthesisRules: EncounterSynthesisRules;
   private readonly presenceTiming: PresenceTimingConfig;
 
@@ -3772,24 +3901,175 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.paginatePublicExpressions(items, input.cursor, input.limit);
   }
 
-  getCurrent(): CurrentRecord {
-    const override = this.activeCurrentId ? this.currentsById.get(this.activeCurrentId) ?? null : null;
-    if (override) {
-      const now = Date.now();
-      const startsAt = Date.parse(override.startsAt);
-      const endsAt = Date.parse(override.endsAt);
+  private isManualCurrentActive(current: CurrentRecord, nowMs: number) {
+    const startsAt = Date.parse(current.startsAt);
+    const endsAt = Date.parse(current.endsAt);
+    return Number.isFinite(startsAt) && Number.isFinite(endsAt) && nowMs >= startsAt && nowMs < endsAt;
+  }
 
-      if (Number.isFinite(startsAt) && Number.isFinite(endsAt)) {
-        if (now >= startsAt && now < endsAt) {
-          return override;
-        }
-        if (now >= endsAt) {
-          this.activeCurrentId = null;
-        }
-      }
+  private manualEnvironmentExpiresAtMs(environment: EnvironmentRecord) {
+    const expiresAt = environment.metadata.expiresAt;
+    if (typeof expiresAt !== 'string') {
+      return null;
+    }
+    const parsed = Date.parse(expiresAt);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private isManualEnvironmentActive(environment: EnvironmentRecord, nowMs: number) {
+    const expiresAtMs = this.manualEnvironmentExpiresAtMs(environment);
+    return expiresAtMs === null || nowMs < expiresAtMs;
+  }
+
+  private recordCurrentChangedEvent(input: {
+    current: CurrentRecord;
+    previousCurrent: CurrentRecord;
+    actorGatewayId?: string | null;
+    createdAt?: string;
+  }) {
+    const changedByGateway = input.actorGatewayId ? this.gatewaysById.get(input.actorGatewayId) ?? null : null;
+    this.appendSeaEvent({
+      type: 'current.changed',
+      actorGatewayId: null,
+      subjectGatewayId: null,
+      objectGatewayId: null,
+      visibility: 'system',
+      summary: `A new current took shape: ${input.current.label}`,
+      tone: input.current.tone,
+      sceneHint: input.current.sceneHint,
+      metadata: {
+        currentId: input.current.id,
+        currentKey: input.current.key,
+        currentLabel: input.current.label,
+        currentSummary: input.current.summary,
+        currentTone: input.current.tone,
+        currentSceneHint: input.current.sceneHint,
+        startsAt: input.current.startsAt,
+        endsAt: input.current.endsAt,
+        source: input.current.source,
+        currentMetadata: input.current.metadata,
+        changedByGatewayId: changedByGateway?.id ?? null,
+        changedByHandle: changedByGateway?.handle ?? null,
+        previousCurrentId: input.previousCurrent.id,
+        previousCurrentKey: input.previousCurrent.key,
+        previousCurrentSource: input.previousCurrent.source,
+      },
+      createdAt: input.createdAt ?? new Date().toISOString(),
+    });
+  }
+
+  private recordEnvironmentChangedEvent(input: {
+    environment: EnvironmentRecord;
+    previousEnvironment: EnvironmentRecord;
+    current: CurrentRecord;
+    actorGatewayId?: string | null;
+    createdAt?: string;
+  }) {
+    const changedByGateway = input.actorGatewayId ? this.gatewaysById.get(input.actorGatewayId) ?? null : null;
+    this.appendSeaEvent({
+      type: 'environment.changed',
+      actorGatewayId: null,
+      subjectGatewayId: null,
+      objectGatewayId: null,
+      visibility: 'system',
+      summary: `The water conditions shifted: ${input.environment.waterTemperatureC.toFixed(1).replace(/\.0$/, '')}C and ${input.environment.clarity} water.`,
+      tone: input.current.tone,
+      sceneHint: input.current.sceneHint,
+      metadata: {
+        environmentId: input.environment.id,
+        waterTemperatureC: input.environment.waterTemperatureC,
+        clarity: input.environment.clarity,
+        tideDirection: input.environment.tideDirection,
+        surfaceState: input.environment.surfaceState,
+        phenomenon: input.environment.phenomenon,
+        environmentSummary: input.environment.summary,
+        source: input.environment.source,
+        environmentMetadata: input.environment.metadata,
+        changedByGatewayId: changedByGateway?.id ?? null,
+        changedByHandle: changedByGateway?.handle ?? null,
+        previousEnvironmentId: input.previousEnvironment.id,
+        previousEnvironmentSource: input.previousEnvironment.source,
+      },
+      createdAt: input.createdAt ?? input.environment.updatedAt,
+    });
+  }
+
+  private resolveAutomaticCurrent(now = new Date(), emitEvent = true): CurrentRecord {
+    const nowMs = now.getTime();
+    const manualOverride = this.activeCurrentId ? this.currentsById.get(this.activeCurrentId) ?? null : null;
+    const expiredManual =
+      manualOverride?.source === 'manual' && Number.isFinite(Date.parse(manualOverride.endsAt)) && Date.parse(manualOverride.endsAt) <= nowMs
+        ? manualOverride
+        : null;
+
+    if (manualOverride?.source === 'manual' && this.isManualCurrentActive(manualOverride, nowMs)) {
+      return manualOverride;
+    }
+    if (expiredManual && Date.parse(expiredManual.endsAt) <= nowMs) {
+      this.activeCurrentId = null;
     }
 
-    return buildSeededCurrent();
+    const nextCurrent = buildSeededCurrent(now);
+    this.currentsById.set(nextCurrent.id, nextCurrent);
+
+    const previousAutomaticCurrent = this.automaticCurrentId
+      ? this.currentsById.get(this.automaticCurrentId) ?? null
+      : null;
+    const changed = this.automaticCurrentId !== nextCurrent.id;
+    this.automaticCurrentId = nextCurrent.id;
+
+    const previousCurrent = expiredManual ?? previousAutomaticCurrent;
+    const resumedFromExpiredManual = Boolean(expiredManual && expiredManual.id !== nextCurrent.id);
+    if (emitEvent && (changed || resumedFromExpiredManual) && previousCurrent) {
+      this.recordCurrentChangedEvent({
+        current: nextCurrent,
+        previousCurrent,
+        createdAt: nextCurrent.startsAt,
+      });
+      this.resolveAutomaticEnvironment(nextCurrent, now, true);
+    }
+
+    return nextCurrent;
+  }
+
+  private resolveAutomaticEnvironment(current: CurrentRecord, now = new Date(), emitEvent = true): EnvironmentRecord {
+    const nowMs = now.getTime();
+    const manualOverride = this.activeEnvironmentId ? this.environmentsById.get(this.activeEnvironmentId) ?? null : null;
+    const expiredManual =
+      manualOverride?.source === 'manual' && !this.isManualEnvironmentActive(manualOverride, nowMs) ? manualOverride : null;
+
+    if (manualOverride?.source === 'manual' && this.isManualEnvironmentActive(manualOverride, nowMs)) {
+      return manualOverride;
+    }
+    if (expiredManual) {
+      this.activeEnvironmentId = null;
+    }
+
+    const nextEnvironment = buildSeededEnvironment(current, now);
+    this.environmentsById.set(nextEnvironment.id, nextEnvironment);
+
+    const previousAutomaticEnvironment = this.automaticEnvironmentId
+      ? this.environmentsById.get(this.automaticEnvironmentId) ?? null
+      : null;
+    const changed = this.automaticEnvironmentId !== nextEnvironment.id;
+    this.automaticEnvironmentId = nextEnvironment.id;
+
+    const previousEnvironment = expiredManual ?? previousAutomaticEnvironment;
+    const resumedFromExpiredManual = Boolean(expiredManual && expiredManual.id !== nextEnvironment.id);
+    if (emitEvent && (changed || resumedFromExpiredManual) && previousEnvironment) {
+      this.recordEnvironmentChangedEvent({
+        environment: nextEnvironment,
+        previousEnvironment,
+        current,
+        createdAt: nextEnvironment.updatedAt,
+      });
+    }
+
+    return nextEnvironment;
+  }
+
+  getCurrent(): CurrentRecord {
+    return this.resolveAutomaticCurrent();
   }
 
   setCurrent(input: SetCurrentInput): CurrentRecord {
@@ -3834,47 +4114,20 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
 
     this.currentsById.set(current.id, current);
     this.activeCurrentId = current.id;
-
-    const changedByGateway = input.actorGatewayId ? this.gatewaysById.get(input.actorGatewayId) ?? null : null;
-    this.appendSeaEvent({
-      type: 'current.changed',
-      actorGatewayId: null,
-      subjectGatewayId: null,
-      objectGatewayId: null,
-      visibility: 'system',
-      summary: `A new current took shape: ${current.label}`,
-      tone: current.tone,
-      sceneHint: current.sceneHint,
-      metadata: {
-        currentId: current.id,
-        currentKey: current.key,
-        currentLabel: current.label,
-        currentSummary: current.summary,
-        currentTone: current.tone,
-        currentSceneHint: current.sceneHint,
-        startsAt: current.startsAt,
-        endsAt: current.endsAt,
-        source: current.source,
-        currentMetadata: current.metadata,
-        changedByGatewayId: changedByGateway?.id ?? null,
-        changedByHandle: changedByGateway?.handle ?? null,
-        previousCurrentId: previousCurrent.id,
-        previousCurrentKey: previousCurrent.key,
-        previousCurrentSource: previousCurrent.source,
-      },
-      createdAt: new Date().toISOString(),
+    this.recordCurrentChangedEvent({
+      current,
+      previousCurrent,
+      actorGatewayId: input.actorGatewayId,
     });
+    this.resolveAutomaticEnvironment(current, new Date(), false);
 
     return current;
   }
 
   getEnvironment(): EnvironmentRecord {
-    const override = this.activeEnvironmentId ? this.environmentsById.get(this.activeEnvironmentId) ?? null : null;
-    if (override) {
-      return override;
-    }
-
-    return buildSeededEnvironment(this.getCurrent());
+    const now = new Date();
+    const current = this.resolveAutomaticCurrent(now);
+    return this.resolveAutomaticEnvironment(current, now);
   }
 
   setEnvironment(input: SetEnvironmentInput): EnvironmentRecord {
@@ -3895,6 +4148,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
 
     const previousEnvironment = this.getEnvironment();
+    const expiresAt = parseOptionalTimestamp(input.expiresAt, 'environment expiresAt');
+    if (expiresAt && Date.parse(expiresAt) <= Date.now()) {
+      throw new Error('environment expiresAt must be in the future');
+    }
     const waterTemperatureC = Number(input.waterTemperatureC.toFixed(1));
     const summary = input.summary?.trim() || synthesizeEnvironmentSummary({
       waterTemperatureC,
@@ -3904,6 +4161,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       phenomenon: input.phenomenon,
     });
     const updatedAt = new Date().toISOString();
+    const metadata = {
+      ...(input.metadata ?? {}),
+      ...(expiresAt ? { expiresAt, revertMode: 'automatic' } : {}),
+    };
     const environment: EnvironmentRecord = {
       id: `environment-${randomUUID()}`,
       waterTemperatureC,
@@ -3914,37 +4175,16 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       summary,
       source: 'manual',
       updatedAt,
-      metadata: input.metadata ?? {},
+      metadata,
     };
 
     this.environmentsById.set(environment.id, environment);
     this.activeEnvironmentId = environment.id;
-
-    const changedByGateway = input.actorGatewayId ? this.gatewaysById.get(input.actorGatewayId) ?? null : null;
-    this.appendSeaEvent({
-      type: 'environment.changed',
-      actorGatewayId: null,
-      subjectGatewayId: null,
-      objectGatewayId: null,
-      visibility: 'system',
-      summary: `The water conditions shifted: ${waterTemperatureC.toFixed(1).replace(/\.0$/, '')}C and ${input.clarity} water.`,
-      tone: this.getCurrent().tone,
-      sceneHint: this.getCurrent().sceneHint,
-      metadata: {
-        environmentId: environment.id,
-        waterTemperatureC: environment.waterTemperatureC,
-        clarity: environment.clarity,
-        tideDirection: environment.tideDirection,
-        surfaceState: environment.surfaceState,
-        phenomenon: environment.phenomenon,
-        environmentSummary: environment.summary,
-        source: environment.source,
-        environmentMetadata: environment.metadata,
-        changedByGatewayId: changedByGateway?.id ?? null,
-        changedByHandle: changedByGateway?.handle ?? null,
-        previousEnvironmentId: previousEnvironment.id,
-        previousEnvironmentSource: previousEnvironment.source,
-      },
+    this.recordEnvironmentChangedEvent({
+      environment,
+      previousEnvironment,
+      current: this.getCurrent(),
+      actorGatewayId: input.actorGatewayId,
       createdAt: updatedAt,
     });
 
@@ -6531,8 +6771,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       seaEvents: [...this.seaEvents],
       currents: [...this.currentsById.values()],
       activeCurrentId: this.activeCurrentId,
+      automaticCurrentId: this.automaticCurrentId,
       environments: [...this.environmentsById.values()],
       activeEnvironmentId: this.activeEnvironmentId,
+      automaticEnvironmentId: this.automaticEnvironmentId,
       encounters: [...this.encountersByPairKey.values()],
       scenes: [...this.scenesById.values()],
       sceneOrder: [...this.sceneIdsByGatewayId.entries()].map(([gatewayId, sceneIds]) => ({
@@ -6766,10 +7008,12 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       this.currentsById.set(current.id, current);
     }
     this.activeCurrentId = snapshot.activeCurrentId;
+    this.automaticCurrentId = snapshot.automaticCurrentId ?? null;
     for (const environment of snapshot.environments ?? []) {
       this.environmentsById.set(environment.id, environment);
     }
     this.activeEnvironmentId = snapshot.activeEnvironmentId ?? null;
+    this.automaticEnvironmentId = snapshot.automaticEnvironmentId ?? null;
     for (const encounter of snapshot.encounters) {
       this.encountersByPairKey.set(this.encounterPairKey(encounter.gatewayAId, encounter.gatewayBId), encounter);
     }
@@ -6823,7 +7067,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.hostedRegistrationPolicy = null;
     this.localRuntimeBinding = null;
     this.activeCurrentId = null;
+    this.automaticCurrentId = null;
     this.activeEnvironmentId = null;
+    this.automaticEnvironmentId = null;
   }
 }
 

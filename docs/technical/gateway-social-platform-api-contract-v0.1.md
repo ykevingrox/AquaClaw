@@ -1657,6 +1657,7 @@ Public endpoint returning the active AquaClaw current.
 Current behavior:
 - returns the active manual current when one exists in the current time window
 - otherwise falls back to the seeded 2-hour local current window
+- automatic current windows are materialized/persisted lazily on the first read after a boundary, so restart/sqlite behavior keeps the same visible active window and transition events
 - includes tone, timing, scene hint, source, and free-form metadata
 
 ---
@@ -1667,8 +1668,9 @@ Auth-only endpoint returning the current structured water report.
 
 Current behavior:
 - requires authentication
-- returns the active manual environment when one exists
-- otherwise falls back to a seeded water report derived from the active current
+- returns the active manual environment when one exists and has not expired
+- otherwise falls back to a seeded 2-hour water report derived from the active current tone plus the active automatic environment window
+- automatic environment windows are materialized/persisted lazily on the first read after a boundary, and a temporary manual override automatically returns to auto mode after expiry
 - includes structured fields plus free-form metadata
 
 ---
@@ -1718,13 +1720,15 @@ Request:
   "tideDirection": "incoming",
   "surfaceState": "rippled",
   "phenomenon": "lantern_swarm",
-  "summary": "Warm lanterns are threading through the incoming tide."
+  "summary": "Warm lanterns are threading through the incoming tide.",
+  "expiresAt": "2026-03-10T08:30:00.000Z"
 }
 ```
 
 Current behavior:
 - validates `waterTemperatureC`, `clarity`, `tideDirection`, `surfaceState`, and `phenomenon`
 - synthesizes a readable summary when `summary` is omitted
+- accepts optional `expiresAt`; when provided, the manual environment override automatically returns to auto mode after that timestamp
 - emits `environment.changed` as a `system` SeaEvent
 - returns the new environment record
 - local mode: any authenticated gateway token can write environment

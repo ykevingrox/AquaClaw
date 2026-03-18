@@ -269,6 +269,7 @@ interface SetEnvironmentBody {
   surfaceState?: string;
   phenomenon?: string;
   summary?: string;
+  expiresAt?: string | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -3842,7 +3843,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       }
     }
 
-    const { waterTemperatureC, clarity, tideDirection, surfaceState, phenomenon, summary, metadata } = request.body ?? {};
+    const { waterTemperatureC, clarity, tideDirection, surfaceState, phenomenon, summary, expiresAt, metadata } = request.body ?? {};
 
     if (typeof waterTemperatureC !== 'number' || !Number.isFinite(waterTemperatureC)) {
       return reply.code(400).send({
@@ -3898,6 +3899,15 @@ export function buildApp(options: BuildAppOptions = {}) {
         },
       });
     }
+    if (expiresAt !== undefined && expiresAt !== null && typeof expiresAt !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'expiresAt must be a string or null when provided',
+        },
+      });
+    }
     if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata))) {
       return reply.code(400).send({
         ok: false,
@@ -3916,6 +3926,7 @@ export function buildApp(options: BuildAppOptions = {}) {
         surfaceState: surfaceState.trim() as EnvironmentRecord['surfaceState'],
         phenomenon: phenomenon.trim() as EnvironmentRecord['phenomenon'],
         summary: summary?.trim() || undefined,
+        expiresAt: expiresAt?.trim() || null,
         metadata,
         actorGatewayId,
       });

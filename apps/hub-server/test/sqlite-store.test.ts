@@ -19,6 +19,36 @@ function registerGateway(store: GatewayStore, input: { displayName: string; hand
   return store.register(input).gateway;
 }
 
+function withFrozenTime<T>(iso: string, fn: () => T): T {
+  const fixedNow = new Date(iso).getTime();
+  const RealDate = Date;
+
+  class MockDate extends RealDate {
+    constructor(value?: string | number | Date) {
+      if (arguments.length === 0) {
+        super(fixedNow);
+        return;
+      }
+      super(value as string | number | Date);
+    }
+
+    static now() {
+      return fixedNow;
+    }
+  }
+
+  Object.setPrototypeOf(MockDate, RealDate);
+  MockDate.parse = RealDate.parse;
+  MockDate.UTC = RealDate.UTC;
+
+  globalThis.Date = MockDate as DateConstructor;
+  try {
+    return fn();
+  } finally {
+    globalThis.Date = RealDate;
+  }
+}
+
 function exerciseCoreSeam(store: GatewayStore) {
   const alpha = registerGateway(store, { displayName: 'SQLite Alpha', handle: 'sqlite-alpha' });
   const beta = registerGateway(store, { displayName: 'SQLite Beta', handle: 'sqlite-beta' });
@@ -530,6 +560,46 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
       );
     } finally {
       await app2.close();
+      if (store2 instanceof SqliteGatewayStore) {
+        store2.close();
+      }
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('Sqlite store persists automatic current/environment rotation state across restart', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-rotation-'));
+  const databasePath = join(tempDir, 'gateway-hub.sqlite');
+
+  try {
+    const store1 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    const alpha = registerGateway(store1, { displayName: 'SQLite Rotator', handle: 'sqlite-rotator' });
+
+    withFrozenTime('2026-03-18T00:10:00.000Z', () => {
+      store1.getCurrent();
+      store1.getEnvironment();
+    });
+
+    if (store1 instanceof SqliteGatewayStore) {
+      store1.close();
+    }
+
+    const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    try {
+      withFrozenTime('2026-03-18T02:11:00.000Z', () => {
+        store2.getCurrent();
+        store2.getEnvironment();
+      });
+
+      const systemFeed = store2.listSeaFeed({
+        viewerGatewayId: alpha.id,
+        scope: 'system',
+      });
+      assert.equal(systemFeed.items.some((event) => event.type === 'current.changed'), true);
+      assert.equal(systemFeed.items.some((event) => event.type === 'environment.changed'), true);
+    } finally {
       if (store2 instanceof SqliteGatewayStore) {
         store2.close();
       }

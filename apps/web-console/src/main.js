@@ -52,6 +52,7 @@ const elements = {
   currentTone: document.querySelector('#current-tone'),
   environmentClarity: document.querySelector('#environment-clarity'),
   environmentCommandForm: document.querySelector('#environment-command-form'),
+  environmentDurationMinutes: document.querySelector('#environment-duration-minutes'),
   environmentHelpBlock: document.querySelector('#environment-help-block'),
   environmentPanel: document.querySelector('#environment-panel'),
   environmentPhenomenon: document.querySelector('#environment-phenomenon'),
@@ -559,6 +560,7 @@ const FORM_HELP = {
       bullets: [
         'Water temperature sets the broad thermal feel of the sea.',
         'Clarity, tide direction, surface state, and phenomenon are structured descriptors that observers can compare across time.',
+        'Duration controls how long this manual override stays in charge before AquaClaw returns to automatic rotation.',
         'Summary is optional. If you leave it blank, AquaClaw synthesizes a readable sentence for you.',
       ],
       presetsLabel: 'Ready-made water presets',
@@ -569,6 +571,7 @@ const FORM_HELP = {
       bullets: [
         '水温控制这片海的大体冷热感。',
         '清澈度、潮向、水面、现象是可以长期比较的结构化描述。',
+        '持续时间决定这次手动覆盖会持续多久；到期后 AquaClaw 会自动回到轮转模式。',
         '摘要可以留空；留空后 AquaClaw 会自动帮你生成一条可读的水况说明。',
       ],
       presetsLabel: '现成水况模板',
@@ -584,6 +587,7 @@ const FORM_HELP = {
         },
         values: {
           common: {
+            durationMinutes: '120',
             waterTemperatureC: '18',
             clarity: 'clear',
             tideDirection: 'slack',
@@ -602,6 +606,7 @@ const FORM_HELP = {
         },
         values: {
           common: {
+            durationMinutes: '120',
             waterTemperatureC: '11',
             clarity: 'murky',
             tideDirection: 'crosswind',
@@ -620,6 +625,7 @@ const FORM_HELP = {
         },
         values: {
           common: {
+            durationMinutes: '120',
             waterTemperatureC: '24',
             clarity: 'clear',
             tideDirection: 'incoming',
@@ -830,6 +836,7 @@ const COPY = {
       title: 'Tune the water',
       action: 'Set Environment',
       temperature: { label: 'Water temperature (C)' },
+      duration: { label: 'Duration (minutes)' },
       clarity: { label: 'Clarity' },
       tide: { label: 'Tide direction' },
       surface: { label: 'Surface state' },
@@ -1573,6 +1580,7 @@ const COPY = {
       title: '调节水体',
       action: '设置环境',
       temperature: { label: '水温（C）' },
+      duration: { label: '持续时间（分钟）' },
       clarity: { label: '清澈度' },
       tide: { label: '潮向' },
       surface: { label: '水面状态' },
@@ -5253,6 +5261,7 @@ function applyHostPreset(group, presetId) {
     elements.currentDurationMinutes.value = values.durationMinutes ?? '120';
     commandState.currentDirty = true;
   } else if (group === 'environment') {
+    elements.environmentDurationMinutes.value = values.durationMinutes ?? '120';
     elements.environmentTemperature.value = values.waterTemperatureC ?? '18';
     elements.environmentClarity.value = values.clarity ?? 'clear';
     elements.environmentTideDirection.value = values.tideDirection ?? 'slack';
@@ -5455,6 +5464,17 @@ function hydrateCurrentForm(current, { force = false } = {}) {
   commandState.currentDirty = false;
 }
 
+function environmentDurationMinutes(environment) {
+  const updatedAt = Date.parse(environment.updatedAt);
+  const expiresAt = Date.parse(environment.metadata?.expiresAt ?? '');
+  if (!Number.isFinite(updatedAt) || !Number.isFinite(expiresAt) || expiresAt <= updatedAt) {
+    return '120';
+  }
+
+  const minutes = Math.round((expiresAt - updatedAt) / 60_000);
+  return String(Math.min(Math.max(minutes, 15), 1_440));
+}
+
 function hydrateEnvironmentForm(environment, { force = false } = {}) {
   const environmentChanged = commandState.environmentId !== environment.id;
   if (environmentChanged) {
@@ -5467,6 +5487,7 @@ function hydrateEnvironmentForm(environment, { force = false } = {}) {
   }
 
   elements.environmentTemperature.value = String(environment.waterTemperatureC);
+  elements.environmentDurationMinutes.value = environmentDurationMinutes(environment);
   elements.environmentClarity.value = environment.clarity;
   elements.environmentTideDirection.value = environment.tideDirection;
   elements.environmentSurfaceState.value = environment.surfaceState;
@@ -7316,10 +7337,16 @@ elements.environmentCommandForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void runDeckCommand(elements.environmentSetButton, t('pending.settling'), async ({ apiOrigin, token }) => {
     const waterTemperatureC = Number.parseFloat(elements.environmentTemperature.value.trim());
+    const durationMinutes = Number.parseInt(elements.environmentDurationMinutes.value.trim(), 10);
 
     if (!Number.isFinite(waterTemperatureC) || waterTemperatureC < 0 || waterTemperatureC > 40) {
       throw new Error(t('validation.temperatureRange'));
     }
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 15 || durationMinutes > 1_440) {
+      throw new Error(t('validation.durationRange'));
+    }
+
+    const expiresAt = new Date(Date.now() + durationMinutes * 60_000).toISOString();
 
     const payload = await requestJson('/api/v1/environment', {
       apiOrigin,
@@ -7332,6 +7359,7 @@ elements.environmentCommandForm.addEventListener('submit', (event) => {
         surfaceState: elements.environmentSurfaceState.value,
         phenomenon: elements.environmentPhenomenon.value,
         summary: elements.environmentSummary.value.trim() || undefined,
+        expiresAt,
       },
     });
 

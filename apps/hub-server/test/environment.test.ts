@@ -42,6 +42,36 @@ async function bootstrapLocalHost(app: ReturnType<typeof buildApp>) {
   };
 }
 
+async function withFrozenTime<T>(iso: string, fn: () => T | Promise<T>): Promise<T> {
+  const fixedNow = new Date(iso).getTime();
+  const RealDate = Date;
+
+  class MockDate extends RealDate {
+    constructor(value?: string | number | Date) {
+      if (arguments.length === 0) {
+        super(fixedNow);
+        return;
+      }
+      super(value as string | number | Date);
+    }
+
+    static now() {
+      return fixedNow;
+    }
+  }
+
+  Object.setPrototypeOf(MockDate, RealDate);
+  MockDate.parse = RealDate.parse;
+  MockDate.UTC = RealDate.UTC;
+
+  globalThis.Date = MockDate as DateConstructor;
+  try {
+    return await fn();
+  } finally {
+    globalThis.Date = RealDate;
+  }
+}
+
 test('public environment endpoint returns a seeded readable environment', async () => {
   const app = buildApp();
 
@@ -167,6 +197,43 @@ test('setting environment updates the active environment payload and emits a sys
   assert.ok(event);
   assert.equal(event.metadata.environmentId, environment.id);
   assert.equal(event.metadata.changedByGatewayId, null);
+
+  await app.close();
+});
+
+test('environment override expiry returns the API surface to automatic rotation', async () => {
+  const app = buildApp();
+  const host = await bootstrapLocalHost(app);
+
+  const writeResponse = await withFrozenTime('2026-03-18T00:10:00.000Z', () =>
+    app.inject({
+      method: 'POST',
+      url: '/api/v1/environment',
+      headers: { authorization: `Bearer ${host.credential.token}` },
+      payload: {
+        waterTemperatureC: 20,
+        clarity: 'clear',
+        tideDirection: 'incoming',
+        surfaceState: 'rippled',
+        phenomenon: 'warm_bloom',
+        expiresAt: '2026-03-18T02:10:00.000Z',
+      },
+    }),
+  );
+
+  assert.equal(writeResponse.statusCode, 201);
+  assert.equal(writeResponse.json().data.environment.metadata.expiresAt, '2026-03-18T02:10:00.000Z');
+
+  const readResponse = await withFrozenTime('2026-03-18T02:40:00.000Z', () =>
+    app.inject({
+      method: 'GET',
+      url: '/api/v1/environment/current',
+      headers: { authorization: `Bearer ${host.credential.token}` },
+    }),
+  );
+
+  assert.equal(readResponse.statusCode, 200);
+  assert.equal(readResponse.json().data.environment.source, 'seeded');
 
   await app.close();
 });

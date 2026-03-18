@@ -502,9 +502,15 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   getCurrent(...args: Parameters<GatewayStore['getCurrent']>): ReturnType<GatewayStore['getCurrent']> {
-    const before = this.inner.exportSnapshot().activeCurrentId;
+    const snapshotBefore = this.inner.exportSnapshot();
     const current = this.inner.getCurrent(...args);
-    if (before !== this.inner.exportSnapshot().activeCurrentId) {
+    const snapshotAfter = this.inner.exportSnapshot();
+    if (
+      snapshotBefore.activeCurrentId !== snapshotAfter.activeCurrentId ||
+      snapshotBefore.automaticCurrentId !== snapshotAfter.automaticCurrentId ||
+      snapshotBefore.activeEnvironmentId !== snapshotAfter.activeEnvironmentId ||
+      snapshotBefore.automaticEnvironmentId !== snapshotAfter.automaticEnvironmentId
+    ) {
       this.persistSnapshot();
     }
     return current;
@@ -520,7 +526,9 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     const snapshotAfter = this.inner.exportSnapshot();
     if (
       snapshotBefore.activeCurrentId !== snapshotAfter.activeCurrentId ||
-      snapshotBefore.activeEnvironmentId !== snapshotAfter.activeEnvironmentId
+      snapshotBefore.automaticCurrentId !== snapshotAfter.automaticCurrentId ||
+      snapshotBefore.activeEnvironmentId !== snapshotAfter.activeEnvironmentId ||
+      snapshotBefore.automaticEnvironmentId !== snapshotAfter.automaticEnvironmentId
     ) {
       this.persistSnapshot();
     }

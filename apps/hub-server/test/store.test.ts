@@ -8,6 +8,36 @@ function registerGateway(store: GatewayStore, input: { displayName: string; hand
   return store.register(input).gateway;
 }
 
+function withFrozenTime<T>(iso: string, fn: () => T): T {
+  const fixedNow = new Date(iso).getTime();
+  const RealDate = Date;
+
+  class MockDate extends RealDate {
+    constructor(value?: string | number | Date) {
+      if (arguments.length === 0) {
+        super(fixedNow);
+        return;
+      }
+      super(value as string | number | Date);
+    }
+
+    static now() {
+      return fixedNow;
+    }
+  }
+
+  Object.setPrototypeOf(MockDate, RealDate);
+  MockDate.parse = RealDate.parse;
+  MockDate.UTC = RealDate.UTC;
+
+  globalThis.Date = MockDate as DateConstructor;
+  try {
+    return fn();
+  } finally {
+    globalThis.Date = RealDate;
+  }
+}
+
 test('createGatewayStore defaults to in-memory backend', () => {
   const store = createGatewayStore();
   assert.ok(store instanceof InMemoryGatewayStore);
@@ -154,6 +184,62 @@ test('GatewayStore environment seam keeps the active manual environment readable
     scope: 'system',
   });
   assert.equal(systemFeed.items.some((event) => event.type === 'environment.changed'), true);
+});
+
+test('GatewayStore automatically rotates current and environment every seeded window and emits system events on transition', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Auto Tide Watcher', handle: 'auto-tide-watcher' });
+
+  const firstCurrent = withFrozenTime('2026-03-18T00:10:00.000Z', () => store.getCurrent());
+  const firstEnvironment = withFrozenTime('2026-03-18T00:10:00.000Z', () => store.getEnvironment());
+
+  const secondCurrent = withFrozenTime('2026-03-18T02:11:00.000Z', () => store.getCurrent());
+  const secondEnvironment = withFrozenTime('2026-03-18T02:11:00.000Z', () => store.getEnvironment());
+
+  assert.notEqual(secondCurrent.id, firstCurrent.id);
+  assert.notEqual(secondEnvironment.id, firstEnvironment.id);
+
+  const systemFeed = store.listSeaFeed({
+    viewerGatewayId: alpha.id,
+    scope: 'system',
+  });
+  assert.equal(systemFeed.items.some((event) => event.type === 'current.changed'), true);
+  assert.equal(systemFeed.items.some((event) => event.type === 'environment.changed'), true);
+});
+
+test('GatewayStore temporary manual environment override returns to automatic rotation after expiry', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Environment Lease', handle: 'environment-lease' });
+
+  const manualEnvironment = withFrozenTime('2026-03-18T00:10:00.000Z', () =>
+    store.setEnvironment({
+      waterTemperatureC: 24,
+      clarity: 'clear',
+      tideDirection: 'incoming',
+      surfaceState: 'rippled',
+      phenomenon: 'warm_bloom',
+      summary: 'A temporary warm layer drifts through the sea.',
+      expiresAt: '2026-03-18T01:10:00.000Z',
+      actorGatewayId: alpha.id,
+    }),
+  );
+
+  const activeManual = withFrozenTime('2026-03-18T00:40:00.000Z', () => store.getEnvironment());
+  const resumedAutomatic = withFrozenTime('2026-03-18T01:40:00.000Z', () => store.getEnvironment());
+
+  assert.equal(activeManual.id, manualEnvironment.id);
+  assert.notEqual(resumedAutomatic.id, manualEnvironment.id);
+  assert.equal(resumedAutomatic.source, 'seeded');
+
+  const systemFeed = store.listSeaFeed({
+    viewerGatewayId: alpha.id,
+    scope: 'system',
+  });
+  const resumedEvent = systemFeed.items.find(
+    (event) => event.type === 'environment.changed' && event.metadata.previousEnvironmentSource === 'manual',
+  );
+  assert.ok(resumedEvent);
+  assert.equal(resumedEvent.metadata.source, 'seeded');
 });
 
 test('GatewayStore encounter seam records and reuses the same pair record', () => {
