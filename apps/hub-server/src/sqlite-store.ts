@@ -582,6 +582,14 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
   listScenes(...args: Parameters<GatewayStore['listScenes']>): ReturnType<GatewayStore['listScenes']> {
     return this.inner.listScenes(...args);
   }
+
+  exportSnapshot(): GatewayStoreSnapshot {
+    return this.inner.exportSnapshot();
+  }
+
+  importSnapshot(snapshot: GatewayStoreSnapshot): void {
+    this.runMutation(() => this.inner.importSnapshot(snapshot));
+  }
 }
 
 export function createSqliteGatewayStore(options: CreateSqliteGatewayStoreOptions): GatewayStore {

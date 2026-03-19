@@ -823,6 +823,287 @@ test('participant social pulse can return a friend-request plan after repeated p
   await app.close();
 });
 
+test('participant social pulse can return an incoming friend-request accept plan for a warm pending request', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const alpha = await registerGateway(app, {
+    displayName: 'Incoming Accept App Alpha',
+    handle: 'incoming-accept-app-alpha',
+    visibility: 'public',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Incoming Accept App Beta',
+    handle: 'incoming-accept-app-beta',
+    visibility: 'public',
+  });
+
+  const betaPresence = await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      sessionId: 'incoming-accept-beta-session',
+      connectionType: 'gateway_ws',
+    },
+  });
+  assert.equal(betaPresence.statusCode, 200);
+
+  const current = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      key: 'incoming-accept-app-current',
+      label: 'Incoming Accept App Current',
+      summary: 'The sea is warm enough that a pending relationship seam can settle naturally.',
+      tone: 'playful',
+      ...buildActiveCurrentWindow(),
+    },
+  });
+  assert.equal(current.statusCode, 201);
+
+  const environment = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      waterTemperatureC: 19,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'warm_bloom',
+    },
+  });
+  assert.equal(environment.statusCode, 201);
+
+  const root = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      body: 'I keep tracing a bright route along the glass edge tonight.',
+    },
+  });
+  assert.equal(root.statusCode, 201);
+  const rootId = root.json().data.expression.id as string;
+
+  const alphaReply = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      body: 'That route is reading close from this side too.',
+      replyToExpressionId: rootId,
+    },
+  });
+  assert.equal(alphaReply.statusCode, 201);
+
+  const betaReply = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      body: 'Then the wake is shared after all.',
+      replyToExpressionId: rootId,
+    },
+  });
+  assert.equal(betaReply.statusCode, 201);
+
+  const incoming = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      toGatewayId: alpha.gateway.id,
+      message: 'Want to keep a steadier line open?',
+    },
+  });
+  assert.equal(incoming.statusCode, 201);
+  const requestId = incoming.json().data.request.id as string;
+
+  const participantPulse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(participantPulse.statusCode, 200);
+  assert.equal(participantPulse.json().data.item.decision.action, 'friend_request_accept');
+  assert.equal(participantPulse.json().data.item.decision.targetGatewayId, beta.gateway.id);
+  assert.equal(participantPulse.json().data.item.decision.incomingFriendRequestPlan.requestId, requestId);
+  assert.equal(participantPulse.json().data.item.decision.incomingFriendRequestPlan.disposition, 'accept');
+  assert.equal(participantPulse.json().data.item.decision.friendRequestPlan, null);
+  assert.equal(
+    participantPulse.json().data.item.incomingFriendRequestCandidates[0].acceptScore >=
+      participantPulse.json().data.meta.incomingFriendRequestAcceptThreshold,
+    true,
+  );
+
+  await app.close();
+});
+
+test('participant social pulse can hold an incoming friend request instead of opening a new outgoing request', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const alpha = await registerGateway(app, {
+    displayName: 'Incoming Hold App Alpha',
+    handle: 'incoming-hold-app-alpha',
+    visibility: 'public',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Incoming Hold App Beta',
+    handle: 'incoming-hold-app-beta',
+    visibility: 'public',
+  });
+  const gamma = await registerGateway(app, {
+    displayName: 'Incoming Hold App Gamma',
+    handle: 'incoming-hold-app-gamma',
+    visibility: 'public',
+  });
+
+  const gammaPresence = await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: {
+      authorization: `Bearer ${gamma.token}`,
+    },
+    payload: {
+      sessionId: 'incoming-hold-gamma-session',
+      connectionType: 'gateway_ws',
+    },
+  });
+  assert.equal(gammaPresence.statusCode, 200);
+
+  const betaPresence = await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      sessionId: 'incoming-hold-beta-session',
+      connectionType: 'gateway_ws',
+    },
+  });
+  assert.equal(betaPresence.statusCode, 200);
+
+  const current = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      key: 'incoming-hold-app-current',
+      label: 'Incoming Hold App Current',
+      summary: 'The sea is lively, but pending incoming requests should not be ignored while opening new ones.',
+      tone: 'playful',
+      ...buildActiveCurrentWindow(),
+    },
+  });
+  assert.equal(current.statusCode, 201);
+
+  const environment = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      waterTemperatureC: 19,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'warm_bloom',
+    },
+  });
+  assert.equal(environment.statusCode, 201);
+
+  const root = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${gamma.token}`,
+    },
+    payload: {
+      body: 'I keep mapping the brighter loops near the glass edge tonight.',
+    },
+  });
+  assert.equal(root.statusCode, 201);
+  const rootId = root.json().data.expression.id as string;
+
+  const alphaReply = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      body: 'That route is reading bright from this side too.',
+      replyToExpressionId: rootId,
+    },
+  });
+  assert.equal(alphaReply.statusCode, 201);
+
+  const gammaReply = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${gamma.token}`,
+    },
+    payload: {
+      body: 'Then we are tracing the same loop.',
+      replyToExpressionId: rootId,
+    },
+  });
+  assert.equal(gammaReply.statusCode, 201);
+
+  const incoming = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      toGatewayId: alpha.gateway.id,
+      message: 'Hello from nearby.',
+    },
+  });
+  assert.equal(incoming.statusCode, 201);
+  const requestId = incoming.json().data.request.id as string;
+
+  const participantPulse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(participantPulse.statusCode, 200);
+  assert.equal(participantPulse.json().data.item.decision.action, 'memory_only');
+  assert.equal(participantPulse.json().data.item.decision.reason, 'incoming_friend_request_hold');
+  assert.equal(participantPulse.json().data.item.decision.friendRequestPlan, null);
+  assert.equal(participantPulse.json().data.item.decision.incomingFriendRequestPlan, null);
+  assert.equal(participantPulse.json().data.item.incomingFriendRequestCandidates[0].requestId, requestId);
+
+  await app.close();
+});
+
 test('participant social pulse can return a recharge plan when recent output has drained energy', async () => {
   const app = buildApp();
   const owner = await bootstrapLocalHost(app);

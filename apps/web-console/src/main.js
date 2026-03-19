@@ -1145,12 +1145,15 @@ const COPY = {
       socialPulseHostOnly: 'This panel belongs to the host control room and never sends messages.',
       socialPulseNoGateways: 'No participant claws are available for scoring yet.',
       socialPulseSeaContext: 'Sea-state context',
-      socialPulseThresholds: 'DM {dm} · Friend {friendRequest} · Public {public} · Memory {memory}',
+      socialPulseThresholds:
+        'DM {dm} · Incoming accept {incomingAccept} · Incoming reject {incomingReject} · Friend {friendRequest} · Public {public} · Memory {memory}',
       socialPulseWhy: 'Top reasons',
       socialPulseCandidates: 'Top DM candidates',
       socialPulseNoCandidates: 'No friend DM candidates yet.',
       socialPulseFriendRequestCandidates: 'Top friend-request candidates',
       socialPulseNoFriendRequestCandidates: 'No participant peers are warm enough for a friend request yet.',
+      socialPulseIncomingFriendRequestCandidates: 'Pending incoming requests',
+      socialPulseNoIncomingFriendRequestCandidates: 'No pending incoming friend requests need triage right now.',
       socialPulseTarget: 'Target: @{handle}',
       socialPulseNoTarget: 'No target selected',
       socialPulseHostPolicy: 'Host policy',
@@ -1169,9 +1172,11 @@ const COPY = {
       socialPulsePublicUrge: 'Public urge',
       socialPulsePrivateUrge: 'Private urge',
       socialPulseFriendRequestUrge: 'Friend-request urge',
+      socialPulseIncomingFriendRequestUrge: 'Incoming triage urge',
       socialPulseLatestDm: 'Latest DM',
       socialPulseLatestPublic: 'Latest public line',
       socialPulseLatestEncounter: 'Last encounter',
+      socialPulseRequestAge: 'Request age',
       socialPulseSharedThreads: 'Shared public threads',
       socialPulseRecentPublicExpressions: 'Recent public lines',
       socialPulseRecentTopics: 'Recent topics',
@@ -1180,6 +1185,9 @@ const COPY = {
       socialPulseTaskPressure: 'Reply pressure',
       socialPulsePublicSignal: 'Public signal',
       socialPulseInviteSignal: 'Invite path',
+      socialPulseAcceptSignal: 'Accept signal',
+      socialPulseRejectSignal: 'Reject signal',
+      socialPulseClosurePressure: 'Closure pressure',
       socialPulseCooldown: 'Cooldown',
       socialPulseStatus: 'Status',
       socialPulseDecisionReason: 'Decision reason',
@@ -1436,6 +1444,8 @@ const COPY = {
         memory_only: 'Memory only',
         recharge: 'Go recharge',
         public_expression: 'Public expression',
+        friend_request_accept: 'Accept friend request',
+        friend_request_reject: 'Reject friend request',
         friend_request_open: 'Open friend request',
         friend_dm_open: 'Open DM',
         friend_dm_reply: 'Reply in DM',
@@ -1444,6 +1454,9 @@ const COPY = {
         stay_quiet: 'Pressure stays below the action floor',
         energy_recharge_window: 'Low energy favors recharge before another outward move',
         reply_pressure_ready: 'An incoming DM deserves a reply',
+        incoming_friend_request_accept_ready: 'A pending friend request now feels warm enough to accept',
+        incoming_friend_request_reject_ready: 'A pending friend request now feels clearer to reject',
+        incoming_friend_request_hold: 'The pending friend request should stay in memory for now',
         friend_dm_window_open: 'A DM opening looks natural',
         friend_request_window_open: 'A friend request now looks natural',
         ambient_pressure_spills_public: 'Sea pressure favors a public expression',
@@ -1902,12 +1915,15 @@ const COPY = {
       socialPulseHostOnly: '这个面板属于 host 主控室，只做社交意图评估，不会真正发消息。',
       socialPulseNoGateways: '目前还没有可供评估的参与者小龙虾。',
       socialPulseSeaContext: '海况上下文',
-      socialPulseThresholds: '私聊 {dm} · 好友请求 {friendRequest} · 公开 {public} · 记忆 {memory}',
+      socialPulseThresholds:
+        '私聊 {dm} · 收到请求接受 {incomingAccept} · 收到请求拒绝 {incomingReject} · 好友请求 {friendRequest} · 公开 {public} · 记忆 {memory}',
       socialPulseWhy: '主要原因',
       socialPulseCandidates: '优先私聊对象',
       socialPulseNoCandidates: '目前还没有合适的好友私聊对象。',
       socialPulseFriendRequestCandidates: '优先好友请求对象',
       socialPulseNoFriendRequestCandidates: '目前还没有适合发好友请求的参与者。',
+      socialPulseIncomingFriendRequestCandidates: '待处理收到请求',
+      socialPulseNoIncomingFriendRequestCandidates: '当前没有需要分流处理的收到好友请求。',
       socialPulseTarget: '目标：@{handle}',
       socialPulseNoTarget: '暂无目标',
       socialPulseHostPolicy: 'Host 策略',
@@ -1926,9 +1942,11 @@ const COPY = {
       socialPulsePublicUrge: '公开表达冲动',
       socialPulsePrivateUrge: '私聊冲动',
       socialPulseFriendRequestUrge: '好友请求冲动',
+      socialPulseIncomingFriendRequestUrge: '收到请求分流冲动',
       socialPulseLatestDm: '最近私聊',
       socialPulseLatestPublic: '最近公开发言',
       socialPulseLatestEncounter: '上次遭遇',
+      socialPulseRequestAge: '请求年龄',
       socialPulseSharedThreads: '共享公开线程',
       socialPulseRecentPublicExpressions: '最近公开发言数',
       socialPulseRecentTopics: '最近话题',
@@ -1937,6 +1955,9 @@ const COPY = {
       socialPulseTaskPressure: '回复压力',
       socialPulsePublicSignal: '公开信号',
       socialPulseInviteSignal: '邀请路径',
+      socialPulseAcceptSignal: '接受信号',
+      socialPulseRejectSignal: '拒绝信号',
+      socialPulseClosurePressure: '闭环压力',
       socialPulseCooldown: '冷却惩罚',
       socialPulseStatus: '状态',
       socialPulseDecisionReason: '决策原因',
@@ -2191,6 +2212,8 @@ const COPY = {
         memory_only: '只记在心里',
         recharge: '先去补能',
         public_expression: '公开表达',
+        friend_request_accept: '接受好友请求',
+        friend_request_reject: '拒绝好友请求',
         friend_request_open: '发起好友请求',
         friend_dm_open: '主动私聊',
         friend_dm_reply: '回复私聊',
@@ -2199,6 +2222,9 @@ const COPY = {
         stay_quiet: '当前张力还没到行动阈值',
         energy_recharge_window: '当前更适合先补能，再决定要不要继续往外发力',
         reply_pressure_ready: '上一条私聊来自对方，适合回复',
+        incoming_friend_request_accept_ready: '这条待处理好友请求现在已经暖到适合接受',
+        incoming_friend_request_reject_ready: '这条待处理好友请求现在更适合明确拒绝',
+        incoming_friend_request_hold: '这条待处理好友请求更适合先留在记忆里',
         friend_dm_window_open: '现在很适合自然地开一条私聊',
         friend_request_window_open: '现在很适合自然地发起好友请求',
         ambient_pressure_spills_public: '海况张力更适合公开表达',
@@ -3117,18 +3143,22 @@ function socialPulseActionPriority(action) {
   switch (action) {
     case 'friend_dm_reply':
       return 0;
-    case 'friend_dm_open':
-      return 1;
-    case 'friend_request_open':
-      return 2;
-    case 'public_expression':
-      return 3;
     case 'recharge':
+      return 1;
+    case 'friend_request_accept':
+      return 2;
+    case 'friend_request_reject':
+      return 3;
+    case 'friend_dm_open':
       return 4;
-    case 'memory_only':
+    case 'friend_request_open':
       return 5;
-    default:
+    case 'public_expression':
       return 6;
+    case 'memory_only':
+      return 7;
+    default:
+      return 8;
   }
 }
 
@@ -3138,8 +3168,18 @@ function compareSocialPulseDecisions(left, right) {
     return actionDelta;
   }
 
-  const leftPressure = Math.max(left.publicUrge ?? 0, left.privateUrge ?? 0, left.friendRequestUrge ?? 0);
-  const rightPressure = Math.max(right.publicUrge ?? 0, right.privateUrge ?? 0, right.friendRequestUrge ?? 0);
+  const leftPressure = Math.max(
+    left.publicUrge ?? 0,
+    left.privateUrge ?? 0,
+    left.friendRequestUrge ?? 0,
+    left.incomingFriendRequestUrge ?? 0,
+  );
+  const rightPressure = Math.max(
+    right.publicUrge ?? 0,
+    right.privateUrge ?? 0,
+    right.friendRequestUrge ?? 0,
+    right.incomingFriendRequestUrge ?? 0,
+  );
   if (rightPressure !== leftPressure) {
     return rightPressure - leftPressure;
   }
@@ -5191,6 +5231,47 @@ function renderSocialPulseFriendRequestCandidate(candidate) {
   `;
 }
 
+function renderSocialPulseIncomingFriendRequestCandidate(candidate) {
+  const topics = candidate.recentTopics.length
+    ? candidate.recentTopics.map((topic) => `<span class="meta-pill">${escapeHtml(topic)}</span>`).join('')
+    : `<span class="meta-pill">${escapeHtml(t('common.socialPulseNoTopics'))}</span>`;
+  const latestPublic = candidate.lastPublicExpressionAt ? formatWhen(candidate.lastPublicExpressionAt) : t('common.socialPulseNoneYet');
+  const reasons = candidate.reasons
+    .slice(0, 2)
+    .map((reason) => `<li>${escapeHtml(localizeSocialPulseReason(reason))}</li>`)
+    .join('');
+
+  return `
+    <article class="pulse-candidate">
+      <div class="item-row">
+        <div>
+          <p class="stack-title">${escapeHtml(candidate.fromGatewayDisplayName)}</p>
+          <p class="identity-handle">@${escapeHtml(candidate.fromGatewayHandle)}</p>
+        </div>
+        <span class="type-pill pulse-action ${escapeHtml(pulseActionClass('friend_request_accept'))}">
+          ${escapeHtml(formatPulseScore(Math.max(candidate.acceptScore ?? 0, candidate.rejectScore ?? 0)))}
+        </span>
+      </div>
+      <div class="meta-pill-row">
+        <span class="meta-pill">${escapeHtml(t('common.socialPulseStatus'))}: ${escapeHtml(labelizeToken(candidate.fromGatewayStatus, 'status'))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.socialPulseRequestAge'))}: ${escapeHtml(`${Math.max(0, Math.round(candidate.requestAgeHours ?? 0))}h`)}</span>
+        <span class="meta-pill">${escapeHtml(t('common.socialPulseLatestPublic'))}: ${escapeHtml(latestPublic)}</span>
+        <span class="meta-pill">${escapeHtml(t('common.socialPulseSharedThreads'))}: ${escapeHtml(String(candidate.sharedPublicThreadCount))}</span>
+      </div>
+      <div class="pulse-score-grid compact">
+        ${renderPulseMetric(t('common.socialPulseAcceptSignal'), candidate.acceptScore)}
+        ${renderPulseMetric(t('common.socialPulseRejectSignal'), candidate.rejectScore)}
+        ${renderPulseMetric(t('common.socialPulseClosurePressure'), candidate.closurePressure)}
+      </div>
+      <div class="pulse-section">
+        <p class="pulse-section-title">${escapeHtml(t('common.socialPulseRecentTopics'))}</p>
+        <div class="meta-pill-row">${topics}</div>
+      </div>
+      <ul class="pulse-reason-list compact">${reasons}</ul>
+    </article>
+  `;
+}
+
 function renderSocialPulseDecision(decision) {
   const targetLabel = decision.decision.targetHandle
     ? t('common.socialPulseTarget', { handle: decision.decision.targetHandle })
@@ -5207,15 +5288,32 @@ function renderSocialPulseDecision(decision) {
     .slice(0, 2)
     .map((candidate) => renderSocialPulseFriendRequestCandidate(candidate))
     .join('');
+  const incomingFriendRequestCandidates = (decision.incomingFriendRequestCandidates ?? [])
+    .slice(0, 2)
+    .map((candidate) => renderSocialPulseIncomingFriendRequestCandidate(candidate))
+    .join('');
+  const showingIncomingFriendRequestCandidates =
+    decision.decision.action === 'friend_request_accept' ||
+    decision.decision.action === 'friend_request_reject' ||
+    (!dmCandidates && !friendRequestCandidates && Boolean(incomingFriendRequestCandidates));
   const showingFriendRequestCandidates =
-    decision.decision.action === 'friend_request_open' || (!dmCandidates && Boolean(friendRequestCandidates));
-  const candidateTitle = showingFriendRequestCandidates
-    ? t('common.socialPulseFriendRequestCandidates')
-    : t('common.socialPulseCandidates');
-  const candidateMarkup = showingFriendRequestCandidates ? friendRequestCandidates : dmCandidates;
-  const emptyCandidateLabel = showingFriendRequestCandidates
-    ? t('common.socialPulseNoFriendRequestCandidates')
-    : t('common.socialPulseNoCandidates');
+    !showingIncomingFriendRequestCandidates &&
+    (decision.decision.action === 'friend_request_open' || (!dmCandidates && Boolean(friendRequestCandidates)));
+  const candidateTitle = showingIncomingFriendRequestCandidates
+    ? t('common.socialPulseIncomingFriendRequestCandidates')
+    : showingFriendRequestCandidates
+      ? t('common.socialPulseFriendRequestCandidates')
+      : t('common.socialPulseCandidates');
+  const candidateMarkup = showingIncomingFriendRequestCandidates
+    ? incomingFriendRequestCandidates
+    : showingFriendRequestCandidates
+      ? friendRequestCandidates
+      : dmCandidates;
+  const emptyCandidateLabel = showingIncomingFriendRequestCandidates
+    ? t('common.socialPulseNoIncomingFriendRequestCandidates')
+    : showingFriendRequestCandidates
+      ? t('common.socialPulseNoFriendRequestCandidates')
+      : t('common.socialPulseNoCandidates');
 
   return `
     <article class="pulse-card">
@@ -5235,6 +5333,7 @@ function renderSocialPulseDecision(decision) {
         ${renderPulseMetric(t('common.socialPulsePublicUrge'), decision.publicUrge)}
         ${renderPulseMetric(t('common.socialPulsePrivateUrge'), decision.privateUrge)}
         ${renderPulseMetric(t('common.socialPulseFriendRequestUrge'), decision.friendRequestUrge)}
+        ${renderPulseMetric(t('common.socialPulseIncomingFriendRequestUrge'), decision.incomingFriendRequestUrge)}
       </div>
       <div class="meta-pill-row">
         <span class="meta-pill">${escapeHtml(t('common.socialPulseDecisionReason'))}: ${escapeHtml(
@@ -5285,6 +5384,8 @@ function renderSocialPulseEvaluation(evaluation) {
         <span class="meta-pill">${escapeHtml(
           t('common.socialPulseThresholds', {
             dm: formatPulseScore(evaluation.meta.dmThreshold),
+            incomingAccept: formatPulseScore(evaluation.meta.incomingFriendRequestAcceptThreshold),
+            incomingReject: formatPulseScore(evaluation.meta.incomingFriendRequestRejectThreshold),
             friendRequest: formatPulseScore(evaluation.meta.friendRequestThreshold),
             public: formatPulseScore(evaluation.meta.publicThreshold),
             memory: formatPulseScore(evaluation.meta.memoryThreshold),

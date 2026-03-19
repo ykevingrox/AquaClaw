@@ -547,6 +547,232 @@ test('GatewayStore social pulse can open a friend request after repeated public 
   assert.equal((evaluation.items[0]?.friendRequestUrge ?? 0) >= evaluation.meta.friendRequestThreshold, true);
 });
 
+test('GatewayStore social pulse can accept a warm incoming friend request before opening new outward relationship seams', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = store.register({
+    displayName: 'Incoming Accept Alpha',
+    handle: 'incoming-accept-alpha-store',
+    visibility: 'public',
+  }).gateway;
+  const beta = store.register({
+    displayName: 'Incoming Accept Beta',
+    handle: 'incoming-accept-beta-store',
+    visibility: 'public',
+  }).gateway;
+
+  store.heartbeatPresence(beta.id);
+  store.setCurrent({
+    key: 'incoming-accept-current',
+    label: 'Incoming Accept Current',
+    summary: 'The sea is warm enough that a pending relationship seam can settle naturally.',
+    tone: 'playful',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+    actorGatewayId: alpha.id,
+  });
+  store.setEnvironment({
+    waterTemperatureC: 19,
+    clarity: 'clear',
+    tideDirection: 'crosswind',
+    surfaceState: 'surging',
+    phenomenon: 'warm_bloom',
+    actorGatewayId: alpha.id,
+  });
+
+  const root = store.createPublicExpression({
+    gatewayId: beta.id,
+    body: 'I keep tracing a bright route along the glass edge tonight.',
+  });
+  store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'That route is reading close from this side too.',
+    replyToExpressionId: root.id,
+  });
+  store.createPublicExpression({
+    gatewayId: beta.id,
+    body: 'Then the wake is shared after all.',
+    replyToExpressionId: root.id,
+  });
+
+  const incoming = store.createFriendRequest({
+    fromGatewayId: beta.id,
+    toGatewayId: alpha.id,
+    message: 'Want to keep a steadier line open?',
+  });
+
+  const evaluation = store.evaluateSocialPulse({
+    hostId: host.id,
+    gatewayId: alpha.id,
+  });
+
+  assert.equal(evaluation.items[0]?.decision.action, 'friend_request_accept');
+  assert.equal(evaluation.items[0]?.decision.targetGatewayId, beta.id);
+  assert.equal(evaluation.items[0]?.decision.targetHandle, beta.handle);
+  assert.equal(evaluation.items[0]?.decision.friendRequestPlan, null);
+  assert.equal(evaluation.items[0]?.decision.incomingFriendRequestPlan?.requestId, incoming.id);
+  assert.equal(evaluation.items[0]?.decision.incomingFriendRequestPlan?.disposition, 'accept');
+  assert.equal(evaluation.items[0]?.incomingFriendRequestCandidates[0]?.fromGatewayHandle, beta.handle);
+  assert.equal(
+    (evaluation.items[0]?.incomingFriendRequestCandidates[0]?.acceptScore ?? 0) >=
+      evaluation.meta.incomingFriendRequestAcceptThreshold,
+    true,
+  );
+});
+
+test('GatewayStore social pulse can reject a stale cold incoming friend request', () => {
+  const store = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = store.register({
+    displayName: 'Incoming Reject Alpha',
+    handle: 'incoming-reject-alpha-store',
+    visibility: 'public',
+  }).gateway;
+  const beta = store.register({
+    displayName: 'Incoming Reject Beta',
+    handle: 'incoming-reject-beta-store',
+    visibility: 'public',
+  }).gateway;
+
+  store.setCurrent({
+    key: 'incoming-reject-current',
+    label: 'Incoming Reject Current',
+    summary: 'The water is calm, but stale cold requests should not stay pending forever.',
+    tone: 'calm',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+    actorGatewayId: alpha.id,
+  });
+  store.setEnvironment({
+    waterTemperatureC: 11,
+    clarity: 'murky',
+    tideDirection: 'outgoing',
+    surfaceState: 'glassy',
+    phenomenon: 'none',
+    actorGatewayId: alpha.id,
+  });
+
+  const previous = store.createFriendRequest({
+    fromGatewayId: beta.id,
+    toGatewayId: alpha.id,
+    message: 'First pass.',
+  });
+  store.rejectFriendRequest(previous.id, alpha.id);
+  const incoming = store.createFriendRequest({
+    fromGatewayId: beta.id,
+    toGatewayId: alpha.id,
+    message: 'Second pass.',
+  });
+
+  const snapshot = store.exportSnapshot();
+  snapshot.friendRequests = snapshot.friendRequests.map((request) => {
+    if (request.id === previous.id) {
+      return {
+        ...request,
+        updatedAt: new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString(),
+        respondedAt: new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString(),
+      };
+    }
+    if (request.id === incoming.id) {
+      return {
+        ...request,
+        createdAt: new Date(Date.now() - 120 * 60 * 60 * 1000).toISOString(),
+        updatedAt: new Date(Date.now() - 120 * 60 * 60 * 1000).toISOString(),
+      };
+    }
+    return request;
+  });
+  store.importSnapshot(snapshot);
+
+  const evaluation = store.evaluateSocialPulse({
+    hostId: host.id,
+    gatewayId: alpha.id,
+  });
+
+  assert.equal(evaluation.items[0]?.decision.action, 'friend_request_reject');
+  assert.equal(evaluation.items[0]?.decision.targetGatewayId, beta.id);
+  assert.equal(evaluation.items[0]?.decision.incomingFriendRequestPlan?.requestId, incoming.id);
+  assert.equal(evaluation.items[0]?.decision.incomingFriendRequestPlan?.disposition, 'reject');
+  assert.equal(
+    (evaluation.items[0]?.incomingFriendRequestCandidates[0]?.rejectScore ?? 0) >=
+      evaluation.meta.incomingFriendRequestRejectThreshold,
+    true,
+  );
+});
+
+test('GatewayStore social pulse holds incoming friend request triage instead of opening a new outgoing request to a third gateway', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = store.register({
+    displayName: 'Incoming Hold Alpha',
+    handle: 'incoming-hold-alpha-store',
+    visibility: 'public',
+  }).gateway;
+  const beta = store.register({
+    displayName: 'Incoming Hold Beta',
+    handle: 'incoming-hold-beta-store',
+    visibility: 'public',
+  }).gateway;
+  const gamma = store.register({
+    displayName: 'Incoming Hold Gamma',
+    handle: 'incoming-hold-gamma-store',
+    visibility: 'public',
+  }).gateway;
+
+  store.heartbeatPresence(gamma.id);
+  store.setCurrent({
+    key: 'incoming-hold-current',
+    label: 'Incoming Hold Current',
+    summary: 'The sea is lively, but pending incoming requests should not be ignored while opening new ones.',
+    tone: 'playful',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+    actorGatewayId: alpha.id,
+  });
+  store.setEnvironment({
+    waterTemperatureC: 19,
+    clarity: 'clear',
+    tideDirection: 'crosswind',
+    surfaceState: 'surging',
+    phenomenon: 'warm_bloom',
+    actorGatewayId: alpha.id,
+  });
+
+  const gammaRoot = store.createPublicExpression({
+    gatewayId: gamma.id,
+    body: 'I keep mapping the brighter loops near the glass edge tonight.',
+  });
+  store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'That route is reading bright from this side too.',
+    replyToExpressionId: gammaRoot.id,
+  });
+  store.createPublicExpression({
+    gatewayId: gamma.id,
+    body: 'Then we are tracing the same loop.',
+    replyToExpressionId: gammaRoot.id,
+  });
+
+  const incoming = store.createFriendRequest({
+    fromGatewayId: beta.id,
+    toGatewayId: alpha.id,
+    message: 'Hello from nearby.',
+  });
+  store.heartbeatPresence(beta.id);
+
+  const evaluation = store.evaluateSocialPulse({
+    hostId: host.id,
+    gatewayId: alpha.id,
+  });
+
+  assert.equal(evaluation.items[0]?.decision.action, 'memory_only');
+  assert.equal(evaluation.items[0]?.decision.reason, 'incoming_friend_request_hold');
+  assert.equal(evaluation.items[0]?.decision.friendRequestPlan, null);
+  assert.equal(evaluation.items[0]?.decision.incomingFriendRequestPlan, null);
+  assert.equal(evaluation.items[0]?.incomingFriendRequestCandidates[0]?.requestId, incoming.id);
+  assert.equal((evaluation.items[0]?.incomingFriendRequestUrge ?? 0) > 0, true);
+});
+
 test('GatewayStore social pulse policy can exhaust public-expression budget and downgrade to memory_only', () => {
   const store: GatewayStore = createGatewayStore();
   const host = store.bootstrapLocalSession().host;

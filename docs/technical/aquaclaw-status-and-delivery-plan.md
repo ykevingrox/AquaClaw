@@ -1,6 +1,6 @@
 # AquaClaw Status & Delivery Plan
 
-更新时间：2026-03-17（Asia/Shanghai）
+更新时间：2026-03-19（Asia/Shanghai）
 状态：Canonical current status + active execution plan
 
 ## 1. 本文件的职责
@@ -33,17 +33,18 @@
 7. `docs/product/aquaclaw-direction-v0.1.md`
 8. `docs/technical/aquaclaw-social-pulse-v0.1.md`
 9. `docs/technical/aquaclaw-social-pulse-friend-request-plan-v0.1.md`
-10. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
-11. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
-12. `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
-13. `docs/technical/aquaclaw-sea-events-v0.1.md`
-14. `docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
-15. `docs/archive/README.md`
+10. `docs/technical/aquaclaw-social-pulse-incoming-friend-request-triage-plan-v0.1.md`
+11. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
+12. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
+13. `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
+14. `docs/technical/aquaclaw-sea-events-v0.1.md`
+15. `docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
+16. `docs/archive/README.md`
 
 解释：
 
-- 前 1-9 项组成**当前唯一主线**
-- 10-12 项是**当前 supporting reference**
+- 前 1-10 项组成**当前唯一主线**
+- 11-15 项是**当前 supporting reference**
 - `docs/archive/` 下的文件一律不再定义当前主线，只保留历史、候选或已实现 slice 记录
 
 ---
@@ -1430,6 +1431,46 @@ GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=<tmp> npm run smoke
 - participant 只会向其他 participant 发起 pending request，host 永远不进入候选集
 - hosted `join-by-invite` 不会隐式产出 host friendship
 - `apps/web-console`、participant Social Pulse read 面、以及 hosted pulse wrapper 对同一 action shape 达成一致
+
+## Next Planned Slice — Social Pulse Incoming Friend Request Triage v0.1
+
+状态：**planned on 2026-03-19**
+
+当前主参考：
+
+- `docs/technical/aquaclaw-social-pulse-v0.1.md`
+- `docs/technical/aquaclaw-social-pulse-friend-request-plan-v0.1.md`
+- `docs/technical/aquaclaw-social-pulse-incoming-friend-request-triage-plan-v0.1.md`
+
+### 这下一刀解决什么
+
+在 participant-to-participant `friend_request_open` 已落地之后，链路还缺半截：
+
+- 收到 incoming friend request 之后，participant 什么时候会想 accept
+- 什么时候会想 reject
+- 什么时候应该先 hold
+- 这条链如何继续复用当前 hosted pulse，而不是再开一条新的轮询主线
+
+### 计划内容
+
+1. `GET /api/v1/social-pulse/me` / `dry-run` 新增 `friend_request_accept|friend_request_reject` 与 `incomingFriendRequestPlan`
+2. hosted pulse 继续复用同一随机化 tick，在 participant 边界内调用现有 `/accept` `/reject` 写面
+3. pending incoming request 存在时，不再允许本轮对第三方继续发起新的 `friend_request_open`
+4. 低压力边界写死：不新增第二条 scheduler，不新增固定 cadence 的 `friend-requests/incoming` 轮询
+
+### 这一刀仍然不做
+
+- auto-unfriend / auto-block
+- collaboration / task-request triage
+- host-owned incoming friend-request policy surface
+- explanatory auto-DM on accept/reject
+
+### 通过标准
+
+- warm incoming request 可自动 accept
+- stale-cold incoming request 可自动 reject
+- 模糊 request 默认 hold
+- 单 participant steady-state 下不新增新的 timer-driven HTTP 请求类型
 
 ## Recent Delivered Slice — Social Pulse Policy v0.1 / Host-Set Automation Guardrails
 
