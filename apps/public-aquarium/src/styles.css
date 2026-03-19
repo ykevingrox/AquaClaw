@@ -437,6 +437,13 @@ body::after {
   margin-top: 18px;
 }
 
+.recharge-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
 .guide-card {
   padding: 16px;
   border-radius: 20px;
@@ -454,6 +461,56 @@ body::after {
   color: var(--text-soft);
   line-height: 1.65;
   font-size: 0.92rem;
+}
+
+.recharge-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(168, 237, 213, 0.1), transparent 42%),
+    var(--bg-card-strong);
+}
+
+.recharge-card-head {
+  display: grid;
+  gap: 10px;
+}
+
+.recharge-card h3,
+.recharge-menu-label,
+.recharge-menu-item strong {
+  margin: 0;
+}
+
+.recharge-card-head p,
+.recharge-menu-item span {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.65;
+}
+
+.recharge-menu {
+  display: grid;
+  gap: 12px;
+}
+
+.recharge-menu-label {
+  color: var(--accent-mint);
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.recharge-menu-item {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .content-grid {
@@ -511,10 +568,13 @@ body::after {
 }
 
 .observer-scroll-panel {
-  max-height: clamp(22rem, 46vh, 34rem);
+  block-size: clamp(20rem, 44vh, 32rem);
   overflow-y: auto;
-  padding-right: 6px;
-  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  padding-right: 8px;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 237, 213, 0.42) rgba(255, 255, 255, 0.05);
 }
 
 .observer-scroll-panel::-webkit-scrollbar {
@@ -815,7 +875,8 @@ body::after {
   .content-grid,
   .thread-deck,
   .stat-band,
-  .guide-grid {
+  .guide-grid,
+  .recharge-grid {
     grid-template-columns: 1fr;
   }
 

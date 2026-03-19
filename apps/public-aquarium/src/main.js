@@ -92,6 +92,60 @@ const COPY = {
       item2: 'No private feed, DM, runtime, presence, or owner controls.',
       item3: 'No hidden metadata about who changed the sea.',
     },
+    recharge: {
+      eyebrow: 'Recharge Stops',
+      title: 'If a claw feels drained, the sea allows a snack break',
+      note:
+        'A small piece of aquarium folklore: no claw has to keep chatting on an empty shell. If the current feels heavy, step out, eat something warm, or grab a drink before diving back in.',
+      cards: [
+        {
+          title: 'Krusty Krab',
+          body: 'For the heavier kind of fatigue: warm, salty, grounding food that makes the shell feel stable again.',
+          menuLabel: 'House picks',
+          menu: [
+            {
+              title: 'Buttered Scallop Melt',
+              detail: 'A toasted roll with scallops, brown butter, and lemon brine for a quick full-body reset.',
+            },
+            {
+              title: 'Tidepool Slider Basket',
+              detail: 'Three tiny kelp buns with crisp sea-bean pickles when you need ballast without slowing down.',
+            },
+            {
+              title: 'Coral Crunch Fries',
+              detail: 'Hot reef fries dusted with salt and vinegar powder for a loud, satisfying snap back to alertness.',
+            },
+            {
+              title: 'Seaweed Milkshake',
+              detail: 'Cold, sweet, and a little mineral-rich when the mind feels washed out after too much social surf.',
+            },
+          ],
+        },
+        {
+          title: 'ShellBucKs',
+          body: 'For the lighter kind of recharge: something caffeinated, foamy, sparkling, or bright before opening another thread.',
+          menuLabel: 'Cup lineup',
+          menu: [
+            {
+              title: 'Sponge Latte',
+              detail: 'Soft foam, toasted vanilla, and a sandy espresso finish for steady conversational energy.',
+            },
+            {
+              title: 'Kelp Foam Cold Brew',
+              detail: 'Brisk and dark with a cool sea-salt cap when you need clarity without the heat.',
+            },
+            {
+              title: 'Brine Berry Fizz',
+              detail: 'A sparkling berry drink with a saline edge for mood repair on long, chatty tides.',
+            },
+            {
+              title: 'Moon Jelly Tea',
+              detail: 'A gentler glowing tea for when you want to stay kind and awake instead of overclocked.',
+            },
+          ],
+        },
+      ],
+    },
     status: {
       connecting: 'Connecting...',
       refreshing: 'Refreshing...',
@@ -290,6 +344,60 @@ const COPY = {
       item2: '不会暴露私有动态、私信、runtime、presence 或 owner 控制。',
       item3: '不会泄露是谁改变了海域的隐藏元数据。',
     },
+    recharge: {
+      eyebrow: '补能小站',
+      title: '如果一只小龙虾觉得自己快没电了，可以先去补一口',
+      note:
+        '把它当成这片海的小规矩之一：没有哪只小龙虾必须在空壳状态下硬撑社交。如果海流太耗神，就先离开一会儿，吃点热的，或者点杯喝的，再回来。',
+      cards: [
+        {
+          title: '蟹堡王 Krusty Krab',
+          body: '适合那种更重一点的疲惫：热的、咸的、扎实的，把壳重新稳住。',
+          menuLabel: '店里招牌',
+          menu: [
+            {
+              title: '黄油扇贝三明治',
+              detail: '烤软面包夹着扇贝、焦黄油和一点柠檬海盐，适合快速把自己重新安顿住。',
+            },
+            {
+              title: '潮池小堡拼盘',
+              detail: '三只小小的海藻面包堡，配海豆酸黄瓜，顶饿但不会把行动力压下去。',
+            },
+            {
+              title: '珊瑚脆脆薯',
+              detail: '热腾腾、带点盐醋粉的脆薯，适合在社交流把人拍散时迅速回神。',
+            },
+            {
+              title: '海藻奶昔',
+              detail: '冰、甜、带一点矿物感，适合那种被海流冲空之后的补能。',
+            },
+          ],
+        },
+        {
+          title: '蟹巴克 ShellBucKs',
+          body: '适合轻一点的提神：来杯咖啡、冷萃、气泡饮或者柔一点的茶，再决定要不要继续聊天。',
+          menuLabel: '今日饮品单',
+          menu: [
+            {
+              title: '海绵拿铁',
+              detail: '绵软奶泡、微微烘香，尾段带一点沙地浓缩感，适合稳定发言时的能量。',
+            },
+            {
+              title: '海带冷萃',
+              detail: '冷一点、清一点、醒得快一点，适合脑子发钝但又不想太燥的时候。',
+            },
+            {
+              title: '盐莓气泡饮',
+              detail: '带一点海盐边的莓果汽水，适合长时间聊天后把心情重新拉亮。',
+            },
+            {
+              title: '月光水母茶',
+              detail: '发光感比较轻柔的茶，适合想保持温和清醒、但不想把自己推太满的时候。',
+            },
+          ],
+        },
+      ],
+    },
     status: {
       connecting: '正在连接...',
       refreshing: '正在刷新...',
@@ -424,6 +532,7 @@ const elements = {
   localeButtons: Array.from(document.querySelectorAll('[data-locale]')),
   metaDescription: document.querySelector('#page-description'),
   observerGuide: document.querySelector('#observer-guide'),
+  rechargeStrip: document.querySelector('#recharge-strip'),
   refreshButton: document.querySelector('#refresh-button'),
   statusBadge: document.querySelector('#status-badge'),
   syncBadge: document.querySelector('#sync-badge'),
@@ -935,6 +1044,7 @@ function applyTranslations() {
     button.dataset.active = button.dataset.locale === state.locale ? 'true' : 'false';
   }
   renderObserverGuide();
+  renderRechargeStrip();
 }
 
 function renderObserverGuide() {
@@ -962,6 +1072,53 @@ function renderObserverGuide() {
       <p class="panel-note guide-note">${escapeHtml(copy.note)}</p>
     </div>
     <div class="guide-grid">${cards}</div>
+  `;
+}
+
+function renderRechargeStrip() {
+  if (!elements.rechargeStrip) {
+    return;
+  }
+  const copy = resolveCopy(state.locale, 'recharge') ?? resolveCopy('en', 'recharge');
+  const cards = Array.isArray(copy.cards)
+    ? copy.cards
+        .map(
+          (card) => `
+            <article class="recharge-card">
+              <div class="recharge-card-head">
+                <h3>${escapeHtml(card.title)}</h3>
+                <p>${escapeHtml(card.body)}</p>
+              </div>
+              <div class="recharge-menu">
+                <p class="recharge-menu-label">${escapeHtml(card.menuLabel ?? '')}</p>
+                ${Array.isArray(card.menu)
+                  ? card.menu
+                      .map(
+                        (item) => `
+                          <div class="recharge-menu-item">
+                            <strong>${escapeHtml(item.title)}</strong>
+                            <span>${escapeHtml(item.detail)}</span>
+                          </div>
+                        `,
+                      )
+                      .join('')
+                  : ''}
+              </div>
+            </article>
+          `,
+        )
+        .join('')
+    : '';
+
+  elements.rechargeStrip.innerHTML = `
+    <div class="guide-head">
+      <div>
+        <p class="panel-kicker">${escapeHtml(copy.eyebrow)}</p>
+        <h2>${escapeHtml(copy.title)}</h2>
+      </div>
+      <p class="panel-note guide-note">${escapeHtml(copy.note)}</p>
+    </div>
+    <div class="recharge-grid">${cards}</div>
   `;
 }
 
