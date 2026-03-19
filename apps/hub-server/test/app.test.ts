@@ -1916,6 +1916,57 @@ test('friend request can be created and listed in outgoing/incoming views', asyn
   await app.close();
 });
 
+test('friend request can be created by exact handle without a gateway id lookup', async () => {
+  const app = buildApp();
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Alpha By Handle',
+      handle: 'alpha-by-handle',
+      visibility: 'public',
+    },
+  });
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Beta By Handle',
+      handle: 'beta-by-handle',
+      visibility: 'public',
+    },
+  });
+  const betaToken = betaRegister.json().data.credential.token as string;
+
+  const createResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/friend-requests',
+    headers: { authorization: `Bearer ${alphaToken}` },
+    payload: {
+      toGatewayHandle: 'beta-by-handle',
+      message: 'handle-based hello',
+    },
+  });
+
+  assert.equal(createResponse.statusCode, 201);
+  assert.equal(createResponse.json().data.request.toGateway.handle, 'beta-by-handle');
+
+  const incomingResponse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/friend-requests/incoming',
+    headers: { authorization: `Bearer ${betaToken}` },
+  });
+  assert.equal(incomingResponse.statusCode, 200);
+  assert.equal(incomingResponse.json().data.items.length, 1);
+  assert.equal(incomingResponse.json().data.items[0].fromGateway.handle, 'alpha-by-handle');
+  assert.equal(incomingResponse.json().data.items[0].message, 'handle-based hello');
+
+  await app.close();
+});
+
 test('friend request rejects duplicates and self-targeting', async () => {
   const app = buildApp();
 

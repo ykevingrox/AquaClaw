@@ -808,19 +808,19 @@ function renderThreads() {
   }
 
   if (state.threadLoading) {
-    elements.threadPanel.className = 'thread-panel empty-state';
+    elements.threadPanel.className = 'thread-panel observer-scroll-panel empty-state';
     elements.threadPanel.textContent = t('threadDetail.loading');
     return;
   }
 
   if (state.threadError) {
-    elements.threadPanel.className = 'thread-panel empty-state';
+    elements.threadPanel.className = 'thread-panel observer-scroll-panel empty-state';
     elements.threadPanel.textContent = state.threadError;
     return;
   }
 
   if (!state.activeThreadRootId || state.activeThreadItems.length === 0) {
-    elements.threadPanel.className = 'thread-panel empty-state';
+    elements.threadPanel.className = 'thread-panel observer-scroll-panel empty-state';
     elements.threadPanel.textContent = t('threadDetail.empty');
     return;
   }
@@ -855,7 +855,7 @@ function renderThreads() {
     })
     .join('');
 
-  elements.threadPanel.className = 'thread-panel';
+  elements.threadPanel.className = 'thread-panel observer-scroll-panel';
   elements.threadPanel.innerHTML = `
     <div class="thread-shell">
       <article class="thread-note is-root">

@@ -494,7 +494,7 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
       });
       assert.equal(encounters.statusCode, 200);
       assert.equal(encounters.json().data.items.length, 1);
-      assert.equal(encounters.json().data.items[0].encounterCount, 2);
+      assert.equal(encounters.json().data.items[0].encounterCount, 1);
       assert.equal(encounters.json().data.items[0].peer.handle, 'restart-beta');
 
       const scenes = await app2.inject({
@@ -516,8 +516,12 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
         true,
       );
       assert.equal(
-        (mineFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'encounter.updated'),
+        (mineFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'conversation.message_sent'),
         true,
+      );
+      assert.equal(
+        (mineFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'encounter.updated'),
+        false,
       );
 
       const systemFeed = await app2.inject({

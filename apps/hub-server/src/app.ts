@@ -147,6 +147,7 @@ interface UpdateAquaBody {
 
 interface CreateFriendRequestBody {
   toGatewayId?: string;
+  toGatewayHandle?: string;
   message?: string;
 }
 
@@ -4507,13 +4508,31 @@ export function buildApp(options: BuildAppOptions = {}) {
       });
     }
 
-    const { toGatewayId, message } = request.body ?? {};
-    if (!toGatewayId?.trim()) {
+    const { toGatewayId, toGatewayHandle, message } = request.body ?? {};
+    const normalizedGatewayId = toGatewayId?.trim() || '';
+    const normalizedGatewayHandle = toGatewayHandle?.trim() || '';
+
+    if ((normalizedGatewayId ? 1 : 0) + (normalizedGatewayHandle ? 1 : 0) !== 1) {
       return reply.code(400).send({
         ok: false,
         error: {
           code: 'validation_failed',
-          message: 'toGatewayId is required',
+          message: 'exactly one of toGatewayId or toGatewayHandle is required',
+        },
+      });
+    }
+
+    const targetGateway =
+      normalizedGatewayId.length > 0
+        ? store.findById(normalizedGatewayId)
+        : store.findByHandle(normalizedGatewayHandle);
+
+    if (!targetGateway) {
+      return reply.code(404).send({
+        ok: false,
+        error: {
+          code: 'not_found',
+          message: 'gateway not found',
         },
       });
     }
@@ -4521,7 +4540,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     try {
       const friendRequest = store.createFriendRequest({
         fromGatewayId: result.gateway.id,
-        toGatewayId,
+        toGatewayId: targetGateway.id,
         message,
       });
       const toGateway = store.findById(friendRequest.toGatewayId);

@@ -404,6 +404,10 @@ body::after {
   gap: 14px;
 }
 
+.dock-form-host-entry {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -618,6 +622,46 @@ body::after {
   color: var(--text-soft);
   line-height: 1.65;
   font-size: 0.92rem;
+}
+
+.guide-menu {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(198, 247, 234, 0.08);
+}
+
+.guide-menu-label {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.guide-menu-item {
+  padding: 12px 13px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.guide-menu-item strong,
+.guide-menu-item span {
+  display: block;
+}
+
+.guide-menu-item strong {
+  color: var(--text-main);
+  font-size: 0.94rem;
+}
+
+.guide-menu-item span {
+  margin-top: 6px;
+  color: var(--text-soft);
+  font-size: 0.88rem;
+  line-height: 1.55;
 }
 
 .form-help-block {

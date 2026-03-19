@@ -510,6 +510,29 @@ body::after {
   gap: 14px;
 }
 
+.observer-scroll-panel {
+  max-height: clamp(22rem, 46vh, 34rem);
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-gutter: stable;
+}
+
+.observer-scroll-panel::-webkit-scrollbar {
+  width: 10px;
+}
+
+.observer-scroll-panel::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.observer-scroll-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background: linear-gradient(180deg, rgba(168, 237, 213, 0.34), rgba(138, 199, 218, 0.3));
+  background-clip: padding-box;
+}
+
 .condition-panel {
   display: grid;
   gap: 14px;
@@ -687,6 +710,7 @@ body::after {
 
 .thread-panel {
   min-height: 280px;
+  align-content: start;
 }
 
 .thread-author {

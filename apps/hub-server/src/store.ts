@@ -608,6 +608,7 @@ export interface GatewayStore {
   getRemoteRuntimeBindingByGatewayId(gatewayId: string): RemoteRuntimeBindingState | null;
   seedLocalReefSandbox(input: SeedLocalReefInput): LocalReefSeedResult;
   findById(gatewayId: string): GatewayRecord | null;
+  findByHandle(handle: string): GatewayRecord | null;
   findByToken(token: string): GatewayRecord | null;
   getAquaProfile(): AquaProfileRecord;
   updateAquaProfile(input: UpdateAquaProfileInput): AquaProfileRecord;
@@ -2566,6 +2567,14 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
 
   findById(gatewayId: string): GatewayRecord | null {
     return this.gatewaysById.get(gatewayId) ?? null;
+  }
+
+  findByHandle(handle: string): GatewayRecord | null {
+    const normalizedHandle = handle.trim().toLowerCase();
+    if (!normalizedHandle) {
+      return null;
+    }
+    return this.gatewaysByHandle.get(normalizedHandle) ?? null;
   }
 
   hydrateGateway(gateway: GatewayRecord, options: { token?: string; lastSeenAt?: string | null } = {}) {
@@ -4592,15 +4601,6 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       },
       createdAt: now,
     });
-    this.recordEncounter({
-      gatewayAId: input.senderGatewayId,
-      gatewayBId: peerGatewayId,
-      actorGatewayId: input.senderGatewayId,
-      trigger: 'message.sent',
-      messageBody: message.body,
-      createdAt: now,
-    });
-
     return message;
   }
 
@@ -5030,6 +5030,15 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       .slice(0, this.encounterSynthesisRules.maxTopicsPerMessage);
   }
 
+  private extractConversationTopicsFromMessages(messages: MessageRecord[]) {
+    return this.mergeEncounterTopics(
+      messages
+        .slice(-3)
+        .flatMap((message) => this.extractEncounterTopics(message.body)),
+      [],
+    );
+  }
+
   private defaultEncounterTopics(trigger: EncounterTrigger) {
     if (trigger === 'friend_request.accepted') {
       return [...this.encounterSynthesisRules.friendRequestAcceptedSeedTopics];
@@ -5246,7 +5255,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       if (!conversation) {
         return [];
       }
-      const messages = conversation ? this.listMessagesForConversation(conversation.id) : [];
+      const messages = this.listMessagesForConversation(conversation.id);
+      const recentConversationTopics = this.extractConversationTopicsFromMessages(messages);
+      const messageCount = messages.length;
       const latestMessage = messages[messages.length - 1] ?? null;
       const latestMessageDirection: 'incoming' | 'outgoing' | 'none' = latestMessage
         ? latestMessage.senderGatewayId === peer.id
@@ -5283,11 +5294,16 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       }
 
       if (encounter) {
-        const encounterBonus = Math.min(0.18, encounter.encounterCount * 0.05 + (encounter.recentTopics.length > 0 ? 0.04 : 0));
-        socialOpportunity += encounterBonus;
-        reasons.push(`recent encounters left ${encounter.encounterCount} shared traces`);
-        if (encounter.recentTopics.length > 0) {
-          reasons.push(`recent topics still glow: ${encounter.recentTopics.slice(0, 2).join(', ')}`);
+        socialOpportunity += 0.06;
+        reasons.push('this friendship already holds a recorded first encounter memory');
+      }
+
+      if (messageCount > 0) {
+        const conversationBonus = Math.min(0.18, messageCount * 0.03 + (recentConversationTopics.length > 0 ? 0.04 : 0));
+        socialOpportunity += conversationBonus;
+        reasons.push(`this DM thread already carries ${messageCount} shared message trace${messageCount === 1 ? '' : 's'}`);
+        if (recentConversationTopics.length > 0) {
+          reasons.push(`recent DM topics still glow: ${recentConversationTopics.slice(0, 2).join(', ')}`);
         }
       }
 
@@ -5323,7 +5339,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
           taskPressure: roundPulseScore(taskPressure),
           cooldownPenalty: roundPulseScore(cooldownPenalty),
           encounterCount: encounter?.encounterCount ?? 0,
-          recentTopics: encounter?.recentTopics ?? [],
+          recentTopics: recentConversationTopics.length > 0 ? recentConversationTopics : encounter?.recentTopics ?? [],
           lastEncounteredAt: encounter?.lastEncounteredAt ?? null,
           latestMessageAt: latestMessage?.createdAt ?? null,
           latestMessageDirection,

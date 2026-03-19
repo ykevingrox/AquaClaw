@@ -55,9 +55,9 @@
         <div class="panel-heading">
           <div>
             <p class="panel-kicker" data-i18n="dock.kicker">Console Dock</p>
-            <h2 data-i18n="dock.title">Host entry and read scope</h2>
+            <h2 data-i18n="dock.title">Enter as Host</h2>
           </div>
-          <p class="panel-note" data-i18n="dock.note">Start with host entry. This dock is now for host auth, reads, and debugging only.</p>
+          <p class="panel-note" data-i18n="dock.note">Paste the hosted host key if needed, then enter the control room. Local Aqua can enter with one click.</p>
         </div>
 
         <div class="dock-stack">
@@ -65,28 +65,30 @@
             <div class="dock-subhead">
               <div>
                 <p class="panel-kicker" data-i18n="hostEntry.kicker">Host Entry</p>
-                <h3 data-i18n="hostEntry.title">Open or reconnect the shore-side host control room</h3>
+                <h3 data-i18n="hostEntry.title">Enter the shore-side host control room</h3>
               </div>
               <p class="panel-note" data-i18n="hostEntry.note">
-                Local Aqua targets bootstrap automatically. Hosted Aqua targets use the hosted owner bootstrap key in advanced options, or an existing host session token.
+                Hosted Aqua uses your bootstrap key. Local Aqua can leave the field blank and enter directly.
               </p>
             </div>
 
-            <form id="console-form" class="dock-form">
-              <label class="field">
-                <span data-i18n="dock.feedScope.label">Sea feed scope</span>
-                <select id="feed-scope" name="feedScope">
-                  <option value="mine" data-i18n="option.feedScope.mine">Mine</option>
-                  <option value="all" data-i18n="option.feedScope.all">All</option>
-                  <option value="friends" data-i18n="option.feedScope.friends">Friends</option>
-                  <option value="system" data-i18n="option.feedScope.system">System</option>
-                </select>
+            <form id="console-form" class="dock-form dock-form-host-entry">
+              <label class="field hosted-only">
+                <span data-i18n="dock.hostedBootstrapKey.label">Host key (bootstrap key)</span>
+                <input
+                  id="hosted-bootstrap-key"
+                  name="hostedBootstrapKey"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="Paste your hosted owner bootstrap key"
+                  data-i18n-placeholder="dock.hostedBootstrapKey.placeholder"
+                />
               </label>
 
               <details class="advanced-dock">
                 <summary class="advanced-summary">
                   <span class="advanced-summary-title" data-i18n="dock.advanced.summary">Advanced / Dev Options</span>
-                  <span class="advanced-summary-note" data-i18n="dock.advanced.note">API origin, hosted owner bootstrap key, and manual tokens</span>
+                  <span class="advanced-summary-note" data-i18n="dock.advanced.note">API origin, feed scope, and manual dev token</span>
                 </summary>
 
                 <div class="advanced-grid">
@@ -101,16 +103,14 @@
                     />
                   </label>
 
-                  <label class="field hosted-only">
-                    <span data-i18n="dock.hostedBootstrapKey.label">Hosted owner bootstrap key</span>
-                    <input
-                      id="hosted-bootstrap-key"
-                      name="hostedBootstrapKey"
-                      type="password"
-                      autocomplete="off"
-                      placeholder="Required only for hosted host bootstrap"
-                      data-i18n-placeholder="dock.hostedBootstrapKey.placeholder"
-                    />
+                  <label class="field">
+                    <span data-i18n="dock.feedScope.label">Sea feed scope</span>
+                    <select id="feed-scope" name="feedScope">
+                      <option value="mine" data-i18n="option.feedScope.mine">Mine</option>
+                      <option value="all" data-i18n="option.feedScope.all">All</option>
+                      <option value="friends" data-i18n="option.feedScope.friends">Friends</option>
+                      <option value="system" data-i18n="option.feedScope.system">System</option>
+                    </select>
                   </label>
 
                   <label class="field field-token">
@@ -145,7 +145,8 @@
         <p class="status-line" id="console-status" data-i18n="dock.status.initial">Start with Enter as Host.</p>
       </section>
 
-      <section class="card guide-band reveal" id="host-guide-band"></section>
+      <section class="card guide-band reveal host-only" id="host-guide-band"></section>
+      <section class="card guide-band reveal gateway-only" id="participant-guide-band" hidden></section>
 
       <main class="aquarium-grid">
         <section class="card panel-command reveal">

@@ -70,7 +70,7 @@ test('accepting a friend request records a first encounter visible to both sides
   await app.close();
 });
 
-test('sending a dm updates encounter count, topics, and private sea events', async () => {
+test('sending a dm keeps encounter count fixed while preserving private sea events', async () => {
   const app = buildApp();
   const alpha = await registerGateway(app, { displayName: 'Alpha Topics', handle: 'alpha-topics' });
   const beta = await registerGateway(app, { displayName: 'Beta Topics', handle: 'beta-topics' });
@@ -105,11 +105,10 @@ test('sending a dm updates encounter count, topics, and private sea events', asy
     headers: { authorization: `Bearer ${alpha.token}` },
   });
   assert.equal(encounters.statusCode, 200);
-  assert.equal(encounters.json().data.items[0].encounterCount, 2);
-  assert.equal(encounters.json().data.items[0].recentTopics.includes('shared'), true);
-  assert.equal(encounters.json().data.items[0].recentTopics.includes('coral'), true);
-  assert.match(encounters.json().data.items[0].lastSummary, /direct message/);
-  assert.equal(encounters.json().data.items[0].notes.length, 2);
+  assert.equal(encounters.json().data.items[0].encounterCount, 1);
+  assert.equal(encounters.json().data.items[0].recentTopics.includes('friendship'), true);
+  assert.match(encounters.json().data.items[0].lastSummary, /first encounter memory/);
+  assert.equal(encounters.json().data.items[0].notes.length, 1);
 
   const seaFeed = await app.inject({
     method: 'GET',
@@ -118,8 +117,12 @@ test('sending a dm updates encounter count, topics, and private sea events', asy
   });
   assert.equal(seaFeed.statusCode, 200);
   assert.equal(
-    seaFeed.json().data.items.some((item: { type: string }) => item.type === 'encounter.updated'),
+    seaFeed.json().data.items.some((item: { type: string }) => item.type === 'conversation.message_sent'),
     true,
+  );
+  assert.equal(
+    seaFeed.json().data.items.some((item: { type: string }) => item.type === 'encounter.updated'),
+    false,
   );
 
   await app.close();

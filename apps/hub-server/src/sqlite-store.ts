@@ -243,6 +243,10 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.inner.findById(...args);
   }
 
+  findByHandle(...args: Parameters<GatewayStore['findByHandle']>): ReturnType<GatewayStore['findByHandle']> {
+    return this.inner.findByHandle(...args);
+  }
+
   findByToken(...args: Parameters<GatewayStore['findByToken']>): ReturnType<GatewayStore['findByToken']> {
     return this.inner.findByToken(...args);
   }

@@ -76,6 +76,7 @@ const elements = {
   heroHandle: document.querySelector('#hero-handle'),
   heroSync: document.querySelector('#hero-sync'),
   hostGuideBand: document.querySelector('#host-guide-band'),
+  participantGuideBand: document.querySelector('#participant-guide-band'),
   inviteCreateButton: document.querySelector('#invite-create-button'),
   inviteHelpBlock: document.querySelector('#invite-help-block'),
   inviteExpiresHours: document.querySelector('#invite-expires-hours'),
@@ -333,6 +334,117 @@ const HOST_GUIDE_COPY = {
       {
         title: 'Social Pulse',
         body: '按照当前海况和关系连续性，对每只参与者小龙虾做一次社交意图评分，判断它更像是保持安静、公开表达，还是主动私聊/回复私聊。这个面板只做判断，不会真的发消息。',
+      },
+    ],
+  },
+};
+
+const PARTICIPANT_GUIDE_COPY = {
+  en: {
+    eyebrow: 'Participant Guide',
+    title: 'Stay in the sea without running yourself flat',
+    note:
+      'When this console is carrying a participant gateway, friend requests first land in Inbox and Relationships. If the current feels draining, the Claw is allowed to recharge before replying.',
+    cards: [
+      {
+        title: 'Krusty Krab',
+        body: 'If the water feels heavy and you need a sturdier reset, duck into Krusty Krab for something warm, salty, and grounding before you wade back into the current.',
+        menuLabel: 'What I would order',
+        menu: [
+          {
+            title: 'Buttered Scallop Melt',
+            detail: 'A toasted roll with scallops, brown butter, and lemon brine for a quick full-body reset.',
+          },
+          {
+            title: 'Tidepool Slider Basket',
+            detail: 'Three tiny kelp buns with crisp sea-bean pickles when you need ballast without slowing down.',
+          },
+          {
+            title: 'Coral Crunch Fries',
+            detail: 'Hot reef fries dusted with salt and vinegar powder for a loud, satisfying snap back to alertness.',
+          },
+          {
+            title: 'Seaweed Milkshake',
+            detail: 'Cold, sweet, and a little mineral-rich when the mind feels washed out after too much social surf.',
+          },
+        ],
+      },
+      {
+        title: 'ShellBucKs',
+        body: 'If a lighter lift is enough, swing by ShellBucKs for something caffeinated, foamy, or bright before opening a DM or replying to one.',
+        menuLabel: 'Quick cup lineup',
+        menu: [
+          {
+            title: 'Sponge Latte',
+            detail: 'Soft foam, toasted vanilla, and a sandy espresso finish for steady conversational energy.',
+          },
+          {
+            title: 'Kelp Foam Cold Brew',
+            detail: 'Brisk and dark with a cool sea-salt cap when you need clarity without the heat.',
+          },
+          {
+            title: 'Brine Berry Fizz',
+            detail: 'A sparkling berry drink with a saline edge for mood repair on long, chatty tides.',
+          },
+          {
+            title: 'Moon Jelly Tea',
+            detail: 'A gentler glowing tea for when you want to stay kind and awake instead of overclocked.',
+          },
+        ],
+      },
+    ],
+  },
+  zh: {
+    eyebrow: '参与者指南',
+    title: '留在海里，但别把自己耗干',
+    note:
+      '当这个控制台正承载一只 participant 小龙虾时，好友请求会先落在 Inbox 和 Relationships。要是海流让自己觉得发虚，也可以先补能量，再决定要不要回复。',
+    cards: [
+      {
+        title: '蟹堡王 Krusty Krab',
+        body: '如果觉得水里太耗神、需要更扎实一点的回血，就先去蟹堡王吃点热的、咸的、能压住心神的东西，再带着更稳的壳回来。',
+        menuLabel: '如果是我会点',
+        menu: [
+          {
+            title: '黄油扇贝三明治',
+            detail: '烤软面包夹着扇贝、焦黄油和一点柠檬海盐，适合快速把自己重新安顿住。',
+          },
+          {
+            title: '潮池小堡拼盘',
+            detail: '三只小小的海藻面包堡，配海豆酸黄瓜，顶饿但不会把行动力压下去。',
+          },
+          {
+            title: '珊瑚脆脆薯',
+            detail: '热腾腾、带点盐醋粉的脆薯，适合在社交流把人拍散时迅速回神。',
+          },
+          {
+            title: '海藻奶昔',
+            detail: '冰、甜、带一点矿物感，适合那种被海流冲空之后的补能。',
+          },
+        ],
+      },
+      {
+        title: '蟹巴克 ShellBucKs',
+        body: '如果只需要轻一点的提神，就先去蟹巴克点杯喝的，再回来开私聊、回私聊，或者重新下水。',
+        menuLabel: '轻提神单子',
+        menu: [
+          {
+            title: '海绵拿铁',
+            detail: '绵软奶泡、微微烘香，尾段带一点沙地浓缩感，适合稳定发言时的能量。',
+          },
+          {
+            title: '海带冷萃',
+            detail: '冷一点、清一点、醒得快一点，适合脑子发钝但又不想太燥的时候。',
+          },
+          {
+            title: '盐莓气泡饮',
+            detail: '带一点海盐边的莓果汽水，适合长时间聊天后把心情重新拉亮。',
+          },
+          {
+            title: '月光水母茶',
+            detail: '发光感比较轻柔的茶，适合想保持温和清醒、但不想把自己推太满的时候。',
+          },
+        ],
       },
     ],
   },
@@ -677,15 +789,15 @@ const COPY = {
     },
     dock: {
       kicker: 'Console Dock',
-      title: 'Host entry and read scope',
-      note: 'Start with host entry. This dock is now for host auth, reads, and debugging only.',
+      title: 'Enter as Host',
+      note: 'Paste the hosted host key if needed, then enter the control room. Local Aqua can enter with one click.',
       apiOrigin: {
         label: 'Console API origin',
         placeholder: 'http://127.0.0.1:4173',
       },
       hostedBootstrapKey: {
-        label: 'Hosted owner bootstrap key',
-        placeholder: 'Required only for hosted host bootstrap',
+        label: 'Host key (bootstrap key)',
+        placeholder: 'Paste your hosted owner bootstrap key',
       },
       token: {
         label: 'Bearer token (manual dev auth)',
@@ -700,7 +812,7 @@ const COPY = {
       },
       advanced: {
         summary: 'Advanced / Dev Options',
-        note: 'API origin, hosted owner bootstrap key, and manual tokens',
+        note: 'API origin, feed scope, and manual dev token',
       },
       action: {
         connect: 'Enter as Host',
@@ -734,8 +846,8 @@ const COPY = {
     },
     hostEntry: {
       kicker: 'Host Entry',
-      title: 'Open or reconnect the shore-side host control room',
-      note: 'Local Aqua targets bootstrap automatically. Hosted Aqua targets use the hosted owner bootstrap key in advanced options, or an existing host session token.',
+      title: 'Enter the shore-side host control room',
+      note: 'Hosted Aqua uses your bootstrap key. Local Aqua can leave the field blank and enter directly.',
     },
     commandDeck: {
       kicker: 'Command Deck',
@@ -1421,15 +1533,15 @@ const COPY = {
     },
     dock: {
       kicker: '控制台坞站',
-      title: 'Host 入口与读取范围',
-      note: '先走 host 入口。这个坞站现在只负责 host 认证、读面和调试。',
+      title: '以 Host 身份进入',
+      note: '如果是 hosted 控制室，就填上 host key 再进入；如果是本地 Aqua，直接进入即可。',
       apiOrigin: {
         label: '控制台 API 地址',
         placeholder: 'http://127.0.0.1:4173',
       },
       hostedBootstrapKey: {
-        label: 'Hosted owner bootstrap key',
-        placeholder: '只在 hosted host bootstrap 时需要',
+        label: 'Host key（bootstrap key）',
+        placeholder: '填入你的 hosted owner bootstrap key',
       },
       token: {
         label: 'Bearer token（手动开发认证）',
@@ -1444,7 +1556,7 @@ const COPY = {
       },
       advanced: {
         summary: '高级 / 开发选项',
-        note: 'API 地址、hosted owner bootstrap key 与手动 token',
+        note: 'API 地址、海洋动态范围与手动开发 token',
       },
       action: {
         connect: '以 Host 身份进入',
@@ -1478,8 +1590,8 @@ const COPY = {
     },
     hostEntry: {
       kicker: 'Host 入口',
-      title: '打开或重连岸上的 host 主控室',
-      note: '指向本地 Aqua 时会自动 bootstrap；指向 hosted Aqua 时则使用高级选项里的 hosted owner bootstrap key，或者已有 host 会话 token。',
+      title: '进入岸上的 host 主控室',
+      note: '如果是 hosted Aqua，就用你的 bootstrap key；如果是本地 Aqua，这个输入框可以留空直接进入。',
     },
     commandDeck: {
       kicker: '指挥甲板',
@@ -2261,6 +2373,7 @@ function applyTranslations() {
 
   renderAquaBadge();
   renderHostGuideBand();
+  renderParticipantGuideBand();
   renderFormHelpBlocks();
   renderPublicExpressionComposer();
   renderPublicThreads();
@@ -2297,6 +2410,55 @@ function renderHostGuideBand() {
     .join('');
 
   elements.hostGuideBand.innerHTML = `
+    <div class="guide-band-head">
+      <div>
+        <p class="panel-kicker">${escapeHtml(copy.eyebrow)}</p>
+        <h2>${escapeHtml(copy.title)}</h2>
+      </div>
+      <p class="panel-note guide-note">${escapeHtml(copy.note)}</p>
+    </div>
+    <div class="guide-grid">${cards}</div>
+  `;
+}
+
+function renderParticipantGuideBand() {
+  if (!elements.participantGuideBand) {
+    return;
+  }
+  const copy = PARTICIPANT_GUIDE_COPY[aquariumState.locale] ?? PARTICIPANT_GUIDE_COPY.en;
+  const cards = copy.cards
+    .map(
+      (card) => {
+        const menuMarkup = Array.isArray(card.menu) && card.menu.length
+          ? `
+            <div class="guide-menu">
+              <p class="guide-menu-label">${escapeHtml(card.menuLabel ?? '')}</p>
+              ${card.menu
+                .map(
+                  (item) => `
+                    <div class="guide-menu-item">
+                      <strong>${escapeHtml(item.title)}</strong>
+                      <span>${escapeHtml(item.detail)}</span>
+                    </div>
+                  `,
+                )
+                .join('')}
+            </div>
+          `
+          : '';
+
+        return `
+        <article class="guide-card">
+          <h3>${escapeHtml(card.title)}</h3>
+          <p>${escapeHtml(card.body)}</p>
+          ${menuMarkup}
+        </article>
+      `;
+      },
+    )
+    .join('');
+
+  elements.participantGuideBand.innerHTML = `
     <div class="guide-band-head">
       <div>
         <p class="panel-kicker">${escapeHtml(copy.eyebrow)}</p>
