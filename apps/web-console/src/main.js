@@ -664,6 +664,270 @@ const FORM_HELP = {
           },
         },
       },
+      {
+        id: 'harbor-hush',
+        title: { en: 'Harbor Hush', zh: '港雾静泊' },
+        note: {
+          en: 'Calm and sheltering, good when you want the sea to feel held rather than empty.',
+          zh: '平静而有包裹感，适合你想让海显得被托住，而不是单纯安静的时候。',
+        },
+        values: {
+          common: {
+            key: 'harbor-hush',
+            tone: 'calm',
+            sceneHint: 'harbor-fog',
+            durationMinutes: '120',
+          },
+          en: {
+            label: 'Harbor Hush',
+            summary: 'A low harbor fog gathers close to the surface, making every approach slower, softer, and more sheltered.',
+          },
+          zh: {
+            label: '港雾静泊',
+            summary: '低低的港雾贴着水面收拢下来，让每一次靠近都更慢、更软，也更有落点。',
+          },
+        },
+      },
+      {
+        id: 'tidemarket-spark',
+        title: { en: 'Tidemarket Spark', zh: '潮市起灯' },
+        note: {
+          en: 'Playful and social, useful when you want the sea to feel busy and inviting without turning noisy.',
+          zh: '轻快偏社交，适合你想让海热闹起来，但又不至于显得吵的时候。',
+        },
+        values: {
+          common: {
+            key: 'tidemarket-spark',
+            tone: 'playful',
+            sceneHint: 'market-lanterns',
+            durationMinutes: '120',
+          },
+          en: {
+            label: 'Tidemarket Spark',
+            summary: 'Small lights seem to open across the water, and casual conversations catch faster than expected.',
+          },
+          zh: {
+            label: '潮市起灯',
+            summary: '像有一排排小灯沿着水面次第亮起，随口的搭话也比平时更容易被接住。',
+          },
+        },
+      },
+      {
+        id: 'moonwake-archive',
+        title: { en: 'Moonwake Archive', zh: '月痕留档' },
+        note: {
+          en: 'Reflective and memory-heavy, suited for nights when the sea should feel thoughtful and traceable.',
+          zh: '偏沉思、带留痕感，适合想让海显得会记得事情的夜晚。',
+        },
+        values: {
+          common: {
+            key: 'moonwake-archive',
+            tone: 'reflective',
+            sceneHint: 'moonwake-trail',
+            durationMinutes: '120',
+          },
+          en: {
+            label: 'Moonwake Archive',
+            summary: 'Silver wake-lines linger longer than they should, and even small gestures feel quietly worth keeping.',
+          },
+          zh: {
+            label: '月痕留档',
+            summary: '银白尾迹在水面停得比平时更久，连很小的动作也像被这片海悄悄存了下来。',
+          },
+        },
+      },
+      {
+        id: 'wirecurrent-scan',
+        title: { en: 'Wirecurrent Scan', zh: '线流巡检' },
+        note: {
+          en: 'Sharp and diagnostic, good for a sea that should feel alert, corrective, and slightly charged.',
+          zh: '锐利且带巡检感，适合你想让海显得警觉、在校准、还有一点电压的时候。',
+        },
+        values: {
+          common: {
+            key: 'wirecurrent-scan',
+            tone: 'sharp',
+            sceneHint: 'signal-sweep',
+            durationMinutes: '120',
+          },
+          en: {
+            label: 'Wirecurrent Scan',
+            summary: 'Fine charged lines keep sweeping the water, and anything imprecise reveals itself at once.',
+          },
+          zh: {
+            label: '线流巡检',
+            summary: '细而带电的线流不断扫过水面，任何不够精确的动作都会立刻显形。',
+          },
+        },
+      },
+      {
+        id: 'stonepool-hold',
+        title: { en: 'Stonepool Hold', zh: '礁池稳流' },
+        note: {
+          en: 'Neutral and steady, useful when you want the sea to feel operational, readable, and not overdramatic.',
+          zh: '中性而稳定，适合你想让海显得可靠、可读、不过分戏剧化的时候。',
+        },
+        values: {
+          common: {
+            key: 'stonepool-hold',
+            tone: 'neutral',
+            sceneHint: 'stone-basin',
+            durationMinutes: '120',
+          },
+          en: {
+            label: 'Stonepool Hold',
+            summary: 'The water settles into a stable basin where signals travel cleanly and nothing needs to hurry.',
+          },
+          zh: {
+            label: '礁池稳流',
+            summary: '水体沉进更稳定的礁池里，信息传得更干净，整片海都不必着急。',
+          },
+        },
+      },
+      {
+        id: 'quiet-anchorage',
+        title: { en: 'Quiet Anchorage', zh: '静湾锚泊' },
+        note: {
+          en: 'Calm and settling, useful when you want the sea to feel safely moored instead of merely quiet.',
+          zh: '平静而更有停靠感，适合你想让海显得安稳落住，而不是只有安静的时候。',
+        },
+        values: {
+          common: {
+            key: 'quiet-anchorage',
+            tone: 'calm',
+            sceneHint: 'anchored-water',
+            durationMinutes: '120',
+          },
+          en: {
+            label: 'Quiet Anchorage',
+            summary: 'The water tucks into a sheltered bay where movement slows down and arrivals land gently.',
+          },
+          zh: {
+            label: '静湾锚泊',
+            summary: '水体收进一个更安静的湾口，动作会自然放慢，新的靠近也更容易柔和落下。',
+          },
+        },
+      },
+      {
+        id: 'open-dock',
+        title: { en: 'Open Dock', zh: '开埠顺潮' },
+        note: {
+          en: 'Playful and open, good when you want greetings and casual contact to catch quickly.',
+          zh: '轻快而开放，适合你想让招呼、寒暄和靠近都更容易接上的时候。',
+        },
+        values: {
+          common: {
+            key: 'open-dock',
+            tone: 'playful',
+            sceneHint: 'open-dock',
+            durationMinutes: '120',
+          },
+          en: {
+            label: 'Open Dock',
+            summary: 'The dock feels open and the tide runs your way, so greetings and small talk catch quickly.',
+          },
+          zh: {
+            label: '开埠顺潮',
+            summary: '埠口像是被打开了一点，潮也顺着人来，于是招呼和闲聊都会比平时更快接上。',
+          },
+        },
+      },
+      {
+        id: 'afterimage-drift',
+        title: { en: 'Afterimage Drift', zh: '余波留影' },
+        note: {
+          en: 'Reflective and lingering, suited for a sea where recent moments should feel hard to shake off.',
+          zh: '偏沉思、带回响感，适合你想让刚刚发生过的事继续在海里停一会儿的时候。',
+        },
+        values: {
+          common: {
+            key: 'afterimage-drift',
+            tone: 'reflective',
+            sceneHint: 'afterimage-trail',
+            durationMinutes: '120',
+          },
+          en: {
+            label: 'Afterimage Drift',
+            summary: 'Ripples seem to hold their shape longer than usual, making recent moments feel hard to shake off.',
+          },
+          zh: {
+            label: '余波留影',
+            summary: '尾波会比平时多停一会儿，刚刚发生过的事也更容易在这片海里留下回响。',
+          },
+        },
+      },
+      {
+        id: 'friction-line',
+        title: { en: 'Friction Line', zh: '摩擦线流' },
+        note: {
+          en: 'Sharp and exposing, useful when you want vague or misaligned motion to show itself quickly.',
+          zh: '锐利而带显形感，适合你想让含糊或没对齐的动作更快露出来的时候。',
+        },
+        values: {
+          common: {
+            key: 'friction-line',
+            tone: 'sharp',
+            sceneHint: 'friction-line',
+            durationMinutes: '120',
+          },
+          en: {
+            label: 'Friction Line',
+            summary: 'The surface carries a slight drag, and anything vague or poorly aligned starts to show immediately.',
+          },
+          zh: {
+            label: '摩擦线流',
+            summary: '水面像多出了一层轻微阻力，凡是不够清楚、没有对齐的动作都会很快暴露出来。',
+          },
+        },
+      },
+      {
+        id: 'steady-channel',
+        title: { en: 'Steady Channel', zh: '稳槽通航' },
+        note: {
+          en: 'Neutral and balanced, good when you want a readable baseline without pushing the sea toward a mood.',
+          zh: '中性而平衡，适合你想给整片海一个清晰基线，但又不想硬推某种情绪的时候。',
+        },
+        values: {
+          common: {
+            key: 'steady-channel',
+            tone: 'neutral',
+            sceneHint: 'steady-channel',
+            durationMinutes: '120',
+          },
+          en: {
+            label: 'Steady Channel',
+            summary: 'A stable mid-channel opens through the water, keeping signals readable without pushing the sea in any direction.',
+          },
+          zh: {
+            label: '稳槽通航',
+            summary: '海里像开出一条稳定的中槽，信息传得清楚，但不会把整片海硬推向某种情绪。',
+          },
+        },
+      },
+      {
+        id: 'soft-return',
+        title: { en: 'Soft Return', zh: '缓潮回港' },
+        note: {
+          en: 'Calm and homeward, useful when you want returning to feel easier than pushing through.',
+          zh: '平静而有回港感，适合你想让这片海更像“可以回来”的地方，而不是“必须穿过”的地方。',
+        },
+        values: {
+          common: {
+            key: 'soft-return',
+            tone: 'calm',
+            sceneHint: 'home-tide',
+            durationMinutes: '120',
+          },
+          en: {
+            label: 'Soft Return',
+            summary: 'The tide turns homeward and the sea feels easier to return to than to push through.',
+          },
+          zh: {
+            label: '缓潮回港',
+            summary: '潮水开始往回收，这片海会更像一个能回来的地方，而不是一个需要硬闯过去的地方。',
+          },
+        },
+      },
     ],
   },
   environment: {
@@ -739,6 +1003,139 @@ const FORM_HELP = {
           common: {
             durationMinutes: '120',
             waterTemperatureC: '24',
+            clarity: 'clear',
+            tideDirection: 'incoming',
+            surfaceState: 'rippled',
+            phenomenon: 'warm_bloom',
+            summary: '',
+          },
+        },
+      },
+      {
+        id: 'harbor-fog-bank',
+        title: { en: 'Harbor Fog Bank', zh: '港湾薄雾' },
+        note: {
+          en: 'Sheltered and low-visibility, useful when the sea should feel held, quiet, and close.',
+          zh: '带一点遮蔽和雾感，适合你想让海显得被包住、安静、距离更近的时候。',
+        },
+        values: {
+          common: {
+            durationMinutes: '120',
+            waterTemperatureC: '16',
+            clarity: 'hazy',
+            tideDirection: 'slack',
+            surfaceState: 'glassy',
+            phenomenon: 'none',
+            summary: '',
+          },
+        },
+      },
+      {
+        id: 'lantern-corridor',
+        title: { en: 'Lantern Corridor', zh: '灯群引潮' },
+        note: {
+          en: 'Bright and welcoming, a good companion for currents that should feel open and social.',
+          zh: '明亮而迎客，适合搭配那些想让海显得开放、有人气的海流。',
+        },
+        values: {
+          common: {
+            durationMinutes: '120',
+            waterTemperatureC: '23',
+            clarity: 'crystalline',
+            tideDirection: 'incoming',
+            surfaceState: 'rippled',
+            phenomenon: 'lantern_swarm',
+            summary: '',
+          },
+        },
+      },
+      {
+        id: 'moonlit-outflow',
+        title: { en: 'Moonlit Outflow', zh: '月潮回落' },
+        note: {
+          en: 'Cool and receding, useful when you want reflective distance without making the sea feel hostile.',
+          zh: '偏冷、缓慢回落，适合你想让海带一点反思距离感，但又不至于显得拒人于千里之外的时候。',
+        },
+        values: {
+          common: {
+            durationMinutes: '120',
+            waterTemperatureC: '14',
+            clarity: 'hazy',
+            tideDirection: 'outgoing',
+            surfaceState: 'glassy',
+            phenomenon: 'none',
+            summary: '',
+          },
+        },
+      },
+      {
+        id: 'signal-squall',
+        title: { en: 'Signal Squall', zh: '讯号急浪' },
+        note: {
+          en: 'Crosswind and pressured, good when the sea should feel corrective, exposed, and slightly storm-charged.',
+          zh: '横切、带压力、略带风暴边缘，适合你想让海显得在修正、在暴露问题的时候。',
+        },
+        values: {
+          common: {
+            durationMinutes: '120',
+            waterTemperatureC: '11',
+            clarity: 'murky',
+            tideDirection: 'crosswind',
+            surfaceState: 'surging',
+            phenomenon: 'storm_front',
+            summary: '',
+          },
+        },
+      },
+      {
+        id: 'debris-lane',
+        title: { en: 'Debris Lane', zh: '碎潮疾行' },
+        note: {
+          en: 'Busy and friction-heavy, useful when the sea should feel cluttered, noisy, and slightly misaligned.',
+          zh: '繁忙、带摩擦感，适合你想让海显得拥挤、嘈杂、还有一点没对齐的时候。',
+        },
+        values: {
+          common: {
+            durationMinutes: '120',
+            waterTemperatureC: '12',
+            clarity: 'hazy',
+            tideDirection: 'incoming',
+            surfaceState: 'choppy',
+            phenomenon: 'debris_field',
+            summary: '',
+          },
+        },
+      },
+      {
+        id: 'working-basin',
+        title: { en: 'Working Basin', zh: '稳池常航' },
+        note: {
+          en: 'Neutral and dependable, a practical baseline when you want structure without drama.',
+          zh: '中性而可靠，适合你想给整片海一个有秩序、不过分戏剧化的稳定基线。',
+        },
+        values: {
+          common: {
+            durationMinutes: '120',
+            waterTemperatureC: '17',
+            clarity: 'clear',
+            tideDirection: 'slack',
+            surfaceState: 'rippled',
+            phenomenon: 'none',
+            summary: '',
+          },
+        },
+      },
+      {
+        id: 'homecoming-tide',
+        title: { en: 'Homecoming Tide', zh: '归港暖潮' },
+        note: {
+          en: 'Mild and returning, useful when the sea should feel easier to come back to than to push through.',
+          zh: '温和、带回港感，适合你想让这片海显得更像“回来一下也没关系”的地方。',
+        },
+        values: {
+          common: {
+            durationMinutes: '120',
+            waterTemperatureC: '19',
             clarity: 'clear',
             tideDirection: 'incoming',
             surfaceState: 'rippled',
