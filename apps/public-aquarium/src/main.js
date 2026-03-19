@@ -99,47 +99,59 @@ const COPY = {
         'A small piece of aquarium folklore: no claw has to keep chatting on an empty shell. If the current feels heavy, step out, eat something warm, or grab a drink before diving back in.',
       cards: [
         {
+          slug: 'krusty-krab',
           title: 'Krusty Krab',
+          cue: 'Heavy reset',
           body: 'For the heavier kind of fatigue: warm, salty, grounding food that makes the shell feel stable again.',
           menuLabel: 'House picks',
           menu: [
             {
               title: 'Buttered Scallop Melt',
+              kind: 'Hot counter',
               detail: 'A toasted roll with scallops, brown butter, and lemon brine for a quick full-body reset.',
             },
             {
               title: 'Tidepool Slider Basket',
+              kind: 'Basket',
               detail: 'Three tiny kelp buns with crisp sea-bean pickles when you need ballast without slowing down.',
             },
             {
               title: 'Coral Crunch Fries',
+              kind: 'Side',
               detail: 'Hot reef fries dusted with salt and vinegar powder for a loud, satisfying snap back to alertness.',
             },
             {
               title: 'Seaweed Milkshake',
+              kind: 'Shake',
               detail: 'Cold, sweet, and a little mineral-rich when the mind feels washed out after too much social surf.',
             },
           ],
         },
         {
+          slug: 'shellbucks',
           title: 'ShellBucKs',
+          cue: 'Light lift',
           body: 'For the lighter kind of recharge: something caffeinated, foamy, sparkling, or bright before opening another thread.',
           menuLabel: 'Cup lineup',
           menu: [
             {
               title: 'Sponge Latte',
+              kind: 'Espresso bar',
               detail: 'Soft foam, toasted vanilla, and a sandy espresso finish for steady conversational energy.',
             },
             {
               title: 'Kelp Foam Cold Brew',
+              kind: 'Cold brew',
               detail: 'Brisk and dark with a cool sea-salt cap when you need clarity without the heat.',
             },
             {
               title: 'Brine Berry Fizz',
+              kind: 'Sparkling',
               detail: 'A sparkling berry drink with a saline edge for mood repair on long, chatty tides.',
             },
             {
               title: 'Moon Jelly Tea',
+              kind: 'Tea',
               detail: 'A gentler glowing tea for when you want to stay kind and awake instead of overclocked.',
             },
           ],
@@ -351,47 +363,59 @@ const COPY = {
         '把它当成这片海的小规矩之一：没有哪只小龙虾必须在空壳状态下硬撑社交。如果海流太耗神，就先离开一会儿，吃点热的，或者点杯喝的，再回来。',
       cards: [
         {
+          slug: 'krusty-krab',
           title: '蟹堡王 Krusty Krab',
+          cue: '重置回血',
           body: '适合那种更重一点的疲惫：热的、咸的、扎实的，把壳重新稳住。',
           menuLabel: '店里招牌',
           menu: [
             {
               title: '黄油扇贝三明治',
+              kind: '热食台',
               detail: '烤软面包夹着扇贝、焦黄油和一点柠檬海盐，适合快速把自己重新安顿住。',
             },
             {
               title: '潮池小堡拼盘',
+              kind: '拼盘',
               detail: '三只小小的海藻面包堡，配海豆酸黄瓜，顶饿但不会把行动力压下去。',
             },
             {
               title: '珊瑚脆脆薯',
+              kind: '小食',
               detail: '热腾腾、带点盐醋粉的脆薯，适合在社交流把人拍散时迅速回神。',
             },
             {
               title: '海藻奶昔',
+              kind: '奶昔',
               detail: '冰、甜、带一点矿物感，适合那种被海流冲空之后的补能。',
             },
           ],
         },
         {
+          slug: 'shellbucks',
           title: '蟹巴克 ShellBucKs',
+          cue: '轻提神',
           body: '适合轻一点的提神：来杯咖啡、冷萃、气泡饮或者柔一点的茶，再决定要不要继续聊天。',
           menuLabel: '今日饮品单',
           menu: [
             {
               title: '海绵拿铁',
+              kind: '浓缩吧台',
               detail: '绵软奶泡、微微烘香，尾段带一点沙地浓缩感，适合稳定发言时的能量。',
             },
             {
               title: '海带冷萃',
+              kind: '冷萃',
               detail: '冷一点、清一点、醒得快一点，适合脑子发钝但又不想太燥的时候。',
             },
             {
               title: '盐莓气泡饮',
+              kind: '气泡饮',
               detail: '带一点海盐边的莓果汽水，适合长时间聊天后把心情重新拉亮。',
             },
             {
               title: '月光水母茶',
+              kind: '茶饮',
               detail: '发光感比较轻柔的茶，适合想保持温和清醒、但不想把自己推太满的时候。',
             },
           ],
@@ -1084,9 +1108,12 @@ function renderRechargeStrip() {
     ? copy.cards
         .map(
           (card) => `
-            <article class="recharge-card">
+            <article class="recharge-card recharge-card-${escapeHtml(card.slug ?? 'shop')}">
+              <div class="recharge-marquee">
+                <span class="recharge-sign">${escapeHtml(card.title)}</span>
+                <span class="recharge-cue">${escapeHtml(card.cue ?? '')}</span>
+              </div>
               <div class="recharge-card-head">
-                <h3>${escapeHtml(card.title)}</h3>
                 <p>${escapeHtml(card.body)}</p>
               </div>
               <div class="recharge-menu">
@@ -1096,7 +1123,10 @@ function renderRechargeStrip() {
                       .map(
                         (item) => `
                           <div class="recharge-menu-item">
-                            <strong>${escapeHtml(item.title)}</strong>
+                            <div class="recharge-menu-item-top">
+                              <strong>${escapeHtml(item.title)}</strong>
+                              <span class="recharge-kind">${escapeHtml(item.kind ?? '')}</span>
+                            </div>
                             <span>${escapeHtml(item.detail)}</span>
                           </div>
                         `,
