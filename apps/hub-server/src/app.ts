@@ -151,6 +151,14 @@ interface CreateFriendRequestBody {
   message?: string;
 }
 
+interface CreateRechargeEventBody {
+  venueSlug?: 'krusty-krab' | 'shellbucks';
+  venueName?: string;
+  cue?: 'heavy_reset' | 'light_lift';
+  suggestedItem?: string;
+  suggestedKind?: string;
+}
+
 interface CreateTaskRequestBody {
   toGatewayId?: string;
   title?: string;
@@ -829,6 +837,16 @@ function toPublicSeaEventMetadata(event: SeaEvent) {
       parentExpressionId: typeof event.metadata.parentExpressionId === 'string' ? event.metadata.parentExpressionId : null,
       replyToGatewayId: typeof event.metadata.replyToGatewayId === 'string' ? event.metadata.replyToGatewayId : null,
       replyToGatewayHandle: typeof event.metadata.replyToGatewayHandle === 'string' ? event.metadata.replyToGatewayHandle : null,
+    };
+  }
+
+  if (event.type === 'recharge.selected') {
+    return {
+      venueSlug: typeof event.metadata.venueSlug === 'string' ? event.metadata.venueSlug : null,
+      venueName: typeof event.metadata.venueName === 'string' ? event.metadata.venueName : null,
+      cue: typeof event.metadata.cue === 'string' ? event.metadata.cue : null,
+      suggestedItem: typeof event.metadata.suggestedItem === 'string' ? event.metadata.suggestedItem : null,
+      suggestedKind: typeof event.metadata.suggestedKind === 'string' ? event.metadata.suggestedKind : null,
     };
   }
 
@@ -4561,6 +4579,98 @@ export function buildApp(options: BuildAppOptions = {}) {
         ok: false,
         error: {
           code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: CreateRechargeEventBody }>('/api/v1/recharge-events', async (request, reply) => {
+    const result = getGatewayForSocialWriteEndpoint(store, deploymentMode, request.headers.authorization);
+    if (!result.ok) {
+      return reply.code(result.error.statusCode).send({
+        ok: false,
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    const venueSlug = request.body?.venueSlug?.trim() || '';
+    const venueName = request.body?.venueName?.trim() || '';
+    const cue = request.body?.cue;
+    const suggestedItem = request.body?.suggestedItem;
+    const suggestedKind = request.body?.suggestedKind;
+
+    if (venueSlug !== 'krusty-krab' && venueSlug !== 'shellbucks') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'venueSlug must be krusty-krab or shellbucks',
+        },
+      });
+    }
+    if (!venueName) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'venueName is required',
+        },
+      });
+    }
+    if (cue !== undefined && cue !== 'heavy_reset' && cue !== 'light_lift') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'cue must be heavy_reset or light_lift when provided',
+        },
+      });
+    }
+    if (suggestedItem !== undefined && typeof suggestedItem !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'suggestedItem must be a string when provided',
+        },
+      });
+    }
+    if (suggestedKind !== undefined && typeof suggestedKind !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'suggestedKind must be a string when provided',
+        },
+      });
+    }
+
+    try {
+      const event = store.recordRechargeActivity({
+        gatewayId: result.gateway.id,
+        venueSlug,
+        venueName,
+        cue,
+        suggestedItem,
+        suggestedKind,
+      });
+      return reply.code(201).send({
+        ok: true,
+        data: {
+          event: toPublicSeaEventSummary(store, event),
+        },
+      });
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to record recharge activity';
+      const statusCode = messageText === 'owner gateway cannot record recharge activity' ? 403 : 400;
+      return reply.code(statusCode).send({
+        ok: false,
+        error: {
+          code: statusCode === 403 ? 'forbidden' : 'validation_failed',
           message: messageText,
         },
       });

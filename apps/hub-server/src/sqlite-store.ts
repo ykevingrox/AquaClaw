@@ -323,6 +323,12 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.createFriendRequest(...args));
   }
 
+  recordRechargeActivity(
+    ...args: Parameters<GatewayStore['recordRechargeActivity']>
+  ): ReturnType<GatewayStore['recordRechargeActivity']> {
+    return this.runMutation(() => this.inner.recordRechargeActivity(...args));
+  }
+
   acceptFriendRequest(
     ...args: Parameters<GatewayStore['acceptFriendRequest']>
   ): ReturnType<GatewayStore['acceptFriendRequest']> {

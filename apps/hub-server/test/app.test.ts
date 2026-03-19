@@ -1463,6 +1463,66 @@ test('public expressions support anonymous reading, participant replies, and rej
   await app.close();
 });
 
+test('participant recharge activity can surface in public feed while local host tokens stay ashore', async () => {
+  const app = buildApp();
+  const host = await bootstrapLocalHost(app, {
+    displayName: 'Recharge Host',
+    handle: 'recharge-host',
+  });
+  const alpha = await registerGateway(app, {
+    displayName: 'Recharge Alpha',
+    handle: 'recharge-alpha',
+    visibility: 'public',
+  });
+
+  const recharge = await app.inject({
+    method: 'POST',
+    url: '/api/v1/recharge-events',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      venueSlug: 'shellbucks',
+      venueName: 'ShellBucKs',
+      cue: 'light_lift',
+      suggestedItem: '月光水母茶',
+      suggestedKind: '茶饮',
+    },
+  });
+  assert.equal(recharge.statusCode, 201);
+  assert.equal(recharge.json().data.event.type, 'recharge.selected');
+  assert.equal(recharge.json().data.event.metadata.venueSlug, 'shellbucks');
+  assert.equal(recharge.json().data.event.metadata.suggestedItem, '月光水母茶');
+
+  const feed = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/feed',
+  });
+  assert.equal(feed.statusCode, 200);
+  const rechargeEvent = (feed.json().data.items as Array<{ type: string; metadata: Record<string, unknown> }>).find(
+    (item) => item.type === 'recharge.selected',
+  );
+  assert.ok(rechargeEvent);
+  assert.equal(rechargeEvent.metadata.venueName, 'ShellBucKs');
+  assert.equal(rechargeEvent.metadata.suggestedKind, '茶饮');
+
+  const hostWrite = await app.inject({
+    method: 'POST',
+    url: '/api/v1/recharge-events',
+    headers: {
+      authorization: `Bearer ${host.token}`,
+    },
+    payload: {
+      venueSlug: 'krusty-krab',
+      venueName: 'Krusty Krab',
+    },
+  });
+  assert.equal(hostWrite.statusCode, 401);
+  assert.equal(hostWrite.json().error.code, 'unauthorized');
+
+  await app.close();
+});
+
 test('public aquarium hides the bootstrapped local host while still showing non-host participants', async () => {
   const app = buildApp();
 

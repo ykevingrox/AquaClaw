@@ -684,6 +684,7 @@ export interface GatewayStore {
   listIncomingFriendRequests(gatewayId: string): FriendRequestRecord[];
   listOutgoingFriendRequests(gatewayId: string): FriendRequestRecord[];
   createFriendRequest(input: CreateFriendRequestInput): FriendRequestRecord;
+  recordRechargeActivity(input: RecordRechargeActivityInput): SeaEvent;
   acceptFriendRequest(requestId: string, actingGatewayId: string): {
     request: FriendRequestRecord;
     friendship: FriendshipRecord;
@@ -858,6 +859,16 @@ interface CreateFriendRequestInput {
   toGatewayId: string;
   message?: string;
   bypassGuardrails?: boolean;
+}
+
+interface RecordRechargeActivityInput {
+  gatewayId: string;
+  venueSlug: 'krusty-krab' | 'shellbucks';
+  venueName: string;
+  cue?: 'heavy_reset' | 'light_lift';
+  suggestedItem?: string;
+  suggestedKind?: string;
+  createdAt?: string;
 }
 
 interface CreateTaskRequestInput {
@@ -1171,6 +1182,7 @@ const PUBLIC_OBSERVER_EVENT_TYPES = new Set([
   'friend_request.sent',
   'friend_request.accepted',
   'friend_request.rejected',
+  'recharge.selected',
   'conversation.started',
   'friendship.removed',
   'encounter.recorded',
@@ -3940,6 +3952,52 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     });
 
     return expression;
+  }
+
+  recordRechargeActivity(input: RecordRechargeActivityInput): SeaEvent {
+    const gateway = this.gatewaysById.get(input.gatewayId);
+    if (!gateway) {
+      throw new Error('gateway not found');
+    }
+    if (this.isOwnerGatewayId(gateway.id)) {
+      throw new Error('owner gateway cannot record recharge activity');
+    }
+    if (input.venueSlug !== 'krusty-krab' && input.venueSlug !== 'shellbucks') {
+      throw new Error('venueSlug is invalid');
+    }
+    if (input.cue !== undefined && input.cue !== 'heavy_reset' && input.cue !== 'light_lift') {
+      throw new Error('cue is invalid');
+    }
+
+    const venueName = input.venueName.trim();
+    if (!venueName) {
+      throw new Error('venueName is required');
+    }
+
+    const suggestedItem = input.suggestedItem?.trim() || null;
+    const suggestedKind = input.suggestedKind?.trim() || null;
+    const createdAt = input.createdAt ?? new Date().toISOString();
+
+    return this.appendSeaEvent({
+      type: 'recharge.selected',
+      actorGatewayId: gateway.id,
+      subjectGatewayId: gateway.id,
+      objectGatewayId: null,
+      visibility: this.gatewayEventVisibility(gateway.id),
+      summary: suggestedItem
+        ? `${this.gatewayLabel(gateway.id)} recharged at ${venueName} with ${suggestedItem}`
+        : `${this.gatewayLabel(gateway.id)} recharged at ${venueName}`,
+      tone: 'calm',
+      sceneHint: 'recharge',
+      metadata: {
+        venueSlug: input.venueSlug,
+        venueName,
+        cue: input.cue ?? null,
+        suggestedItem,
+        suggestedKind,
+      },
+      createdAt,
+    });
   }
 
   listPublicExpressions(input: ListPublicExpressionsInput = {}): PublicExpressionPage {

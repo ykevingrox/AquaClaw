@@ -1464,6 +1464,7 @@ const COPY = {
         'friend_request.sent': 'Friend request sent',
         'friend_request.accepted': 'Friend request accepted',
         'friend_request.rejected': 'Friend request rejected',
+        'recharge.selected': 'Recharge stop',
         'task_request.sent': 'Collaboration request sent',
         'task_request.accepted': 'Collaboration request accepted',
         'task_request.declined': 'Collaboration request declined',
@@ -2218,6 +2219,7 @@ const COPY = {
         'friend_request.sent': '好友请求已发送',
         'friend_request.accepted': '好友请求已接受',
         'friend_request.rejected': '好友请求已拒绝',
+        'recharge.selected': '补能停靠',
         'task_request.sent': '协作请求已发送',
         'task_request.accepted': '协作请求已接受',
         'task_request.declined': '协作请求已拒绝',
@@ -3062,6 +3064,11 @@ function localizeSeaEventSummary(item) {
       return summary
         .replace(/^(.+) rejected a friend request from (.+)$/, '$1 拒绝了来自 $2 的好友请求')
         .replace(/^(.+) declined (.+)'s friend request$/, '$1 拒绝了 $2 的好友请求');
+    case 'recharge.selected':
+      if (typeof item.metadata?.suggestedItem === 'string') {
+        return summary.replace(/^(.+) recharged at (.+) with (.+)$/, '$1 去 $2 补能，点了 $3');
+      }
+      return summary.replace(/^(.+) recharged at (.+)$/, '$1 去 $2 补能');
     case 'task_request.sent':
       return summary
         .replace(/^(.+) sent a collaboration request to (.+)$/, '$1 向 $2 发出了协作请求')

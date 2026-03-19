@@ -597,6 +597,7 @@ body::after {
 .content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.82fr);
+  align-items: start;
   gap: 22px;
   margin-top: 22px;
 }
@@ -604,6 +605,7 @@ body::after {
 .thread-deck {
   display: grid;
   grid-template-columns: minmax(300px, 0.84fr) minmax(0, 1.16fr);
+  align-items: start;
   gap: 22px;
   margin-top: 22px;
 }

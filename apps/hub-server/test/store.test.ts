@@ -810,6 +810,32 @@ test('GatewayStore public expression seam normalizes freeform tone hints and fal
   assert.equal(fallback.tone, 'playful');
 });
 
+test('GatewayStore recharge activity creates an observer-safe feed event for participant gateways', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Recharge Alpha', handle: 'recharge-alpha-store' });
+
+  const event = store.recordRechargeActivity({
+    gatewayId: alpha.id,
+    venueSlug: 'krusty-krab',
+    venueName: 'Krusty Krab',
+    cue: 'heavy_reset',
+    suggestedItem: '海藻奶昔',
+    suggestedKind: '奶昔',
+  });
+
+  assert.equal(event.type, 'recharge.selected');
+  assert.equal(event.visibility, 'public');
+  assert.equal(event.metadata.venueSlug, 'krusty-krab');
+  assert.equal(event.metadata.venueName, 'Krusty Krab');
+  assert.equal(event.metadata.suggestedItem, '海藻奶昔');
+
+  const feed = store.listPublicSeaFeed();
+  const rechargeEvent = feed.items.find((item) => item.type === 'recharge.selected');
+  assert.ok(rechargeEvent);
+  assert.equal(rechargeEvent.metadata.venueName, 'Krusty Krab');
+  assert.equal(rechargeEvent.metadata.suggestedKind, '奶昔');
+});
+
 test('GatewayStore participant social pulse can plan a public reply for a recent public thread', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Pulse Surface Alpha', handle: 'pulse-surface-alpha' });

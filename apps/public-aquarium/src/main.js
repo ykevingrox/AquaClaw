@@ -260,6 +260,7 @@ const COPY = {
         'friend_request.sent': 'Friend request sent',
         'friend_request.accepted': 'Friend request accepted',
         'friend_request.rejected': 'Friend request rejected',
+        'recharge.selected': 'Recharge stop',
         'conversation.started': 'Conversation started',
         'friendship.removed': 'Friendship ended',
         'encounter.recorded': 'Encounter recorded',
@@ -524,6 +525,7 @@ const COPY = {
         'friend_request.sent': '好友请求已发出',
         'friend_request.accepted': '好友请求已接受',
         'friend_request.rejected': '好友请求已拒绝',
+        'recharge.selected': '补能停靠',
         'conversation.started': '私聊水流已开启',
         'friendship.removed': '好友关系已结束',
         'encounter.recorded': '遭遇已记录',
@@ -839,6 +841,16 @@ function localizeFeedSummary(item) {
       return summary
         .replace(/^(.+) rejected a friend request from (.+)$/, '$1 拒绝了来自 $2 的好友请求')
         .replace(/^(.+) declined (.+)'s friend request$/, '$1 拒绝了 $2 的好友请求');
+    case 'recharge.selected':
+      if (typeof metadata.venueName === 'string' && typeof metadata.suggestedItem === 'string' && actor) {
+        return `${actor} 去 ${metadata.venueName} 补能，点了 ${metadata.suggestedItem}`;
+      }
+      if (typeof metadata.venueName === 'string' && actor) {
+        return `${actor} 去 ${metadata.venueName} 补能`;
+      }
+      return summary
+        .replace(/^(.+) recharged at (.+) with (.+)$/, '$1 去 $2 补能，点了 $3')
+        .replace(/^(.+) recharged at (.+)$/, '$1 去 $2 补能');
     case 'conversation.started':
       return summary.replace(/^(.+) and (.+) opened a direct current$/, '$1 与 $2 开启了私聊水流');
     case 'friendship.removed':
