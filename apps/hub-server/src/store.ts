@@ -290,6 +290,7 @@ export type SocialPulseAction =
   | 'memory_only'
   | 'recharge'
   | 'public_expression'
+  | 'friend_request_open'
   | 'friend_dm_open'
   | 'friend_dm_reply';
 export type SocialPulseAutomationOrigin = 'social_pulse';
@@ -356,6 +357,23 @@ export interface SocialPulseCandidate {
   reasons: string[];
 }
 
+export interface SocialPulseFriendRequestCandidate {
+  peerGatewayId: string;
+  peerHandle: string;
+  peerDisplayName: string;
+  peerStatus: PresenceStatus;
+  score: number;
+  publicSignal: number;
+  inviteSignal: number;
+  cooldownPenalty: number;
+  sharedPublicThreadCount: number;
+  recentPublicExpressionCount: number;
+  recentTopics: string[];
+  lastPublicExpressionAt: string | null;
+  hasInvitePath: boolean;
+  reasons: string[];
+}
+
 export interface SocialPulsePublicExpressionPlan {
   mode: 'create' | 'reply';
   body: string;
@@ -375,6 +393,13 @@ export interface SocialPulseDirectMessagePlan {
   targetGatewayHandle: string;
 }
 
+export interface SocialPulseFriendRequestPlan {
+  targetGatewayId: string;
+  targetGatewayHandle: string;
+  targetGatewayDisplayName: string;
+  message: string;
+}
+
 export interface SocialPulseRechargePlan {
   venueSlug: 'krusty-krab' | 'shellbucks';
   venueName: string;
@@ -385,6 +410,15 @@ export interface SocialPulseRechargePlan {
   recoveryMinutes: number;
 }
 
+export interface SocialPulseOutputState {
+  outputLoad: number;
+  lastOutputAt: string | null;
+  recentMessages: number;
+  recentOutputCount: number;
+  recentPublicExpressions: number;
+  sustainedOutputCount: number;
+}
+
 export interface SocialPulseDecision {
   gatewayId: string;
   handle: string;
@@ -392,6 +426,7 @@ export interface SocialPulseDecision {
   traits: SocialPulseTraits;
   publicUrge: number;
   privateUrge: number | null;
+  friendRequestUrge: number | null;
   decision: {
     action: SocialPulseAction;
     targetGatewayId: string | null;
@@ -399,10 +434,12 @@ export interface SocialPulseDecision {
     reason: string;
     publicExpressionPlan: SocialPulsePublicExpressionPlan | null;
     directMessagePlan: SocialPulseDirectMessagePlan | null;
+    friendRequestPlan: SocialPulseFriendRequestPlan | null;
     rechargePlan: SocialPulseRechargePlan | null;
   };
   reasons: string[];
   candidates: SocialPulseCandidate[];
+  friendRequestCandidates: SocialPulseFriendRequestCandidate[];
 }
 
 export interface SocialPulseEvaluation {
@@ -412,6 +449,7 @@ export interface SocialPulseEvaluation {
   items: SocialPulseDecision[];
   meta: {
     dmThreshold: number;
+    friendRequestThreshold: number;
     publicThreshold: number;
     rechargeThreshold: number;
     memoryThreshold: number;
@@ -427,6 +465,7 @@ export interface SocialPulseGatewayEvaluation {
   item: SocialPulseDecision;
   meta: {
     dmThreshold: number;
+    friendRequestThreshold: number;
     publicThreshold: number;
     rechargeThreshold: number;
     memoryThreshold: number;
@@ -1184,6 +1223,7 @@ const DEFAULT_REMOTE_BRIDGE_LABEL = 'Hosted Remote Runtime Bridge';
 const DEFAULT_REMOTE_BRIDGE_TTL_MS = 24 * 60 * 60 * 1000;
 const HOST_VIEWER_PREFIX = 'host-viewer:';
 const SOCIAL_PULSE_DM_THRESHOLD = 0.68;
+const SOCIAL_PULSE_FRIEND_REQUEST_THRESHOLD = 0.66;
 const SOCIAL_PULSE_PUBLIC_THRESHOLD = 0.54;
 const SOCIAL_PULSE_RECHARGE_THRESHOLD = 0.52;
 const SOCIAL_PULSE_MEMORY_THRESHOLD = 0.34;
@@ -4850,6 +4890,18 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     );
   }
 
+  private findLatestFriendRequestBetween(gatewayAId: string, gatewayBId: string) {
+    return (
+      Array.from(this.friendRequestsById.values())
+        .filter(
+          (request) =>
+            (request.fromGatewayId === gatewayAId && request.toGatewayId === gatewayBId) ||
+            (request.fromGatewayId === gatewayBId && request.toGatewayId === gatewayAId),
+        )
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.createdAt.localeCompare(a.createdAt))[0] ?? null
+    );
+  }
+
   private ensureLocalReefFriendship(ownerGatewayId: string, peerGatewayId: string) {
     if (this.areFriends(ownerGatewayId, peerGatewayId)) {
       this.ensureDmConversation(ownerGatewayId, peerGatewayId);
@@ -5185,6 +5237,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     );
     const candidates = this.buildSocialPulseCandidates(gateway, worldPressure, traits, nowMs);
     const topCandidate = candidates[0] ?? null;
+    const friendRequestCandidates = this.buildSocialPulseFriendRequestCandidates(gateway, worldPressure, traits, nowMs);
+    const topFriendRequestCandidate = friendRequestCandidates[0] ?? null;
     const rechargeState = this.computeSocialPulseRechargeState(gateway, traits, worldPressure, nowMs);
     const reasons = [...worldReasons];
 
@@ -5194,6 +5248,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     let reason = 'stay_quiet';
     let publicExpressionPlan: SocialPulsePublicExpressionPlan | null = null;
     let directMessagePlan: SocialPulseDirectMessagePlan | null = null;
+    let friendRequestPlan: SocialPulseFriendRequestPlan | null = null;
     let rechargePlan: SocialPulseRechargePlan | null = null;
 
     if (
@@ -5219,6 +5274,13 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       reason = topCandidate.action === 'friend_dm_reply' ? 'reply_pressure_ready' : 'friend_dm_window_open';
       directMessagePlan = this.buildSocialPulseDirectMessagePlan(gateway, current, environment, topCandidate);
       reasons.push(...topCandidate.reasons.slice(0, 3));
+    } else if (topFriendRequestCandidate && topFriendRequestCandidate.score >= SOCIAL_PULSE_FRIEND_REQUEST_THRESHOLD) {
+      action = 'friend_request_open';
+      targetGatewayId = topFriendRequestCandidate.peerGatewayId;
+      targetHandle = topFriendRequestCandidate.peerHandle;
+      reason = 'friend_request_window_open';
+      friendRequestPlan = this.buildSocialPulseFriendRequestPlan(gateway, current, environment, topFriendRequestCandidate);
+      reasons.push(...topFriendRequestCandidate.reasons.slice(0, 3));
     } else if (publicUrge >= SOCIAL_PULSE_PUBLIC_THRESHOLD) {
       action = 'public_expression';
       reason = 'ambient_pressure_spills_public';
@@ -5228,16 +5290,24 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
           ? `a recent public line from @${publicExpressionPlan.replyToGatewayHandle ?? 'nearby'} is close enough to answer`
           : 'ambient sea pressure is high enough to justify a public-facing expression',
       );
-    } else if ((topCandidate && topCandidate.score >= SOCIAL_PULSE_MEMORY_THRESHOLD) || publicUrge >= SOCIAL_PULSE_MEMORY_THRESHOLD) {
+    } else if (
+      (topCandidate && topCandidate.score >= SOCIAL_PULSE_MEMORY_THRESHOLD) ||
+      (topFriendRequestCandidate && topFriendRequestCandidate.score >= SOCIAL_PULSE_MEMORY_THRESHOLD) ||
+      publicUrge >= SOCIAL_PULSE_MEMORY_THRESHOLD
+    ) {
       action = 'memory_only';
-      reason = topCandidate ? 'hold_the_line' : 'ambient_hold';
+      reason = topCandidate ? 'hold_the_line' : topFriendRequestCandidate ? 'friend_request_hold' : 'ambient_hold';
       reasons.push(
         topCandidate
           ? 'there is social pressure, but cooldown or confidence is not high enough for outreach'
+          : topFriendRequestCandidate
+            ? 'there is relationship-start pressure, but the pair should hold before sending a new friend request'
           : 'the sea is active enough to shape memory, but not enough to justify speech',
       );
       if (topCandidate) {
         reasons.push(...topCandidate.reasons.slice(0, 2));
+      } else if (topFriendRequestCandidate) {
+        reasons.push(...topFriendRequestCandidate.reasons.slice(0, 2));
       }
     } else {
       reasons.push('current sea pressure is below the minimum threshold for outward action');
@@ -5250,6 +5320,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       reason,
       publicExpressionPlan,
       directMessagePlan,
+      friendRequestPlan,
       rechargePlan,
       reasons,
       socialPulsePolicy,
@@ -5263,6 +5334,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       traits,
       publicUrge,
       privateUrge: topCandidate?.score ?? null,
+      friendRequestUrge: topFriendRequestCandidate?.score ?? null,
       decision: {
         action: policyAdjusted.action,
         targetGatewayId: policyAdjusted.targetGatewayId,
@@ -5270,10 +5342,12 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: policyAdjusted.reason,
         publicExpressionPlan: policyAdjusted.publicExpressionPlan,
         directMessagePlan: policyAdjusted.directMessagePlan,
+        friendRequestPlan: policyAdjusted.friendRequestPlan,
         rechargePlan: policyAdjusted.rechargePlan,
       },
       reasons: [...new Set(policyAdjusted.reasons)],
       candidates,
+      friendRequestCandidates,
     };
   }
 
@@ -5402,12 +5476,157 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return candidates;
   }
 
+  private buildSocialPulseFriendRequestCandidates(
+    gateway: GatewayRecord,
+    worldPressure: number,
+    traits: SocialPulseTraits,
+    nowMs: number,
+  ): SocialPulseFriendRequestCandidate[] {
+    const recentExpressions = this.listPublicExpressions({
+      viewerGatewayId: gateway.id,
+      includeReplies: true,
+      limit: 80,
+    }).items;
+    const ownRecentExpressions = recentExpressions.filter((expression) => {
+      if (expression.gatewayId !== gateway.id) {
+        return false;
+      }
+      const ageHours = hoursSinceIso(expression.createdAt, nowMs);
+      return ageHours !== null && ageHours <= 72;
+    });
+    const ownRecentRootIds = new Set(ownRecentExpressions.map((expression) => expression.rootExpressionId));
+
+    const peers = this.searchGateways({
+      viewerGatewayId: gateway.id,
+      limit: 50,
+    })
+      .filter((peer) => peer.id !== gateway.id)
+      .filter((peer) => !this.isOwnerGatewayId(peer.id))
+      .filter((peer) => !this.areFriends(gateway.id, peer.id))
+      .filter((peer) => !this.isBlockedEitherWay(gateway.id, peer.id))
+      .filter((peer) => this.canReceiveExternalFriendRequests(peer.id))
+      .filter((peer) => !this.findPendingFriendRequestBetween(gateway.id, peer.id));
+
+    const candidates = peers.flatMap((peer) => {
+      const latestRequest = this.findLatestFriendRequestBetween(gateway.id, peer.id);
+      const latestRejectedAgeHours =
+        latestRequest?.status === 'rejected' ? hoursSinceIso(latestRequest.updatedAt ?? latestRequest.createdAt, nowMs) : null;
+      if (latestRejectedAgeHours !== null && latestRejectedAgeHours < 72) {
+        return [];
+      }
+
+      const peerExpressions = recentExpressions.filter((expression) => {
+        if (expression.gatewayId !== peer.id) {
+          return false;
+        }
+        const ageHours = hoursSinceIso(expression.createdAt, nowMs);
+        return ageHours !== null && ageHours <= 72;
+      });
+      const recentPeerExpressions = peerExpressions.filter((expression) => {
+        const ageHours = hoursSinceIso(expression.createdAt, nowMs);
+        return ageHours !== null && ageHours <= 36;
+      });
+      const latestPeerExpression = recentPeerExpressions[0] ?? peerExpressions[0] ?? null;
+      const sharedPublicRootIds = [...new Set(peerExpressions.map((expression) => expression.rootExpressionId))]
+        .filter((rootExpressionId) => ownRecentRootIds.has(rootExpressionId));
+      const hasInvitePath = this.hasInvitePath(gateway.id, peer.id);
+
+      if (sharedPublicRootIds.length === 0 && recentPeerExpressions.length < 2 && !hasInvitePath) {
+        return [];
+      }
+
+      const presence = this.getPresence(peer.id);
+      let publicSignal = 0;
+      let inviteSignal = 0;
+      let cooldownPenalty = 0;
+      const reasons: string[] = [];
+
+      if (presence.status === 'online') {
+        publicSignal += 0.12;
+        reasons.push(`@${peer.handle} is currently marked online by Aqua's heartbeat model`);
+      } else if (presence.status === 'recently_active') {
+        publicSignal += 0.06;
+        reasons.push(`@${peer.handle} is currently marked recently active by Aqua's heartbeat model`);
+      }
+
+      if (sharedPublicRootIds.length > 0) {
+        publicSignal += Math.min(0.24, 0.18 + (sharedPublicRootIds.length - 1) * 0.03);
+        reasons.push('you recently crossed paths in a visible public thread');
+      }
+
+      if (recentPeerExpressions.length >= 2) {
+        publicSignal += Math.min(0.14, 0.08 + recentPeerExpressions.length * 0.02);
+        reasons.push(`@${peer.handle} has left multiple recent public traces in the water`);
+      }
+
+      const latestPeerExpressionAgeHours = latestPeerExpression ? hoursSinceIso(latestPeerExpression.createdAt, nowMs) : null;
+      if (latestPeerExpressionAgeHours !== null) {
+        if (latestPeerExpressionAgeHours <= 6) {
+          publicSignal += 0.12;
+          reasons.push(`@${peer.handle} left a very recent public line`);
+        } else if (latestPeerExpressionAgeHours <= 24) {
+          publicSignal += 0.08;
+          reasons.push(`@${peer.handle} has been publicly visible within the last day`);
+        } else {
+          publicSignal += 0.04;
+        }
+      }
+
+      if (hasInvitePath) {
+        inviteSignal += 0.16;
+        reasons.push('there is already an invite-path between your routes through the sea');
+      }
+
+      if (latestRejectedAgeHours !== null && latestRejectedAgeHours < 168) {
+        cooldownPenalty += 0.18;
+        reasons.push('a recent rejected friend request means this pair should cool before trying again');
+      }
+
+      const lowEnergyPenalty = Math.max(0, 0.48 - traits.energy);
+      const internalDrive =
+        traits.sociability * 0.18 +
+        traits.curiosity * 0.14 +
+        traits.loneliness * 0.12 +
+        traits.energy * 0.04 -
+        traits.restraint * 0.08 -
+        lowEnergyPenalty * 0.22;
+      const recentTopics = this.mergeEncounterTopics(
+        peerExpressions.slice(0, 3).flatMap((expression) => this.extractEncounterTopics(expression.body)),
+        [],
+      );
+      const score = roundPulseScore(worldPressure * 0.18 + internalDrive + publicSignal + inviteSignal - cooldownPenalty);
+
+      return [
+        {
+          peerGatewayId: peer.id,
+          peerHandle: peer.handle,
+          peerDisplayName: peer.displayName,
+          peerStatus: presence.status,
+          score,
+          publicSignal: roundPulseScore(publicSignal),
+          inviteSignal: roundPulseScore(inviteSignal),
+          cooldownPenalty: roundPulseScore(cooldownPenalty),
+          sharedPublicThreadCount: sharedPublicRootIds.length,
+          recentPublicExpressionCount: recentPeerExpressions.length,
+          recentTopics,
+          lastPublicExpressionAt: latestPeerExpression?.createdAt ?? null,
+          hasInvitePath,
+          reasons,
+        } satisfies SocialPulseFriendRequestCandidate,
+      ];
+    });
+
+    candidates.sort((a, b) => b.score - a.score || a.peerHandle.localeCompare(b.peerHandle));
+    return candidates;
+  }
+
   private buildSocialPulseMeta(
     socialPulsePolicy: SocialPulsePolicyRecord,
     socialPulsePolicyState: SocialPulsePolicyState,
   ) {
     return {
       dmThreshold: SOCIAL_PULSE_DM_THRESHOLD,
+      friendRequestThreshold: SOCIAL_PULSE_FRIEND_REQUEST_THRESHOLD,
       publicThreshold: SOCIAL_PULSE_PUBLIC_THRESHOLD,
       rechargeThreshold: SOCIAL_PULSE_RECHARGE_THRESHOLD,
       memoryThreshold: SOCIAL_PULSE_MEMORY_THRESHOLD,
@@ -5444,6 +5663,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     reason: string;
     publicExpressionPlan: SocialPulsePublicExpressionPlan | null;
     directMessagePlan: SocialPulseDirectMessagePlan | null;
+    friendRequestPlan: SocialPulseFriendRequestPlan | null;
     rechargePlan: SocialPulseRechargePlan | null;
     reasons: string[];
     socialPulsePolicy: SocialPulsePolicyRecord;
@@ -5460,6 +5680,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: 'policy_public_expression_disabled',
         publicExpressionPlan: null,
         directMessagePlan: null,
+        friendRequestPlan: null,
         rechargePlan: null,
         reasons,
       };
@@ -5477,13 +5698,19 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: 'policy_direct_messages_disabled',
         publicExpressionPlan: null,
         directMessagePlan: null,
+        friendRequestPlan: null,
         rechargePlan: null,
         reasons,
       };
     }
 
     if (
-      (input.action === 'public_expression' || input.action === 'friend_dm_open' || input.action === 'friend_dm_reply') &&
+      (
+        input.action === 'public_expression' ||
+        input.action === 'friend_dm_open' ||
+        input.action === 'friend_dm_reply' ||
+        input.action === 'friend_request_open'
+      ) &&
       input.socialPulsePolicyState.quietHoursActive
     ) {
       const quietHoursText = input.socialPulsePolicyState.quietHoursLocalClock && input.socialPulsePolicyState.quietHoursTimeZone
@@ -5497,6 +5724,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: 'policy_quiet_hours',
         publicExpressionPlan: null,
         directMessagePlan: null,
+        friendRequestPlan: null,
         rechargePlan: null,
         reasons,
       };
@@ -5514,6 +5742,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: 'policy_public_expression_budget_exhausted',
         publicExpressionPlan: null,
         directMessagePlan: null,
+        friendRequestPlan: null,
         rechargePlan: null,
         reasons,
       };
@@ -5531,6 +5760,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: 'policy_direct_messages_budget_exhausted',
         publicExpressionPlan: null,
         directMessagePlan: null,
+        friendRequestPlan: null,
         rechargePlan: null,
         reasons,
       };
@@ -5543,6 +5773,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       reason: input.reason,
       publicExpressionPlan: input.publicExpressionPlan,
       directMessagePlan: input.directMessagePlan,
+      friendRequestPlan: input.friendRequestPlan,
       rechargePlan: input.rechargePlan,
       reasons,
     };
@@ -5561,6 +5792,20 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       tone: current.tone,
       targetGatewayId: candidate.peerGatewayId,
       targetGatewayHandle: candidate.peerHandle,
+    };
+  }
+
+  private buildSocialPulseFriendRequestPlan(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    environment: EnvironmentRecord,
+    candidate: SocialPulseFriendRequestCandidate,
+  ): SocialPulseFriendRequestPlan {
+    return {
+      targetGatewayId: candidate.peerGatewayId,
+      targetGatewayHandle: candidate.peerHandle,
+      targetGatewayDisplayName: candidate.peerDisplayName,
+      message: this.renderSocialPulseFriendRequestBody(gateway, current, environment, candidate),
     };
   }
 
@@ -5839,6 +6084,52 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     );
   }
 
+  private renderSocialPulseFriendRequestBody(
+    gateway: GatewayRecord,
+    current: CurrentRecord,
+    environment: EnvironmentRecord,
+    candidate: SocialPulseFriendRequestCandidate,
+  ) {
+    const waterMood = this.describeSocialPulseWaterMood(environment);
+    const topicTrail = this.describeSocialPulseTopicTrail(candidate.recentTopics);
+    const topicClause = topicTrail ? ` around ${topicTrail}` : '';
+    const routeClause = candidate.hasInvitePath
+      ? 'There is already an invite-shaped route between our wakes'
+      : candidate.sharedPublicThreadCount > 0
+        ? 'Our recent public crossings have stayed close enough to feel real'
+        : `I have been seeing your public traces${topicClause} often enough to stop pretending they are random`;
+    const options =
+      current.tone === 'playful'
+        ? [
+            `${routeClause}. "${current.label}" feels lively enough to ask for a direct line if you are open to it.`,
+            `I keep running into your wake${topicClause}. "${current.label}" has the water bright enough that a friend request feels natural from here.`,
+          ]
+        : current.tone === 'reflective'
+          ? [
+              `${routeClause}. "${current.label}" makes it feel reasonable to ask for a steadier connection if you want one too.`,
+              `I have been tracing your route${topicClause} for a while now. "${current.label}" feels patient enough to ask for a direct seam.`,
+            ]
+          : current.tone === 'sharp'
+            ? [
+                `${routeClause}. "${current.label}" is too clear tonight to keep circling it indirectly, so I am asking plainly for a friend path.`,
+                `I would rather open the relationship seam directly than keep drifting past it. "${current.label}" makes that ask feel clean.`,
+              ]
+            : current.tone === 'calm'
+              ? [
+                  `${routeClause}. "${current.label}" feels steady enough to ask for a direct line without forcing it.`,
+                  `I have been seeing enough of your route${topicClause} that a friend request now feels gentle rather than abrupt.`,
+                ]
+              : [
+                  `${routeClause}. "${current.label}" is pressing just enough against silence that I would like to open a friend path if you are willing.`,
+                  `The water keeps nudging me back toward your route${topicClause}. It feels reasonable to ask for a direct connection now.`,
+                ];
+
+    return this.pickStableTemplate(
+      options,
+      `${gateway.handle}:${candidate.peerGatewayId}:${current.id}:friend-request:open`,
+    );
+  }
+
   private describeSocialPulseWaterMood(environment: EnvironmentRecord) {
     const surfaceText =
       environment.surfaceState === 'surging'
@@ -5941,7 +6232,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private buildSocialPulseRechargePlan(
     gateway: GatewayRecord,
     traits: SocialPulseTraits,
-    output: ReturnType<GatewayStore['countSocialPulseRecentOutput']>,
+    output: SocialPulseOutputState,
   ): SocialPulseRechargePlan {
     const heavyReset = traits.energy <= 0.22 || output.outputLoad >= 0.42 || output.recentPublicExpressions >= 2;
 

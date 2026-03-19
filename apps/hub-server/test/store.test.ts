@@ -482,6 +482,71 @@ test('GatewayStore social pulse can choose recharge before another outward move 
   assert.equal(evaluation.meta.rechargeThreshold > evaluation.meta.memoryThreshold, true);
 });
 
+test('GatewayStore social pulse can open a friend request after repeated public crossings with a visible participant peer', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = store.register({
+    displayName: 'Friend Pulse Alpha',
+    handle: 'friend-pulse-alpha-store',
+    visibility: 'public',
+  }).gateway;
+  const beta = store.register({
+    displayName: 'Friend Pulse Beta',
+    handle: 'friend-pulse-beta-store',
+    visibility: 'public',
+  }).gateway;
+
+  store.heartbeatPresence(beta.id);
+  store.setCurrent({
+    key: 'friend-request-store-current',
+    label: 'Friend Request Store Current',
+    summary: 'The sea is lively enough to turn repeated public crossings into a relationship start.',
+    tone: 'playful',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+    actorGatewayId: alpha.id,
+  });
+  store.setEnvironment({
+    waterTemperatureC: 19,
+    clarity: 'clear',
+    tideDirection: 'crosswind',
+    surfaceState: 'surging',
+    phenomenon: 'warm_bloom',
+    actorGatewayId: alpha.id,
+  });
+
+  const root = store.createPublicExpression({
+    gatewayId: beta.id,
+    body: 'I keep mapping the brighter loops near the glass edge tonight.',
+  });
+  store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'That route is reading bright from this side too.',
+    replyToExpressionId: root.id,
+  });
+  store.createPublicExpression({
+    gatewayId: beta.id,
+    body: 'Then we are tracing the same loop.',
+    replyToExpressionId: root.id,
+  });
+
+  const evaluation = store.evaluateSocialPulse({
+    hostId: host.id,
+    gatewayId: alpha.id,
+  });
+
+  assert.equal(evaluation.items[0]?.decision.action, 'friend_request_open');
+  assert.equal(evaluation.items[0]?.decision.targetGatewayId, beta.id);
+  assert.equal(evaluation.items[0]?.decision.targetHandle, beta.handle);
+  assert.equal(evaluation.items[0]?.decision.directMessagePlan, null);
+  assert.equal(evaluation.items[0]?.decision.friendRequestPlan?.targetGatewayHandle, beta.handle);
+  assert.equal(evaluation.items[0]?.decision.friendRequestPlan?.targetGatewayId, beta.id);
+  assert.equal((evaluation.items[0]?.decision.friendRequestPlan?.message?.length ?? 0) > 24, true);
+  assert.equal(evaluation.items[0]?.friendRequestCandidates[0]?.peerHandle, beta.handle);
+  assert.equal(evaluation.items[0]?.friendRequestCandidates[0]?.sharedPublicThreadCount >= 1, true);
+  assert.equal((evaluation.items[0]?.friendRequestUrge ?? 0) >= evaluation.meta.friendRequestThreshold, true);
+});
+
 test('GatewayStore social pulse policy can exhaust public-expression budget and downgrade to memory_only', () => {
   const store: GatewayStore = createGatewayStore();
   const host = store.bootstrapLocalSession().host;

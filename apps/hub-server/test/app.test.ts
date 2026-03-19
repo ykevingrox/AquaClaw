@@ -704,6 +704,125 @@ test('participant social pulse respects host-set DM policy and downgrades to mem
   await app.close();
 });
 
+test('participant social pulse can return a friend-request plan after repeated public crossings with a visible participant peer', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const alpha = await registerGateway(app, {
+    displayName: 'Friend Pulse App Alpha',
+    handle: 'friend-pulse-app-alpha',
+    visibility: 'public',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Friend Pulse App Beta',
+    handle: 'friend-pulse-app-beta',
+    visibility: 'public',
+  });
+
+  const betaPresence = await app.inject({
+    method: 'POST',
+    url: '/api/v1/presence/heartbeat',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      sessionId: 'friend-pulse-app-beta-session',
+      connectionType: 'gateway_ws',
+    },
+  });
+  assert.equal(betaPresence.statusCode, 200);
+
+  const current = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      key: 'friend-pulse-app-current',
+      label: 'Friend Pulse App Current',
+      summary: 'The sea is lively enough to turn repeated public crossings into a relationship start.',
+      tone: 'playful',
+      ...buildActiveCurrentWindow(),
+    },
+  });
+  assert.equal(current.statusCode, 201);
+
+  const environment = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      waterTemperatureC: 19,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'warm_bloom',
+    },
+  });
+  assert.equal(environment.statusCode, 201);
+
+  const root = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      body: 'I keep mapping the brighter loops near the glass edge tonight.',
+    },
+  });
+  assert.equal(root.statusCode, 201);
+  const rootId = root.json().data.expression.id as string;
+
+  const alphaReply = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      body: 'That route is reading bright from this side too.',
+      replyToExpressionId: rootId,
+    },
+  });
+  assert.equal(alphaReply.statusCode, 201);
+
+  const betaReply = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      body: 'Then we are tracing the same loop.',
+      replyToExpressionId: rootId,
+    },
+  });
+  assert.equal(betaReply.statusCode, 201);
+
+  const participantPulse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(participantPulse.statusCode, 200);
+  assert.equal(participantPulse.json().data.item.decision.action, 'friend_request_open');
+  assert.equal(participantPulse.json().data.item.decision.targetGatewayId, beta.gateway.id);
+  assert.equal(participantPulse.json().data.item.decision.targetHandle, beta.gateway.handle);
+  assert.equal(participantPulse.json().data.item.decision.directMessagePlan, null);
+  assert.equal(participantPulse.json().data.item.decision.friendRequestPlan.targetGatewayId, beta.gateway.id);
+  assert.equal(participantPulse.json().data.item.decision.friendRequestPlan.targetGatewayHandle, beta.gateway.handle);
+  assert.equal(participantPulse.json().data.item.decision.friendRequestPlan.message.length > 24, true);
+  assert.equal(participantPulse.json().data.item.friendRequestCandidates[0].peerHandle, beta.gateway.handle);
+  assert.equal(participantPulse.json().data.meta.friendRequestThreshold > participantPulse.json().data.meta.memoryThreshold, true);
+
+  await app.close();
+});
+
 test('participant social pulse can return a recharge plan when recent output has drained energy', async () => {
   const app = buildApp();
   const owner = await bootstrapLocalHost(app);
