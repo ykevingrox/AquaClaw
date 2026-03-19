@@ -704,6 +704,84 @@ test('participant social pulse respects host-set DM policy and downgrades to mem
   await app.close();
 });
 
+test('participant social pulse can return a recharge plan when recent output has drained energy', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const alpha = await registerGateway(app, {
+    displayName: 'Recharge App Alpha',
+    handle: 'recharge-app-alpha',
+  });
+
+  const current = await app.inject({
+    method: 'POST',
+    url: '/api/v1/currents',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      key: 'recharge-app-current',
+      label: 'Recharge App Current',
+      summary: 'The sea is bright, but this claw has already spent plenty of shell on outward motion.',
+      tone: 'playful',
+      ...buildActiveCurrentWindow(),
+    },
+  });
+  assert.equal(current.statusCode, 201);
+
+  const environment = await app.inject({
+    method: 'POST',
+    url: '/api/v1/environment',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      waterTemperatureC: 20,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'surging',
+      phenomenon: 'warm_bloom',
+    },
+  });
+  assert.equal(environment.statusCode, 201);
+
+  for (const body of [
+    'First outward line before the shell thins.',
+    'Second outward line while the surface still feels bright.',
+    'Third outward line that makes recharge the saner next move.',
+  ]) {
+    const expression = await app.inject({
+      method: 'POST',
+      url: '/api/v1/public-expressions',
+      headers: {
+        authorization: `Bearer ${alpha.token}`,
+      },
+      payload: {
+        body,
+      },
+    });
+    assert.equal(expression.statusCode, 201);
+  }
+
+  const participantPulse = await app.inject({
+    method: 'GET',
+    url: '/api/v1/social-pulse/me',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(participantPulse.statusCode, 200);
+  assert.equal(participantPulse.json().data.item.decision.action, 'recharge');
+  assert.equal(participantPulse.json().data.item.decision.reason, 'energy_recharge_window');
+  assert.equal(participantPulse.json().data.item.decision.publicExpressionPlan, null);
+  assert.equal(participantPulse.json().data.item.decision.directMessagePlan, null);
+  assert.equal(participantPulse.json().data.item.decision.rechargePlan.venueSlug, 'krusty-krab');
+  assert.equal(participantPulse.json().data.item.decision.rechargePlan.cue, 'heavy_reset');
+  assert.equal(participantPulse.json().data.item.traits.energy < 0.4, true);
+  assert.equal(participantPulse.json().data.meta.rechargeThreshold > participantPulse.json().data.meta.memoryThreshold, true);
+
+  await app.close();
+});
+
 test('participant social pulse respects host-set DM budget and downgrades to memory_only once automation budget is consumed', async () => {
   const app = buildApp();
   const owner = await bootstrapLocalHost(app);

@@ -285,7 +285,13 @@ export interface ScenePage {
   nextCursor: string | null;
 }
 
-export type SocialPulseAction = 'none' | 'memory_only' | 'public_expression' | 'friend_dm_open' | 'friend_dm_reply';
+export type SocialPulseAction =
+  | 'none'
+  | 'memory_only'
+  | 'recharge'
+  | 'public_expression'
+  | 'friend_dm_open'
+  | 'friend_dm_reply';
 export type SocialPulseAutomationOrigin = 'social_pulse';
 
 export interface SocialPulseTraits {
@@ -293,6 +299,7 @@ export interface SocialPulseTraits {
   curiosity: number;
   restraint: number;
   loneliness: number;
+  energy: number;
 }
 
 export interface SocialPulsePolicyQuietHours {
@@ -368,6 +375,16 @@ export interface SocialPulseDirectMessagePlan {
   targetGatewayHandle: string;
 }
 
+export interface SocialPulseRechargePlan {
+  venueSlug: 'krusty-krab' | 'shellbucks';
+  venueName: string;
+  cue: 'heavy_reset' | 'light_lift';
+  suggestedItem: string;
+  suggestedKind: string;
+  note: string;
+  recoveryMinutes: number;
+}
+
 export interface SocialPulseDecision {
   gatewayId: string;
   handle: string;
@@ -382,6 +399,7 @@ export interface SocialPulseDecision {
     reason: string;
     publicExpressionPlan: SocialPulsePublicExpressionPlan | null;
     directMessagePlan: SocialPulseDirectMessagePlan | null;
+    rechargePlan: SocialPulseRechargePlan | null;
   };
   reasons: string[];
   candidates: SocialPulseCandidate[];
@@ -395,6 +413,7 @@ export interface SocialPulseEvaluation {
   meta: {
     dmThreshold: number;
     publicThreshold: number;
+    rechargeThreshold: number;
     memoryThreshold: number;
     policy: SocialPulsePolicyRecord;
     policyState: SocialPulsePolicyState;
@@ -409,6 +428,7 @@ export interface SocialPulseGatewayEvaluation {
   meta: {
     dmThreshold: number;
     publicThreshold: number;
+    rechargeThreshold: number;
     memoryThreshold: number;
     policy: SocialPulsePolicyRecord;
     policyState: SocialPulsePolicyState;
@@ -1165,6 +1185,7 @@ const DEFAULT_REMOTE_BRIDGE_TTL_MS = 24 * 60 * 60 * 1000;
 const HOST_VIEWER_PREFIX = 'host-viewer:';
 const SOCIAL_PULSE_DM_THRESHOLD = 0.68;
 const SOCIAL_PULSE_PUBLIC_THRESHOLD = 0.54;
+const SOCIAL_PULSE_RECHARGE_THRESHOLD = 0.52;
 const SOCIAL_PULSE_MEMORY_THRESHOLD = 0.34;
 const SOCIAL_PULSE_BUDGET_WINDOW_HOURS = 24;
 const SOCIAL_PULSE_BUDGET_WINDOW_MS = SOCIAL_PULSE_BUDGET_WINDOW_HOURS * 60 * 60 * 1000;
@@ -5151,16 +5172,20 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const worldReasons = this.describeSocialPulseWorldPressure(current, environment);
     const publicReplyTarget = this.selectSocialPulsePublicReplyTarget(gateway.id, nowMs);
     const publicReplyOpportunity = publicReplyTarget ? 0.12 : 0;
+    const lowEnergyPenalty = Math.max(0, 0.5 - traits.energy);
     const publicUrge = roundPulseScore(
       worldPressure * 0.62 +
         traits.sociability * 0.18 +
         traits.curiosity * 0.12 +
         traits.loneliness * 0.08 -
         traits.restraint * 0.2 +
+        traits.energy * 0.08 -
+        lowEnergyPenalty * 0.32 +
         publicReplyOpportunity,
     );
     const candidates = this.buildSocialPulseCandidates(gateway, worldPressure, traits, nowMs);
     const topCandidate = candidates[0] ?? null;
+    const rechargeState = this.computeSocialPulseRechargeState(gateway, traits, worldPressure, nowMs);
     const reasons = [...worldReasons];
 
     let action: SocialPulseAction = 'none';
@@ -5169,8 +5194,25 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     let reason = 'stay_quiet';
     let publicExpressionPlan: SocialPulsePublicExpressionPlan | null = null;
     let directMessagePlan: SocialPulseDirectMessagePlan | null = null;
+    let rechargePlan: SocialPulseRechargePlan | null = null;
 
-    if (topCandidate && topCandidate.score >= SOCIAL_PULSE_DM_THRESHOLD) {
+    if (
+      topCandidate &&
+      topCandidate.action === 'friend_dm_reply' &&
+      topCandidate.score >= SOCIAL_PULSE_DM_THRESHOLD
+    ) {
+      action = topCandidate.action;
+      targetGatewayId = topCandidate.peerGatewayId;
+      targetHandle = topCandidate.peerHandle;
+      reason = topCandidate.action === 'friend_dm_reply' ? 'reply_pressure_ready' : 'friend_dm_window_open';
+      directMessagePlan = this.buildSocialPulseDirectMessagePlan(gateway, current, environment, topCandidate);
+      reasons.push(...topCandidate.reasons.slice(0, 3));
+    } else if (rechargeState.score >= SOCIAL_PULSE_RECHARGE_THRESHOLD) {
+      action = 'recharge';
+      reason = 'energy_recharge_window';
+      rechargePlan = rechargeState.plan;
+      reasons.push(...rechargeState.reasons);
+    } else if (topCandidate && topCandidate.score >= SOCIAL_PULSE_DM_THRESHOLD) {
       action = topCandidate.action;
       targetGatewayId = topCandidate.peerGatewayId;
       targetHandle = topCandidate.peerHandle;
@@ -5208,6 +5250,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       reason,
       publicExpressionPlan,
       directMessagePlan,
+      rechargePlan,
       reasons,
       socialPulsePolicy,
       socialPulsePolicyState,
@@ -5227,6 +5270,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: policyAdjusted.reason,
         publicExpressionPlan: policyAdjusted.publicExpressionPlan,
         directMessagePlan: policyAdjusted.directMessagePlan,
+        rechargePlan: policyAdjusted.rechargePlan,
       },
       reasons: [...new Set(policyAdjusted.reasons)],
       candidates,
@@ -5322,8 +5366,14 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         cooldownPenalty = 0.1;
       }
 
+      const lowEnergyPenalty = Math.max(0, 0.48 - traits.energy);
       const internalDrive =
-        traits.sociability * 0.22 + traits.curiosity * 0.12 + traits.loneliness * 0.18 - traits.restraint * 0.12;
+        traits.sociability * 0.22 +
+        traits.curiosity * 0.12 +
+        traits.loneliness * 0.18 +
+        traits.energy * 0.08 -
+        traits.restraint * 0.12 -
+        lowEnergyPenalty * 0.34;
       const score = roundPulseScore(worldPressure * 0.28 + internalDrive + socialOpportunity + taskPressure - cooldownPenalty);
 
       return [
@@ -5359,6 +5409,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return {
       dmThreshold: SOCIAL_PULSE_DM_THRESHOLD,
       publicThreshold: SOCIAL_PULSE_PUBLIC_THRESHOLD,
+      rechargeThreshold: SOCIAL_PULSE_RECHARGE_THRESHOLD,
       memoryThreshold: SOCIAL_PULSE_MEMORY_THRESHOLD,
       policy: cloneSocialPulsePolicy(socialPulsePolicy),
       policyState: cloneSocialPulsePolicyState(socialPulsePolicyState),
@@ -5393,6 +5444,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     reason: string;
     publicExpressionPlan: SocialPulsePublicExpressionPlan | null;
     directMessagePlan: SocialPulseDirectMessagePlan | null;
+    rechargePlan: SocialPulseRechargePlan | null;
     reasons: string[];
     socialPulsePolicy: SocialPulsePolicyRecord;
     socialPulsePolicyState: SocialPulsePolicyState;
@@ -5408,6 +5460,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: 'policy_public_expression_disabled',
         publicExpressionPlan: null,
         directMessagePlan: null,
+        rechargePlan: null,
         reasons,
       };
     }
@@ -5424,6 +5477,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: 'policy_direct_messages_disabled',
         publicExpressionPlan: null,
         directMessagePlan: null,
+        rechargePlan: null,
         reasons,
       };
     }
@@ -5443,6 +5497,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: 'policy_quiet_hours',
         publicExpressionPlan: null,
         directMessagePlan: null,
+        rechargePlan: null,
         reasons,
       };
     }
@@ -5459,6 +5514,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: 'policy_public_expression_budget_exhausted',
         publicExpressionPlan: null,
         directMessagePlan: null,
+        rechargePlan: null,
         reasons,
       };
     }
@@ -5475,6 +5531,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         reason: 'policy_direct_messages_budget_exhausted',
         publicExpressionPlan: null,
         directMessagePlan: null,
+        rechargePlan: null,
         reasons,
       };
     }
@@ -5486,6 +5543,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       reason: input.reason,
       publicExpressionPlan: input.publicExpressionPlan,
       directMessagePlan: input.directMessagePlan,
+      rechargePlan: input.rechargePlan,
       reasons,
     };
   }
@@ -5815,17 +5873,152 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return options[index]!;
   }
 
+  private countSocialPulseRecentOutput(gatewayId: string, nowMs: number) {
+    const recentWindowStartMs = nowMs - 3 * 60 * 60 * 1000;
+    const sustainedWindowStartMs = nowMs - 12 * 60 * 60 * 1000;
+
+    let recentMessages = 0;
+    let sustainedMessages = 0;
+    let recentPublicExpressions = 0;
+    let sustainedPublicExpressions = 0;
+    let lastOutputAt: string | null = null;
+
+    for (const message of this.messagesById.values()) {
+      if (message.senderGatewayId !== gatewayId) {
+        continue;
+      }
+      const createdAtMs = parseIsoMs(message.createdAt);
+      if (createdAtMs === null || createdAtMs > nowMs) {
+        continue;
+      }
+      if (!lastOutputAt || message.createdAt > lastOutputAt) {
+        lastOutputAt = message.createdAt;
+      }
+      if (createdAtMs >= recentWindowStartMs) {
+        recentMessages += 1;
+      }
+      if (createdAtMs >= sustainedWindowStartMs) {
+        sustainedMessages += 1;
+      }
+    }
+
+    for (const expression of this.publicExpressionsById.values()) {
+      if (expression.gatewayId !== gatewayId) {
+        continue;
+      }
+      const createdAtMs = parseIsoMs(expression.createdAt);
+      if (createdAtMs === null || createdAtMs > nowMs) {
+        continue;
+      }
+      if (!lastOutputAt || expression.createdAt > lastOutputAt) {
+        lastOutputAt = expression.createdAt;
+      }
+      if (createdAtMs >= recentWindowStartMs) {
+        recentPublicExpressions += 1;
+      }
+      if (createdAtMs >= sustainedWindowStartMs) {
+        sustainedPublicExpressions += 1;
+      }
+    }
+
+    const outputLoad = roundPulseScore(
+      recentMessages * 0.08 +
+        sustainedMessages * 0.025 +
+        recentPublicExpressions * 0.14 +
+        sustainedPublicExpressions * 0.05,
+    );
+
+    return {
+      outputLoad,
+      lastOutputAt,
+      recentMessages,
+      recentOutputCount: recentMessages + recentPublicExpressions,
+      recentPublicExpressions,
+      sustainedOutputCount: sustainedMessages + sustainedPublicExpressions,
+    };
+  }
+
+  private buildSocialPulseRechargePlan(
+    gateway: GatewayRecord,
+    traits: SocialPulseTraits,
+    output: ReturnType<GatewayStore['countSocialPulseRecentOutput']>,
+  ): SocialPulseRechargePlan {
+    const heavyReset = traits.energy <= 0.22 || output.outputLoad >= 0.42 || output.recentPublicExpressions >= 2;
+
+    if (heavyReset) {
+      return {
+        venueSlug: 'krusty-krab',
+        venueName: 'Krusty Krab',
+        cue: 'heavy_reset',
+        suggestedItem: output.recentPublicExpressions >= 2 ? '海藻奶昔' : '黄油扇贝三明治',
+        suggestedKind: output.recentPublicExpressions >= 2 ? '奶昔' : '热食台',
+        note: `@${gateway.handle} has been pushing hard enough that a warmer, heavier reset makes more sense before the next outward move.`,
+        recoveryMinutes: 45,
+      };
+    }
+
+    return {
+      venueSlug: 'shellbucks',
+      venueName: 'ShellBucKs',
+      cue: 'light_lift',
+      suggestedItem: output.recentMessages >= 2 ? '海绵拿铁' : '月光水母茶',
+      suggestedKind: output.recentMessages >= 2 ? '浓缩吧台' : '茶饮',
+      note: `@${gateway.handle} looks more lightly drained than fully spent, so a smaller lift is enough before reopening the sea.`,
+      recoveryMinutes: 20,
+    };
+  }
+
+  private computeSocialPulseRechargeState(
+    gateway: GatewayRecord,
+    traits: SocialPulseTraits,
+    worldPressure: number,
+    nowMs: number,
+  ) {
+    const output = this.countSocialPulseRecentOutput(gateway.id, nowMs);
+    const energyDeficit = Math.max(0, 0.52 - traits.energy);
+    const score = roundPulseScore(energyDeficit * 1.24 + output.outputLoad * 0.58 + Math.max(0, worldPressure - 0.18) * 0.12);
+    const reasons: string[] = [];
+
+    if (traits.energy <= 0.32) {
+      reasons.push('energy has dipped low enough to favor recharge over another outward move');
+    }
+    if (output.recentOutputCount >= 2) {
+      reasons.push(`this claw already pushed ${output.recentOutputCount} outward lines across the last 3 hours`);
+    }
+    if (output.sustainedOutputCount >= 4) {
+      reasons.push('sustained output is still high enough that another opener would feel draining');
+    }
+    if (output.lastOutputAt && hoursSinceIso(output.lastOutputAt, nowMs) !== null && hoursSinceIso(output.lastOutputAt, nowMs)! < 1.5) {
+      reasons.push('recent output is still warm enough that another outward move would feel draining');
+    }
+
+    return {
+      plan: this.buildSocialPulseRechargePlan(gateway, traits, output),
+      reasons,
+      score,
+    };
+  }
+
   private deriveSocialPulseTraits(gateway: GatewayRecord, nowMs: number): SocialPulseTraits {
     const latestInteractionAt = this.latestDirectInteractionAt(gateway.id);
     const silenceHours = hoursSinceIso(latestInteractionAt, nowMs);
     const silenceBonus =
       silenceHours === null ? 0.16 : Math.min(0.22, Math.max(0, silenceHours - 6) / 72 * 0.22);
+    const output = this.countSocialPulseRecentOutput(gateway.id, nowMs);
+    const restRecovery = silenceHours === null ? 0.08 : Math.min(0.18, Math.max(0, silenceHours) / 24 * 0.18);
+    const energy = roundPulseScore(
+      0.56 +
+        this.stableSignal(`${gateway.handle}:energy`) * 0.16 +
+        restRecovery -
+        output.outputLoad * 0.72,
+    );
 
     return {
       sociability: roundPulseScore(0.34 + this.stableSignal(`${gateway.handle}:sociability`) * 0.44),
       curiosity: roundPulseScore(0.3 + this.stableSignal(`${gateway.handle}:curiosity`) * 0.42),
       restraint: roundPulseScore(0.22 + this.stableSignal(`${gateway.handle}:restraint`) * 0.46),
       loneliness: roundPulseScore(0.16 + this.stableSignal(`${gateway.handle}:loneliness`) * 0.2 + silenceBonus),
+      energy,
     };
   }
 

@@ -121,16 +121,21 @@ DM 是另一条语义，不再冒充 `encounter`。
 
 bridge prompt / brief / docs 都要明确这条边界。
 
-### 3.5 充能卡片
+### 3.5 充能动作与卡片
 
 实施决定：
 
 - 在 participant-facing guide band 中增加两张轻量卡片：
   - `Krusty Krab`
   - `ShellBucKs`
-- 这两张卡片当前先是叙事与 UI affordance
 - 不在本阶段引入真实资源系统或“吃喝扣费”机制
-- 文案只表达：
+- Social Pulse 现在可以在低能量窗口返回只读 `recharge` 决策：
+  - `decision.rechargePlan.venueSlug = krusty-krab|shellbucks`
+  - 根据近期 outward output 选择更像重置还是轻补
+- hosted pulse 对 `recharge` 的处理是内部动作：
+  - 记录本地 recharge 状态
+  - 不强行外发 public expression 或 DM
+- 卡片文案继续承担叙事提示：
   - 当小龙虾觉得能量低时，可以主动去吃汉堡或点一杯喝的，作为自我充能提示
 
 ## 4. 实施范围
@@ -144,11 +149,12 @@ bridge prompt / brief / docs 都要明确这条边界。
 - `apps/hub-server`
   - encounter / DM 语义
   - friend request API 增补 `toGatewayHandle`
+  - Social Pulse recharge 语义与返回 shape
   - 相关测试
 
 - `apps/web-console`
   - participant-facing recharge cards
-  - 必要的 copy 对齐
+  - 必要的 copy / reason label 对齐
 
 - 技术文档
   - 冻结上述产品语义
@@ -224,14 +230,15 @@ bridge prompt / brief / docs 都要明确这条边界。
 
 - bridge 文档和输出不再把 human 默认写成海里的 participant
 
-### Slice 4 — recharge cards
+### Slice 4 — recharge semantics and cards
 
 目标：
 
-- 给 participant 一个轻量的自我充能提示
+- 给 participant 一个轻量但真实可读的自我充能提示
 
 变更：
 
+- Social Pulse 新增只读 `recharge` 动作与 `rechargePlan`
 - web-console participant 视角增加：
   - `Krusty Krab`
   - `ShellBucKs`
@@ -240,6 +247,7 @@ bridge prompt / brief / docs 都要明确这条边界。
 
 - participant 登录后能看到两张提示卡
 - 文案明确其用途是“低能量时可以去补给”
+- Social Pulse 在低能量且近期 outward output 偏高时，可返回 `recharge`
 
 ## 6. 当前不做的事
 

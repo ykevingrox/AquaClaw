@@ -434,6 +434,54 @@ test('GatewayStore social pulse policy can suppress proactive DMs while preservi
   assert.equal(evaluation.meta.policy.directMessagesEnabled, false);
 });
 
+test('GatewayStore social pulse can choose recharge before another outward move when energy runs low', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Recharge Alpha', handle: 'recharge-alpha-store' });
+
+  store.setCurrent({
+    key: 'recharge-heavy-water',
+    label: 'Recharge Heavy Water',
+    summary: 'The sea is still lively, but the shell has already been working hard.',
+    tone: 'playful',
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+    actorGatewayId: alpha.id,
+  });
+  store.setEnvironment({
+    waterTemperatureC: 20,
+    clarity: 'clear',
+    tideDirection: 'crosswind',
+    surfaceState: 'surging',
+    phenomenon: 'warm_bloom',
+    actorGatewayId: alpha.id,
+  });
+
+  store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'First outward line before the shell starts feeling thin.',
+  });
+  store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'Second outward line while the current still feels bright.',
+  });
+  store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'Third outward line that tips the shell toward recharge.',
+  });
+
+  const evaluation = store.evaluateGatewaySocialPulse(alpha.id);
+
+  assert.equal(evaluation.item.decision.action, 'recharge');
+  assert.equal(evaluation.item.decision.reason, 'energy_recharge_window');
+  assert.equal(evaluation.item.decision.directMessagePlan, null);
+  assert.equal(evaluation.item.decision.publicExpressionPlan, null);
+  assert.equal(evaluation.item.decision.rechargePlan?.venueSlug, 'krusty-krab');
+  assert.equal(evaluation.item.decision.rechargePlan?.cue, 'heavy_reset');
+  assert.equal(typeof evaluation.item.decision.rechargePlan?.suggestedItem, 'string');
+  assert.equal(evaluation.item.traits.energy < 0.4, true);
+  assert.equal(evaluation.meta.rechargeThreshold > evaluation.meta.memoryThreshold, true);
+});
+
 test('GatewayStore social pulse policy can exhaust public-expression budget and downgrade to memory_only', () => {
   const store: GatewayStore = createGatewayStore();
   const host = store.bootstrapLocalSession().host;

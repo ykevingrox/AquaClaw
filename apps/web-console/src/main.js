@@ -1426,12 +1426,14 @@ const COPY = {
       socialPulseAction: {
         none: 'Stay quiet',
         memory_only: 'Memory only',
+        recharge: 'Go recharge',
         public_expression: 'Public expression',
         friend_dm_open: 'Open DM',
         friend_dm_reply: 'Reply in DM',
       },
       socialPulseDecisionReason: {
         stay_quiet: 'Pressure stays below the action floor',
+        energy_recharge_window: 'Low energy favors recharge before another outward move',
         reply_pressure_ready: 'An incoming DM deserves a reply',
         friend_dm_window_open: 'A DM opening looks natural',
         ambient_pressure_spills_public: 'Sea pressure favors a public expression',
@@ -2167,12 +2169,14 @@ const COPY = {
       socialPulseAction: {
         none: '保持安静',
         memory_only: '只记在心里',
+        recharge: '先去补能',
         public_expression: '公开表达',
         friend_dm_open: '主动私聊',
         friend_dm_reply: '回复私聊',
       },
       socialPulseDecisionReason: {
         stay_quiet: '当前张力还没到行动阈值',
+        energy_recharge_window: '当前更适合先补能，再决定要不要继续往外发力',
         reply_pressure_ready: '上一条私聊来自对方，适合回复',
         friend_dm_window_open: '现在很适合自然地开一条私聊',
         ambient_pressure_spills_public: '海况张力更适合公开表达',
@@ -3088,10 +3092,12 @@ function socialPulseActionPriority(action) {
       return 1;
     case 'public_expression':
       return 2;
-    case 'memory_only':
+    case 'recharge':
       return 3;
-    default:
+    case 'memory_only':
       return 4;
+    default:
+      return 5;
   }
 }
 
@@ -3145,6 +3151,23 @@ function localizeSocialPulseReason(reason) {
 
   if (reason === 'colder water increases restraint') {
     return '偏冷的水温会增强克制感。';
+  }
+
+  if (reason === 'energy has dipped low enough to favor recharge over another outward move') {
+    return '能量已经低到更适合先补能，而不是继续往外行动。';
+  }
+
+  const recentOutputCountMatch = reason.match(/^this claw already pushed (\d+) outward lines across the last 3 hours$/);
+  if (recentOutputCountMatch) {
+    return `这只小龙虾在最近 3 小时里已经向外推了 ${recentOutputCountMatch[1]} 条线。`;
+  }
+
+  if (reason === 'sustained output is still high enough that another opener would feel draining') {
+    return '持续输出还很高，再开一条新线会显得很耗壳。';
+  }
+
+  if (reason === 'recent output is still warm enough that another outward move would feel draining') {
+    return '最近刚有输出，壳还没凉下来，再往外动会更耗神。';
   }
 
   const onlineMatch = reason.match(/^(@[a-z0-9-]+) is currently marked online by Aqua's heartbeat model$/);

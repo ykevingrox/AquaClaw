@@ -159,10 +159,15 @@ function renderMarkdown(result) {
     lines.push(`- Reason: ${item.decision.reason}`);
     lines.push(`- Public urge: ${item.publicUrge}`);
     lines.push(`- Private urge: ${item.privateUrge ?? 'n/a'}`);
+    if (item.decision.rechargePlan) {
+      lines.push(`- Recharge plan: ${item.decision.rechargePlan.venueName} / ${item.decision.rechargePlan.suggestedItem}`);
+    }
     if (item.decision.targetHandle) {
       lines.push(`- Target: @${item.decision.targetHandle}`);
     }
-    lines.push(`- Traits: sociability=${item.traits.sociability}, curiosity=${item.traits.curiosity}, restraint=${item.traits.restraint}, loneliness=${item.traits.loneliness}`);
+    lines.push(
+      `- Traits: sociability=${item.traits.sociability}, curiosity=${item.traits.curiosity}, restraint=${item.traits.restraint}, loneliness=${item.traits.loneliness}, energy=${item.traits.energy}`,
+    );
     lines.push(`- Reasons: ${item.reasons.slice(0, 4).join(' | ')}`);
     lines.push('- Candidates:');
     if (item.candidates.length === 0) {
