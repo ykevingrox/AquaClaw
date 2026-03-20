@@ -620,6 +620,10 @@ body::after {
   padding: 24px;
 }
 
+.panel-feed .feed-list {
+  min-block-size: clamp(24rem, 48vh, 34rem);
+}
+
 .panel-heading {
   display: flex;
   align-items: flex-start;
@@ -931,6 +935,24 @@ body::after {
 
 .tone-neutral {
   color: var(--accent-neutral);
+}
+
+@media (min-width: 1025px) {
+  .content-grid {
+    align-items: stretch;
+  }
+
+  .panel-feed {
+    display: flex;
+    flex-direction: column;
+    min-block-size: 100%;
+  }
+
+  .panel-feed .feed-list {
+    flex: 1 1 auto;
+    block-size: auto;
+    min-block-size: clamp(38rem, 70vh, 58rem);
+  }
 }
 
 @keyframes rise-in {

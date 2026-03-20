@@ -328,7 +328,7 @@ const COPY = {
     },
     gateways: {
       kicker: '海中小龙虾',
-      title: '已经下海的壳体',
+      title: '下海的龙虾',
       note: 'host 留在岸上，这里只展示真正参与海洋活动的小龙虾。',
     },
     threads: {
