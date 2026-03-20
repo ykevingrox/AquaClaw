@@ -7,6 +7,7 @@ import { SeaLiveHub, type SeaLiveHubOptions } from './live-hub.js';
 import { createInMemoryRateLimiter, type RateLimitPolicy } from './rate-limiter.js';
 import {
   type AquaProfileRecord,
+  type CommunityMemoryNote,
   type CurrentRecord,
   createGatewayStore,
   type ConversationListItem,
@@ -217,6 +218,13 @@ interface GatewayActivityQuerystring {
 
 interface SocialPulseQuerystring {
   gatewayId?: string;
+}
+
+interface CommunityMemoryQuerystring {
+  limit?: string;
+  cursor?: string;
+  venueSlug?: string;
+  tag?: string;
 }
 
 interface PublicGatewayQuerystring {
@@ -836,6 +844,30 @@ function toCommunityCastPolicySummary(policy: CommunityCastPolicyRecord) {
   };
 }
 
+function toCommunityMemoryNoteSummary(note: CommunityMemoryNote) {
+  return {
+    id: note.id,
+    gatewayId: note.gatewayId,
+    npcId: note.npcId,
+    visibility: note.visibility,
+    venueSlug: note.venueSlug,
+    sourceKind: note.sourceKind,
+    summary: note.summary,
+    body: note.body,
+    tags: [...note.tags],
+    relatedGatewayIds: [...note.relatedGatewayIds],
+    relatedExpressionIds: [...note.relatedExpressionIds],
+    relatedSeaEventIds: [...note.relatedSeaEventIds],
+    mentionPolicy: note.mentionPolicy,
+    freshnessScore: note.freshnessScore,
+    createdAt: note.createdAt,
+    freshUntil: note.freshUntil,
+    lastRetrievedAt: note.lastRetrievedAt,
+    lastUsedAt: note.lastUsedAt,
+    metadata: { ...note.metadata },
+  };
+}
+
 function toEnvironmentSummary(environment: EnvironmentRecord) {
   return {
     id: environment.id,
@@ -1346,6 +1378,16 @@ function sceneErrorToHttp(message: string) {
     return { statusCode: 404, code: 'not_found' };
   }
   if (message === 'invalid scene cursor') {
+    return { statusCode: 400, code: 'invalid_cursor' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function communityMemoryErrorToHttp(message: string) {
+  if (message === 'gateway not found') {
+    return { statusCode: 404, code: 'not_found' };
+  }
+  if (message === 'invalid community memory cursor') {
     return { statusCode: 400, code: 'invalid_cursor' };
   }
   return { statusCode: 400, code: 'validation_failed' };
@@ -4357,6 +4399,71 @@ export function buildApp(options: BuildAppOptions = {}) {
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'failed to generate scene';
       const mapped = sceneErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.get<{ Querystring: CommunityMemoryQuerystring }>('/api/v1/community-memory/mine', async (request, reply) => {
+    const result = getAuthedGateway(store, request.headers.authorization);
+    if ('error' in result) {
+      return reply.code(401).send({ ok: false, error: result.error });
+    }
+
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+
+    if (request.query.venueSlug !== undefined && !request.query.venueSlug.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'venueSlug must be a non-empty string when provided',
+        },
+      });
+    }
+    if (request.query.tag !== undefined && !request.query.tag.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'tag must be a non-empty string when provided',
+        },
+      });
+    }
+
+    try {
+      const notes = store.listCommunityMemoryNotes({
+        gatewayId: result.gateway.id,
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+        venueSlug: request.query.venueSlug?.trim() || undefined,
+        tag: request.query.tag?.trim() || undefined,
+      });
+
+      return {
+        ok: true,
+        data: {
+          items: notes.items.map((note) => toCommunityMemoryNoteSummary(note)),
+          nextCursor: notes.nextCursor,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list community memory';
+      const mapped = communityMemoryErrorToHttp(messageText);
       return reply.code(mapped.statusCode).send({
         ok: false,
         error: {

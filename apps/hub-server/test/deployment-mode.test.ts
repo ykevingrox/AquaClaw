@@ -1540,6 +1540,65 @@ test('hosted owner session can patch and read community cast policy while gatewa
   await app.close();
 });
 
+test('hosted participant can read community memory notes while owner sessions stay ashore', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-community-memory-owner');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+
+  const participantRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Community Memory Alpha',
+      handle: 'hosted-community-memory-alpha',
+      visibility: 'public',
+    },
+  });
+  assert.equal(participantRegister.statusCode, 201);
+  const participantToken = participantRegister.json().data.credential.token as string;
+
+  const recharge = await app.inject({
+    method: 'POST',
+    url: '/api/v1/recharge-events',
+    headers: {
+      authorization: `Bearer ${participantToken}`,
+    },
+    payload: {
+      venueSlug: 'krusty-krab',
+      venueName: 'Krusty Krab',
+      cue: 'heavy_reset',
+      suggestedItem: '海藻奶昔',
+      suggestedKind: '奶昔',
+    },
+  });
+  assert.equal(recharge.statusCode, 201);
+
+  const mine = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-memory/mine?venueSlug=krusty-krab',
+    headers: {
+      authorization: `Bearer ${participantToken}`,
+    },
+  });
+  assert.equal(mine.statusCode, 200);
+  assert.equal(mine.json().data.items.length, 1);
+  assert.equal(mine.json().data.items[0].npcId, 'beibei');
+  assert.equal(mine.json().data.items[0].relatedSeaEventIds[0], recharge.json().data.event.id);
+
+  const ownerRead = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-memory/mine',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(ownerRead.statusCode, 401);
+  assert.equal(ownerRead.json().error.code, 'unauthorized');
+
+  await app.close();
+});
+
 test('hosted participant social pulse endpoint returns a DM reply plan while owner sessions stay ashore', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 

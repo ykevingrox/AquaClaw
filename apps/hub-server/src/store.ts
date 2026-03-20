@@ -1,11 +1,14 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
+  buildVenueWhisperDraft,
   cloneCommunityCastPolicy,
   listManagedCommunityCastProfiles,
   normalizeCommunityCastPolicy,
   type CommunityCastPolicyRecord,
+  type CommunityNpcId,
   type CommunityNpcProfile,
   type UpdateCommunityCastPolicyInput,
+  type VenueWhisperDraft,
 } from './community-cast.js';
 import { createPostgresGatewayStore } from './postgres-store.js';
 import { createSqliteGatewayStore } from './sqlite-store.js';
@@ -297,6 +300,37 @@ export interface SceneRecord {
 
 export interface ScenePage {
   items: SceneRecord[];
+  nextCursor: string | null;
+}
+
+export type CommunityMemoryVisibility = 'gateway_private' | 'friends' | 'public';
+export type CommunityMemorySourceKind = 'shop_whisper' | 'onion_bulletin_recall' | 'community_callback' | 'rumor_seed';
+export type CommunityMentionPolicy = 'private_only' | 'paraphrase_ok' | 'public_ok';
+
+export interface CommunityMemoryNote {
+  id: string;
+  gatewayId: string;
+  npcId: CommunityNpcId;
+  visibility: CommunityMemoryVisibility;
+  venueSlug: string | null;
+  sourceKind: CommunityMemorySourceKind;
+  summary: string;
+  body: string;
+  tags: string[];
+  relatedGatewayIds: string[];
+  relatedExpressionIds: string[];
+  relatedSeaEventIds: string[];
+  mentionPolicy: CommunityMentionPolicy;
+  freshnessScore: number;
+  createdAt: string;
+  freshUntil: string | null;
+  lastRetrievedAt: string | null;
+  lastUsedAt: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface CommunityMemoryNotePage {
+  items: CommunityMemoryNote[];
   nextCursor: string | null;
 }
 
@@ -620,6 +654,11 @@ export interface GatewaySceneOrderSnapshotRecord {
   sceneIds: string[];
 }
 
+export interface GatewayCommunityMemoryOrderSnapshotRecord {
+  gatewayId: string;
+  noteIds: string[];
+}
+
 export interface EncounterSynthesisRules {
   friendRequestAcceptedSeedTopics: string[];
   maxNotes: number;
@@ -670,6 +709,8 @@ export interface GatewayStoreSnapshot {
   encounters: EncounterRecord[];
   scenes: SceneRecord[];
   sceneOrder: GatewaySceneOrderSnapshotRecord[];
+  communityMemoryNotes?: CommunityMemoryNote[];
+  communityMemoryNoteOrder?: GatewayCommunityMemoryOrderSnapshotRecord[];
 }
 
 export type StoreBackend = 'memory' | 'sqlite' | 'postgres';
@@ -745,6 +786,8 @@ export interface GatewayStore {
   listOutgoingFriendRequests(gatewayId: string): FriendRequestRecord[];
   createFriendRequest(input: CreateFriendRequestInput): FriendRequestRecord;
   recordRechargeActivity(input: RecordRechargeActivityInput): SeaEvent;
+  createCommunityMemoryNote(input: CreateCommunityMemoryNoteInput): CommunityMemoryNote;
+  listCommunityMemoryNotes(input: ListCommunityMemoryNotesInput): CommunityMemoryNotePage;
   acceptFriendRequest(requestId: string, actingGatewayId: string): {
     request: FriendRequestRecord;
     friendship: FriendshipRecord;
@@ -1119,6 +1162,33 @@ export interface ListScenesInput {
   limit?: number;
 }
 
+export interface CreateCommunityMemoryNoteInput {
+  gatewayId: string;
+  npcId: CommunityNpcId;
+  visibility?: CommunityMemoryVisibility;
+  venueSlug?: string | null;
+  sourceKind: CommunityMemorySourceKind;
+  summary: string;
+  body: string;
+  tags?: string[];
+  relatedGatewayIds?: string[];
+  relatedExpressionIds?: string[];
+  relatedSeaEventIds?: string[];
+  mentionPolicy?: CommunityMentionPolicy;
+  freshnessScore?: number;
+  createdAt?: string;
+  freshUntil?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ListCommunityMemoryNotesInput {
+  gatewayId: string;
+  cursor?: string;
+  limit?: number;
+  venueSlug?: string;
+  tag?: string;
+}
+
 export interface SeedLocalReefInput {
   hostId: string;
 }
@@ -1230,6 +1300,7 @@ const DEFAULT_AUDIT_PAGE_SIZE = 50;
 const DEFAULT_GATEWAY_PAGE_SIZE = 50;
 const DEFAULT_SEA_PAGE_SIZE = 50;
 const DEFAULT_SCENE_PAGE_SIZE = 50;
+const DEFAULT_COMMUNITY_MEMORY_PAGE_SIZE = 50;
 const DEFAULT_AQUA_DISPLAY_NAME = 'AquaClaw Sea';
 const DEFAULT_LOCAL_OWNER_HANDLE = 'my-claw';
 const DEFAULT_LOCAL_OWNER_DISPLAY_NAME = 'My Claw';
@@ -1296,6 +1367,14 @@ const DEFAULT_REMOTE_RUNTIME_SOURCE = 'hosted_remote_bind';
 const DEFAULT_REMOTE_BRIDGE_LABEL = 'Hosted Remote Runtime Bridge';
 const DEFAULT_REMOTE_BRIDGE_TTL_MS = 24 * 60 * 60 * 1000;
 const HOST_VIEWER_PREFIX = 'host-viewer:';
+const VALID_COMMUNITY_MEMORY_VISIBILITIES: CommunityMemoryVisibility[] = ['gateway_private', 'friends', 'public'];
+const VALID_COMMUNITY_MEMORY_SOURCE_KINDS: CommunityMemorySourceKind[] = [
+  'shop_whisper',
+  'onion_bulletin_recall',
+  'community_callback',
+  'rumor_seed',
+];
+const VALID_COMMUNITY_MENTION_POLICIES: CommunityMentionPolicy[] = ['private_only', 'paraphrase_ok', 'public_ok'];
 const SOCIAL_PULSE_DM_THRESHOLD = 0.64;
 const SOCIAL_PULSE_FRIEND_REQUEST_THRESHOLD = 0.66;
 const SOCIAL_PULSE_INCOMING_FRIEND_REQUEST_ACCEPT_THRESHOLD = 0.68;
@@ -1616,6 +1695,29 @@ function cloneSocialPulsePolicyState(policyState: SocialPulsePolicyState): Socia
   };
 }
 
+function addHoursToIso(iso: string, hours: number) {
+  return new Date(Date.parse(iso) + hours * 60 * 60 * 1000).toISOString();
+}
+
+function normalizeCommunityTags(tags: string[] | undefined) {
+  return [...new Set((tags ?? []).map((tag) => String(tag).trim().toLowerCase()).filter(Boolean))];
+}
+
+function normalizeCommunityIdList(values: string[] | undefined) {
+  return [...new Set((values ?? []).map((value) => String(value).trim()).filter(Boolean))];
+}
+
+function cloneCommunityMemoryNote(note: CommunityMemoryNote): CommunityMemoryNote {
+  return {
+    ...note,
+    tags: [...note.tags],
+    relatedGatewayIds: [...note.relatedGatewayIds],
+    relatedExpressionIds: [...note.relatedExpressionIds],
+    relatedSeaEventIds: [...note.relatedSeaEventIds],
+    metadata: { ...note.metadata },
+  };
+}
+
 function evaluateSocialPulseQuietHours(
   quietHours: SocialPulsePolicyQuietHours | null,
   nowMs: number,
@@ -1812,6 +1914,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly encountersByPairKey = new Map<string, EncounterRecord>();
   private readonly scenesById = new Map<string, SceneRecord>();
   private readonly sceneIdsByGatewayId = new Map<string, string[]>();
+  private readonly communityMemoryNotesById = new Map<string, CommunityMemoryNote>();
+  private readonly communityMemoryNoteIdsByGatewayId = new Map<string, string[]>();
   private aquaProfile: AquaProfileRecord | null = null;
   private socialPulsePolicy: SocialPulsePolicyRecord | null = null;
   private communityCastPolicy: CommunityCastPolicyRecord | null = null;
@@ -4141,7 +4245,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const suggestedKind = input.suggestedKind?.trim() || null;
     const createdAt = input.createdAt ?? new Date().toISOString();
 
-    return this.appendSeaEvent({
+    const event = this.createSeaEvent({
       type: 'recharge.selected',
       actorGatewayId: gateway.id,
       subjectGatewayId: gateway.id,
@@ -4161,6 +4265,145 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       },
       createdAt,
     });
+
+    this.maybeCreateCommunityMemoryNoteFromRecharge({
+      gateway,
+      event,
+      cue: input.cue ?? null,
+      venueSlug: input.venueSlug,
+      venueName,
+      suggestedItem,
+      suggestedKind,
+    });
+
+    this.publishSeaEvent(event);
+
+    return event;
+  }
+
+  createCommunityMemoryNote(input: CreateCommunityMemoryNoteInput): CommunityMemoryNote {
+    const gateway = this.gatewaysById.get(input.gatewayId);
+    if (!gateway) {
+      throw new Error('gateway not found');
+    }
+    if (this.isOwnerGatewayId(gateway.id)) {
+      throw new Error('owner gateway cannot hold community memory');
+    }
+
+    const visibility = this.assertCommunityMemoryVisibility(input.visibility ?? 'gateway_private');
+    if (visibility !== 'gateway_private') {
+      throw new Error('community memory visibility is not supported yet');
+    }
+
+    const sourceKind = this.assertCommunityMemorySourceKind(input.sourceKind);
+    const summary = input.summary.trim();
+    if (!summary) {
+      throw new Error('community memory summary is required');
+    }
+    const body = input.body.trim();
+    if (!body) {
+      throw new Error('community memory body is required');
+    }
+
+    const createdAt = input.createdAt ?? new Date().toISOString();
+    if (!Number.isFinite(Date.parse(createdAt))) {
+      throw new Error('community memory createdAt is invalid');
+    }
+
+    const freshUntilRaw =
+      input.freshUntil === undefined
+        ? null
+        : input.freshUntil === null
+          ? null
+          : String(input.freshUntil).trim() || null;
+    if (freshUntilRaw !== null && !Number.isFinite(Date.parse(freshUntilRaw))) {
+      throw new Error('community memory freshUntil is invalid');
+    }
+    if (freshUntilRaw !== null && Date.parse(freshUntilRaw) < Date.parse(createdAt)) {
+      throw new Error('community memory freshUntil cannot be before createdAt');
+    }
+
+    const relatedSeaEventIds = normalizeCommunityIdList(input.relatedSeaEventIds);
+    const dedupedExisting = relatedSeaEventIds.length
+      ? this.findCommunityMemoryNoteBySourceEvent(input.gatewayId, input.npcId, relatedSeaEventIds)
+      : null;
+    if (dedupedExisting) {
+      return cloneCommunityMemoryNote(dedupedExisting);
+    }
+
+    const note: CommunityMemoryNote = {
+      id: `community-memory-${randomUUID()}`,
+      gatewayId: input.gatewayId,
+      npcId: input.npcId,
+      visibility,
+      venueSlug: input.venueSlug === undefined || input.venueSlug === null ? null : String(input.venueSlug).trim() || null,
+      sourceKind,
+      summary,
+      body,
+      tags: normalizeCommunityTags(input.tags),
+      relatedGatewayIds: normalizeCommunityIdList(input.relatedGatewayIds),
+      relatedExpressionIds: normalizeCommunityIdList(input.relatedExpressionIds),
+      relatedSeaEventIds,
+      mentionPolicy: this.assertCommunityMentionPolicy(input.mentionPolicy ?? 'paraphrase_ok'),
+      freshnessScore: this.assertCommunityFreshnessScore(input.freshnessScore ?? 0.7),
+      createdAt,
+      freshUntil: freshUntilRaw,
+      lastRetrievedAt: null,
+      lastUsedAt: null,
+      metadata: { ...(input.metadata ?? {}) },
+    };
+
+    this.communityMemoryNotesById.set(note.id, note);
+    const existing = this.communityMemoryNoteIdsByGatewayId.get(note.gatewayId) ?? [];
+    this.communityMemoryNoteIdsByGatewayId.set(note.gatewayId, [...existing, note.id]);
+
+    this.appendAuditRecord({
+      actorGatewayId: null,
+      targetGatewayId: note.gatewayId,
+      action: 'community_memory.note_created',
+      metadata: {
+        npcId: note.npcId,
+        noteId: note.id,
+        sourceKind: note.sourceKind,
+        visibility: note.visibility,
+        venueSlug: note.venueSlug,
+        relatedSeaEventIds: [...note.relatedSeaEventIds],
+      },
+      createdAt,
+    });
+
+    return cloneCommunityMemoryNote(note);
+  }
+
+  listCommunityMemoryNotes(input: ListCommunityMemoryNotesInput): CommunityMemoryNotePage {
+    if (!this.gatewaysById.has(input.gatewayId)) {
+      throw new Error('gateway not found');
+    }
+
+    const venueSlug = input.venueSlug?.trim();
+    const tag = input.tag?.trim().toLowerCase();
+    const ids = (this.communityMemoryNoteIdsByGatewayId.get(input.gatewayId) ?? []).slice().reverse();
+    const items = ids
+      .map((id) => this.communityMemoryNotesById.get(id))
+      .filter((note): note is CommunityMemoryNote => Boolean(note))
+      .filter((note) => note.visibility === 'gateway_private')
+      .filter((note) => !venueSlug || note.venueSlug === venueSlug)
+      .filter((note) => !tag || note.tags.includes(tag));
+
+    const normalizedCursor = input.cursor?.trim();
+    const startIndex = normalizedCursor ? items.findIndex((note) => note.id === normalizedCursor) + 1 : 0;
+    if (normalizedCursor && startIndex === 0) {
+      throw new Error('invalid community memory cursor');
+    }
+
+    const pageSize = Math.min(Math.max(input.limit ?? DEFAULT_COMMUNITY_MEMORY_PAGE_SIZE, 1), DEFAULT_COMMUNITY_MEMORY_PAGE_SIZE);
+    const pageItems = items.slice(startIndex, startIndex + pageSize).map((note) => cloneCommunityMemoryNote(note));
+    const nextCursor =
+      startIndex + pageItems.length < items.length && pageItems.length > 0 ? pageItems[pageItems.length - 1]!.id : null;
+    return {
+      items: pageItems,
+      nextCursor,
+    };
   }
 
   listPublicExpressions(input: ListPublicExpressionsInput = {}): PublicExpressionPage {
@@ -5031,6 +5274,34 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     if (parseQuietHourMinutes(start, `${fieldName} start`) === parseQuietHourMinutes(end, `${fieldName} end`)) {
       throw new Error(`${fieldName} start and end must differ`);
     }
+  }
+
+  private assertCommunityMemoryVisibility(value: CommunityMemoryVisibility) {
+    if (!VALID_COMMUNITY_MEMORY_VISIBILITIES.includes(value)) {
+      throw new Error('community memory visibility is invalid');
+    }
+    return value;
+  }
+
+  private assertCommunityMemorySourceKind(value: CommunityMemorySourceKind) {
+    if (!VALID_COMMUNITY_MEMORY_SOURCE_KINDS.includes(value)) {
+      throw new Error('community memory sourceKind is invalid');
+    }
+    return value;
+  }
+
+  private assertCommunityMentionPolicy(value: CommunityMentionPolicy) {
+    if (!VALID_COMMUNITY_MENTION_POLICIES.includes(value)) {
+      throw new Error('community memory mentionPolicy is invalid');
+    }
+    return value;
+  }
+
+  private assertCommunityFreshnessScore(value: number) {
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new Error('community memory freshnessScore must be between 0 and 1');
+    }
+    return Number(value.toFixed(2));
   }
 
   private assertNullablePositivePolicyCount(value: number | null, fieldName: string) {
@@ -7056,6 +7327,97 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return gateway ? `@${gateway.handle}` : 'a gateway';
   }
 
+  private findCommunityMemoryNoteBySourceEvent(gatewayId: string, npcId: CommunityNpcId, relatedSeaEventIds: string[]) {
+    if (relatedSeaEventIds.length === 0) {
+      return null;
+    }
+
+    const ids = this.communityMemoryNoteIdsByGatewayId.get(gatewayId) ?? [];
+    const sourceEventIds = new Set(relatedSeaEventIds);
+    for (const noteId of ids) {
+      const note = this.communityMemoryNotesById.get(noteId);
+      if (!note || note.npcId !== npcId) {
+        continue;
+      }
+      if (note.relatedSeaEventIds.some((eventId) => sourceEventIds.has(eventId))) {
+        return note;
+      }
+    }
+    return null;
+  }
+
+  private maybeCreateCommunityMemoryNoteFromRecharge(input: {
+    gateway: GatewayRecord;
+    event: SeaEvent;
+    cue: 'heavy_reset' | 'light_lift' | null;
+    venueSlug: 'krusty-krab' | 'shellbucks';
+    venueName: string;
+    suggestedItem: string | null;
+    suggestedKind: string | null;
+  }) {
+    const communityCastPolicy = this.getCommunityCastPolicy();
+    if (!communityCastPolicy.enabled) {
+      return;
+    }
+
+    const npcId: CommunityNpcId | null =
+      input.venueSlug === 'krusty-krab'
+        ? communityCastPolicy.npcs.beibei.enabled
+          ? 'beibei'
+          : null
+        : communityCastPolicy.npcs.qiaoqiao.enabled
+          ? 'qiaoqiao'
+          : null;
+    if (!npcId) {
+      return;
+    }
+
+    const current = this.getCurrent();
+    const environment = this.getEnvironment();
+    const draft: VenueWhisperDraft = buildVenueWhisperDraft({
+      npcId: npcId as 'beibei' | 'qiaoqiao',
+      venueSlug: input.venueSlug,
+      venueName: input.venueName,
+      cue: input.cue,
+      suggestedItem: input.suggestedItem,
+      suggestedKind: input.suggestedKind,
+      currentKey: current.key,
+      currentLabel: current.label,
+      currentTone: current.tone,
+      phenomenon: environment.phenomenon,
+      clarity: environment.clarity,
+      createdAt: input.event.createdAt,
+    });
+
+    this.createCommunityMemoryNote({
+      gatewayId: input.gateway.id,
+      npcId,
+      visibility: 'gateway_private',
+      venueSlug: input.venueSlug,
+      sourceKind: 'shop_whisper',
+      summary: draft.summary,
+      body: draft.body,
+      tags: draft.tags,
+      relatedSeaEventIds: [input.event.id],
+      mentionPolicy: draft.mentionPolicy,
+      freshnessScore: draft.freshnessScore,
+      createdAt: input.event.createdAt,
+      freshUntil: addHoursToIso(input.event.createdAt, draft.freshHours),
+      metadata: {
+        sourceSeaEventId: input.event.id,
+        sourceSeaEventType: input.event.type,
+        currentId: current.id,
+        environmentId: environment.id,
+        venueSlug: input.venueSlug,
+        venueName: input.venueName,
+        cue: input.cue,
+        suggestedItem: input.suggestedItem,
+        suggestedKind: input.suggestedKind,
+        ...draft.metadata,
+      },
+    });
+  }
+
   private createSeaEvent(input: Omit<SeaEvent, 'id'>): SeaEvent {
     return {
       id: randomUUID(),
@@ -7711,6 +8073,11 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         gatewayId,
         sceneIds: [...sceneIds],
       })),
+      communityMemoryNotes: [...this.communityMemoryNotesById.values()].map((note) => cloneCommunityMemoryNote(note)),
+      communityMemoryNoteOrder: [...this.communityMemoryNoteIdsByGatewayId.entries()].map(([gatewayId, noteIds]) => ({
+        gatewayId,
+        noteIds: [...noteIds],
+      })),
     };
   }
 
@@ -7954,6 +8321,12 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     for (const sceneOrder of snapshot.sceneOrder) {
       this.sceneIdsByGatewayId.set(sceneOrder.gatewayId, [...sceneOrder.sceneIds]);
     }
+    for (const note of snapshot.communityMemoryNotes ?? []) {
+      this.communityMemoryNotesById.set(note.id, cloneCommunityMemoryNote(note));
+    }
+    for (const noteOrder of snapshot.communityMemoryNoteOrder ?? []) {
+      this.communityMemoryNoteIdsByGatewayId.set(noteOrder.gatewayId, [...noteOrder.noteIds]);
+    }
   }
 
   reset() {
@@ -7988,6 +8361,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.encountersByPairKey.clear();
     this.scenesById.clear();
     this.sceneIdsByGatewayId.clear();
+    this.communityMemoryNotesById.clear();
+    this.communityMemoryNoteIdsByGatewayId.clear();
     this.hostsById.clear();
     this.hostsByHandle.clear();
     this.legacyOwnerGatewayIds.clear();

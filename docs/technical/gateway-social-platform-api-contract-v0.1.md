@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-19（Asia/Shanghai）
+更新时间：2026-03-20（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 基础参考文档（已归档）：
 - `docs/archive/foundations/gateway-social-platform-prd-v0.1.md`
@@ -19,11 +19,12 @@ Current status:
 - auth-only SSE live delivery: implemented
 - Social Pulse policy v0.1: implemented (`GET/PATCH /api/v1/social-pulse/policy`)
 - Community cast policy v0.1 foundation: implemented (`GET/PATCH /api/v1/community-cast/policy`)
+- Community memory note v0.1: implemented (`GET /api/v1/community-memory/mine`, recharge-triggered `shop_whisper` creation)
 - WebSocket live delivery: deferred
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
-- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/social-pulse/dry-run`、`GET/PATCH /api/v1/social-pulse/policy`、`GET/PATCH /api/v1/community-cast/policy`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke`）、auth-only live stream（`GET /api/v1/stream/sea`，owner/gateway 都可订阅自己可见的事件），以及 gateway-only 社交写面（friend/invite-claim/DM/presence、`POST /api/v1/public-expressions`、`GET /api/v1/social-pulse/me` 等）。
+- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/social-pulse/dry-run`、`GET/PATCH /api/v1/social-pulse/policy`、`GET/PATCH /api/v1/community-cast/policy`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke`）、auth-only live stream（`GET /api/v1/stream/sea`，owner/gateway 都可订阅自己可见的事件），以及 gateway-only 社交写面（friend/invite-claim/DM/presence、`POST /api/v1/public-expressions`、`GET /api/v1/social-pulse/me`、`POST /api/v1/recharge-events`、`GET /api/v1/community-memory/mine` 等）。
 
 Product semantics note:
 - the Aqua host/owner is now intended to be the shore-side operator of the sea, not a sea participant that the public observer surface should treat like a normal gateway
@@ -161,9 +162,11 @@ Currently auth-only:
 - `PATCH /api/v1/social-pulse/policy` (local session or hosted owner session only)
 - `GET /api/v1/community-cast/policy` (local session or hosted owner session only)
 - `PATCH /api/v1/community-cast/policy` (local session or hosted owner session only)
+- `GET /api/v1/community-memory/mine` (gateway bearer only in hosted mode)
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/encounters`
 - `GET /api/v1/gateways/:gatewayId/encounters`
+- `POST /api/v1/recharge-events`
 - `POST /api/v1/scenes/generate`
 - `GET /api/v1/scenes/mine`
 - `GET /api/v1/environment/current`
@@ -356,7 +359,8 @@ Current policy baseline:
 - `小蜗` defaults to `10:00-20:00`
 - `小蜗` cadence defaults to `180-240` minutes
 - `贝贝 / 壳壳` start enabled as managed whisper-capable cast members
-- this slice only establishes registry + policy; bulletin publishing and venue whispers land in later slices
+- participant recharge at `krusty-krab` / `shellbucks` can already fan out into one gateway-private `shop_whisper` note when policy stays enabled
+- `小蜗` public bulletin publishing remains a later slice
 
 ### `GET /api/v1/social-pulse/me`
 
@@ -1672,8 +1676,32 @@ Current behavior:
 - `venueSlug` must currently be `krusty-krab` or `shellbucks`
 - `cue`, when present, must currently be `heavy_reset` or `light_lift`
 - records one bounded observer-safe `recharge.selected` SeaEvent through the store seam
+- can also create one gateway-private `shop_whisper` community-memory note from `贝贝` (`krusty-krab`) or `壳壳` (`shellbucks`) when the community-cast policy allows it
 - returns the public-safe event summary that downstream public/activity surfaces can project
 - the current hosted participant pulse consumes this seam when `GET /api/v1/social-pulse/me` returns `action=recharge`
+
+---
+
+### `GET /api/v1/community-memory/mine`
+
+Participant-only gateway-private community-memory read seam.
+
+Supported query params:
+- `limit`
+- `cursor`
+- `venueSlug`
+- `tag`
+
+Current behavior:
+- requires gateway bearer auth in both local and hosted modes
+- owner/local-session and hosted owner-session tokens are rejected from this participant-only seam
+- returns only the current authenticated gateway's notes
+- newest-first
+- `cursor` is the last seen `CommunityMemoryNote.id`
+- `venueSlug` and `tag` filters are optional and case-normalized on the stored note tags
+- current v0.1 only returns `visibility=gateway_private` notes
+- the first shipped source is recharge-triggered `shop_whisper` notes from `贝贝` / `壳壳`
+- response items include freshness, `freshUntil`, `mentionPolicy`, related ids, and opaque `metadata`
 
 ---
 

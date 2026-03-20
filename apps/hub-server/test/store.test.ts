@@ -118,6 +118,184 @@ test('GatewayStore can patch community cast policy with nested NPC settings', ()
   assert.equal(readBack.npcs.xiaowo.minIntervalMinutes, 210);
 });
 
+test('GatewayStore community memory notes stay gateway-private and support filters, pagination, and source dedupe', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Memory Alpha', handle: 'memory-alpha-store' });
+  const beta = registerGateway(store, { displayName: 'Memory Beta', handle: 'memory-beta-store' });
+
+  const first = store.createCommunityMemoryNote({
+    gatewayId: alpha.id,
+    npcId: 'beibei',
+    visibility: 'gateway_private',
+    venueSlug: 'krusty-krab',
+    sourceKind: 'shop_whisper',
+    summary: '贝贝递来一条轻八卦。',
+    body: '记住谁先把路线吹热。',
+    tags: ['gossip', 'Venue:Krusty-Krab'],
+    relatedSeaEventIds: ['sea-event-1'],
+    freshUntil: '2026-03-22T00:00:00.000Z',
+    createdAt: '2026-03-20T10:00:00.000Z',
+  });
+  const deduped = store.createCommunityMemoryNote({
+    gatewayId: alpha.id,
+    npcId: 'beibei',
+    visibility: 'gateway_private',
+    venueSlug: 'krusty-krab',
+    sourceKind: 'shop_whisper',
+    summary: 'should dedupe',
+    body: 'should dedupe',
+    relatedSeaEventIds: ['sea-event-1'],
+    createdAt: '2026-03-20T10:05:00.000Z',
+  });
+  assert.equal(deduped.id, first.id);
+
+  const second = store.createCommunityMemoryNote({
+    gatewayId: alpha.id,
+    npcId: 'qiaoqiao',
+    visibility: 'gateway_private',
+    venueSlug: 'shellbucks',
+    sourceKind: 'shop_whisper',
+    summary: '壳壳丢下一句观察。',
+    body: '留意谁在借浪表演。',
+    tags: ['observer_note', 'venue:shellbucks'],
+    relatedSeaEventIds: ['sea-event-2'],
+    createdAt: '2026-03-20T11:00:00.000Z',
+  });
+  store.createCommunityMemoryNote({
+    gatewayId: beta.id,
+    npcId: 'beibei',
+    visibility: 'gateway_private',
+    venueSlug: 'krusty-krab',
+    sourceKind: 'shop_whisper',
+    summary: 'Beta note',
+    body: 'Beta private note',
+    relatedSeaEventIds: ['sea-event-3'],
+    createdAt: '2026-03-20T12:00:00.000Z',
+  });
+
+  const pageOne = store.listCommunityMemoryNotes({
+    gatewayId: alpha.id,
+    limit: 1,
+  });
+  assert.equal(pageOne.items.length, 1);
+  assert.equal(pageOne.items[0]?.id, second.id);
+  assert.equal(pageOne.nextCursor, second.id);
+
+  const pageTwo = store.listCommunityMemoryNotes({
+    gatewayId: alpha.id,
+    cursor: pageOne.nextCursor ?? undefined,
+    limit: 1,
+  });
+  assert.equal(pageTwo.items.length, 1);
+  assert.equal(pageTwo.items[0]?.id, first.id);
+  assert.equal(pageTwo.items[0]?.freshUntil, '2026-03-22T00:00:00.000Z');
+  assert.equal(pageTwo.nextCursor, null);
+
+  const shellbucksOnly = store.listCommunityMemoryNotes({
+    gatewayId: alpha.id,
+    venueSlug: 'shellbucks',
+  });
+  assert.equal(shellbucksOnly.items.length, 1);
+  assert.equal(shellbucksOnly.items[0]?.id, second.id);
+
+  const gossipOnly = store.listCommunityMemoryNotes({
+    gatewayId: alpha.id,
+    tag: 'gossip',
+  });
+  assert.equal(gossipOnly.items.length, 1);
+  assert.equal(gossipOnly.items[0]?.id, first.id);
+
+  const betaNotes = store.listCommunityMemoryNotes({
+    gatewayId: beta.id,
+  });
+  assert.equal(betaNotes.items.length, 1);
+
+  assert.throws(
+    () =>
+      store.createCommunityMemoryNote({
+        gatewayId: alpha.id,
+        npcId: 'beibei',
+        visibility: 'public',
+        sourceKind: 'shop_whisper',
+        summary: 'nope',
+        body: 'nope',
+      }),
+    /community memory visibility is not supported yet/,
+  );
+  assert.throws(
+    () =>
+      store.createCommunityMemoryNote({
+        gatewayId: alpha.id,
+        npcId: 'beibei',
+        visibility: 'gateway_private',
+        sourceKind: 'shop_whisper',
+        summary: 'bad expiry',
+        body: 'bad expiry',
+        createdAt: '2026-03-20T12:00:00.000Z',
+        freshUntil: '2026-03-20T11:00:00.000Z',
+      }),
+    /community memory freshUntil cannot be before createdAt/,
+  );
+});
+
+test('GatewayStore recharge venue whisper writes community memory notes and respects community-cast policy disablement', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = registerGateway(store, { displayName: 'Whisper Alpha', handle: 'whisper-alpha-store' });
+
+  const shellbucksEvent = store.recordRechargeActivity({
+    gatewayId: alpha.id,
+    venueSlug: 'shellbucks',
+    venueName: 'ShellBucks',
+    cue: 'light_lift',
+    suggestedItem: '月光水母茶',
+    suggestedKind: '茶饮',
+    createdAt: '2026-03-20T12:00:00.000Z',
+  });
+  let notes = store.listCommunityMemoryNotes({ gatewayId: alpha.id });
+  assert.equal(notes.items.length, 1);
+  assert.equal(notes.items[0]?.npcId, 'qiaoqiao');
+  assert.equal(notes.items[0]?.venueSlug, 'shellbucks');
+  assert.equal(notes.items[0]?.relatedSeaEventIds[0], shellbucksEvent.id);
+  assert.equal(notes.items[0]?.mentionPolicy, 'paraphrase_ok');
+
+  store.updateCommunityCastPolicy({
+    hostId: host.id,
+    npcs: {
+      beibei: {
+        enabled: false,
+      },
+    },
+  });
+  store.recordRechargeActivity({
+    gatewayId: alpha.id,
+    venueSlug: 'krusty-krab',
+    venueName: 'Krusty Krab',
+    cue: 'heavy_reset',
+    suggestedItem: '海藻奶昔',
+    suggestedKind: '奶昔',
+    createdAt: '2026-03-20T13:00:00.000Z',
+  });
+  notes = store.listCommunityMemoryNotes({ gatewayId: alpha.id });
+  assert.equal(notes.items.length, 1);
+
+  store.updateCommunityCastPolicy({
+    hostId: host.id,
+    enabled: false,
+  });
+  store.recordRechargeActivity({
+    gatewayId: alpha.id,
+    venueSlug: 'shellbucks',
+    venueName: 'ShellBucks',
+    cue: 'heavy_reset',
+    suggestedItem: '深海浓缩',
+    suggestedKind: '咖啡',
+    createdAt: '2026-03-20T14:00:00.000Z',
+  });
+  notes = store.listCommunityMemoryNotes({ gatewayId: alpha.id });
+  assert.equal(notes.items.length, 1);
+});
+
 test('createGatewayStore requires databaseUrl for postgres backend', () => {
   assert.throws(
     () => createGatewayStore({ backend: 'postgres' }),

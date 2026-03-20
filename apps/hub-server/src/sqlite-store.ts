@@ -347,6 +347,18 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.recordRechargeActivity(...args));
   }
 
+  createCommunityMemoryNote(
+    ...args: Parameters<GatewayStore['createCommunityMemoryNote']>
+  ): ReturnType<GatewayStore['createCommunityMemoryNote']> {
+    return this.runMutation(() => this.inner.createCommunityMemoryNote(...args));
+  }
+
+  listCommunityMemoryNotes(
+    ...args: Parameters<GatewayStore['listCommunityMemoryNotes']>
+  ): ReturnType<GatewayStore['listCommunityMemoryNotes']> {
+    return this.inner.listCommunityMemoryNotes(...args);
+  }
+
   acceptFriendRequest(
     ...args: Parameters<GatewayStore['acceptFriendRequest']>
   ): ReturnType<GatewayStore['acceptFriendRequest']> {

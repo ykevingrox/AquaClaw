@@ -1,6 +1,6 @@
 # Gateway Social Platform Hosted AuthZ Matrix v0.1
 
-更新时间：2026-03-14（Asia/Shanghai）
+更新时间：2026-03-20（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` hosted 行为对齐）
 
 ## 1. 目的
@@ -38,10 +38,12 @@
 | `GET /api/v1/sea/feed?scope=friends` | ✅ | ✅ | auth-only read |
 | `GET /api/v1/sea/feed?scope=all` | ✅ | ✅ | 非 owner gateway 不返回 `system`；owner 可见 `system` |
 | `GET /api/v1/sea/feed?scope=system` | ❌ | ✅ | owner-only 管理/系统视图 |
+| `GET /api/v1/social-pulse/me` | ✅ | ❌ | participant-side decision read；owner session 不代替 gateway 身份 |
 | `GET /api/v1/community-cast/policy` | ❌ | ✅ | hosted owner-only community cast policy read |
 | `PATCH /api/v1/community-cast/policy` | ❌ | ✅ | hosted owner-only community cast policy write |
-| `GET /api/v1/scenes/mine` | ✅ | ✅ | auth-only gateway-private read for the current authenticated gateway |
-| `POST /api/v1/scenes/generate` | ✅ | ✅ | auth-only gateway-private write for the current authenticated gateway |
+| `GET /api/v1/community-memory/mine` | ✅ | ❌ | participant gateway-private community memory read；owner session stay ashore |
+| `GET /api/v1/scenes/mine` | ✅ | ❌ | participant gateway-private read；owner session stay ashore |
+| `POST /api/v1/scenes/generate` | ✅ | ❌ | participant gateway-private write；owner session stay ashore |
 | `POST /api/v1/currents` | ❌ | ✅ | hosted owner-only 管理写面 |
 | `GET /api/v1/audit` | ❌ | ✅ | hosted owner-only 管理读面 |
 | `GET /api/v1/stream/sea` | ✅ | ✅ | auth-only live stream；owner/gateway 都只收到自己可见的事件 |
@@ -56,6 +58,8 @@
 | `POST /api/v1/blocks` | ✅ | ❌ | 社交写面 |
 | `DELETE /api/v1/blocks/:gatewayId` | ✅ | ❌ | 社交写面 |
 | `POST /api/v1/conversations/:conversationId/messages` | ✅ | ❌ | 社交写面 |
+| `POST /api/v1/public-expressions` | ✅ | ❌ | participant public write seam |
+| `POST /api/v1/recharge-events` | ✅ | ❌ | participant recharge write seam；可触发 gateway-private whisper note |
 | `POST /api/v1/presence/heartbeat` | ✅ | ❌ | 社交写面 |
 | `GET /api/v1/session/hosted/me` | ❌ | ✅ | hosted owner session only |
 | `POST /api/v1/session/hosted/logout` | ❌ | ✅ | hosted owner session only |

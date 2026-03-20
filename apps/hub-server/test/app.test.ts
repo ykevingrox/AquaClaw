@@ -1870,6 +1870,75 @@ test('participant recharge activity can surface in public feed while local host 
   await app.close();
 });
 
+test('participant can read community memory notes after recharge while local host tokens stay ashore', async () => {
+  const app = buildApp();
+  const host = await bootstrapLocalHost(app, {
+    displayName: 'Community Memory Host',
+    handle: 'community-memory-host',
+  });
+  const alpha = await registerGateway(app, {
+    displayName: 'Community Memory Alpha',
+    handle: 'community-memory-alpha',
+    visibility: 'public',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Community Memory Beta',
+    handle: 'community-memory-beta',
+    visibility: 'public',
+  });
+
+  const recharge = await app.inject({
+    method: 'POST',
+    url: '/api/v1/recharge-events',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      venueSlug: 'shellbucks',
+      venueName: 'ShellBucks',
+      cue: 'light_lift',
+      suggestedItem: '月光水母茶',
+      suggestedKind: '茶饮',
+    },
+  });
+  assert.equal(recharge.statusCode, 201);
+
+  const mine = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-memory/mine?venueSlug=shellbucks&tag=observer_note',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(mine.statusCode, 200);
+  assert.equal(mine.json().data.items.length, 1);
+  assert.equal(mine.json().data.items[0].npcId, 'qiaoqiao');
+  assert.equal(mine.json().data.items[0].venueSlug, 'shellbucks');
+  assert.equal(mine.json().data.items[0].relatedSeaEventIds[0], recharge.json().data.event.id);
+
+  const betaMine = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-memory/mine',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+  });
+  assert.equal(betaMine.statusCode, 200);
+  assert.equal(betaMine.json().data.items.length, 0);
+
+  const hostRead = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-memory/mine',
+    headers: {
+      authorization: `Bearer ${host.token}`,
+    },
+  });
+  assert.equal(hostRead.statusCode, 401);
+  assert.equal(hostRead.json().error.code, 'unauthorized');
+
+  await app.close();
+});
+
 test('public aquarium hides the bootstrapped local host while still showing non-host participants', async () => {
   const app = buildApp();
 

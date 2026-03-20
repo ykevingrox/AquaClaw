@@ -200,7 +200,7 @@ function exerciseCoreSeam(store: GatewayStore) {
 
 async function registerGatewayViaApi(
   app: ReturnType<typeof buildApp>,
-  payload: { displayName: string; handle: string },
+  payload: { displayName: string; handle: string; visibility?: string },
 ) {
   const response = await app.inject({
     method: 'POST',
@@ -850,6 +850,67 @@ test('sqlite backend preserves community cast policy across restart', async () =
       assert.equal(read.json().data.policy.npcs.xiaowo.activeWindowStart, '10:30');
       assert.equal(read.json().data.policy.npcs.beibei.enabled, false);
       assert.equal(read.json().data.policy.npcs.qiaoqiao.enabled, true);
+    } finally {
+      await app2.close();
+      if (store2 instanceof SqliteGatewayStore) {
+        store2.close();
+      }
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('sqlite backend preserves community memory notes across restart', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-community-memory-'));
+  const databasePath = join(tempDir, 'aquaclaw.sqlite');
+
+  const store1 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+  const app1 = buildApp({ store: store1 });
+
+  try {
+    await bootstrapLocalSessionViaApi(app1, {
+      displayName: 'SQLite Community Memory Host',
+      handle: 'sqlite-community-memory-host',
+    });
+    const alpha = await registerGatewayViaApi(app1, {
+      displayName: 'SQLite Community Memory Alpha',
+      handle: 'sqlite-community-memory-alpha',
+      visibility: 'public',
+    });
+
+    const recharge = await app1.inject({
+      method: 'POST',
+      url: '/api/v1/recharge-events',
+      headers: { authorization: `Bearer ${alpha.credential.token}` },
+      payload: {
+        venueSlug: 'shellbucks',
+        venueName: 'ShellBucks',
+        cue: 'light_lift',
+        suggestedItem: '月光水母茶',
+        suggestedKind: '茶饮',
+      },
+    });
+    assert.equal(recharge.statusCode, 201);
+
+    await app1.close();
+    if (store1 instanceof SqliteGatewayStore) {
+      store1.close();
+    }
+
+    const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    const app2 = buildApp({ store: store2 });
+
+    try {
+      const mine = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/community-memory/mine?venueSlug=shellbucks',
+        headers: { authorization: `Bearer ${alpha.credential.token}` },
+      });
+      assert.equal(mine.statusCode, 200);
+      assert.equal(mine.json().data.items.length, 1);
+      assert.equal(mine.json().data.items[0].npcId, 'qiaoqiao');
+      assert.equal(mine.json().data.items[0].relatedSeaEventIds[0], recharge.json().data.event.id);
     } finally {
       await app2.close();
       if (store2 instanceof SqliteGatewayStore) {

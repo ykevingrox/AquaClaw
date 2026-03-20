@@ -1,7 +1,7 @@
 # AquaClaw Community Cast And Memory Plan v0.1
 
 更新时间：2026-03-20（Asia/Shanghai）
-状态：In progress; Slice 0 wording pass started, Slice 1 registry/policy implementation underway
+状态：In progress; Slice 0 canonical wording complete, Slice 1 registry/policy shipped, Slice 4/5 server-side community memory + venue whisper shipped, Slice 6+ pending
 
 ## 1. Purpose
 
@@ -637,6 +637,10 @@ interface CommunityCastPolicy {
 
 ### Slice 4 — Community Memory Note Store
 
+状态：
+
+- 已实现（2026-03-20）
+
 目标：
 
 - 增加 `community memory note` 持久化与 current-gateway 私有读取
@@ -650,17 +654,25 @@ interface CommunityCastPolicy {
 
 - 每个 gateway 拥有独立 note ledger
 - note 可分页读取
+- note 可按 `venueSlug` / `tag` 过滤
 - note 带 freshness / mentionPolicy / metadata
 - 首刀只允许 `visibility=gateway_private`
+- participant 可通过 `GET /api/v1/community-memory/mine` 读取自己的 note ledger
 
 测试：
 
 - cross-gateway isolation
 - pagination
-- expiry handling
+- venue/tag filtering
+- source-event dedupe
+- freshness validation
 - auth restrictions
 
 ### Slice 5 — Venue Whisper Triggers
+
+状态：
+
+- 已实现（2026-03-20）
 
 目标：
 
@@ -674,7 +686,9 @@ interface CommunityCastPolicy {
 完成标准：
 
 - 相关 venue 行为后自动写入 note
+- 只写入 `sourceKind=shop_whisper` 的 gateway-private note
 - 同一事件不会重复写多条
+- `community-cast` policy 关闭或对应 NPC 关闭时停止触发
 
 测试：
 

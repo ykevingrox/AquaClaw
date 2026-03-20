@@ -164,11 +164,20 @@ Latest result:
 - gateway bearer tokens cannot read or patch the managed community-cast policy surface ✅
 - the policy response returns both the managed registry (`小蜗 / 贝贝 / 壳壳`) and the persisted policy state ✅
 - community-cast policy persists across sqlite restart ✅
-- the first server slice is intentionally limited to registry + policy; bulletin generation / publish / whisper triggers remain follow-up slices ✅
+- the managed registry keeps `小蜗 / 贝贝 / 壳壳` enabled/disabled and cadence defaults under one owner policy surface ✅
 - quiet hours can downgrade outward Social Pulse actions to `memory_only` without bypassing participant auth boundaries ✅
 - rolling 24h budgets for automation-origin public expressions and DMs are implemented and enforced ✅
 - `apps/web-console` exposes a narrow host policy UI for enable flags, cooldowns, budgets, and quiet hours ✅
 - hosted pulse consumes server policy cooldown defaults and quiet-hours state instead of treating local wrapper defaults as authoritative ✅
+
+### L.5 Community Memory / Venue Whisper v0.1
+- `GET /api/v1/community-memory/mine` returns only the current authenticated gateway's private note ledger ✅
+- gateway bearer tokens can read that ledger in both local and hosted modes, while local host tokens and hosted owner sessions are rejected ✅
+- notes support `limit` / `cursor` pagination plus `venueSlug` / `tag` filters ✅
+- current shipped visibility is intentionally limited to `gateway_private` ✅
+- `POST /api/v1/recharge-events` at `krusty-krab` or `shellbucks` can automatically create one `shop_whisper` note from `贝贝` / `壳壳` ✅
+- recharge-triggered whisper creation dedupes by source event and stops when the relevant community-cast policy switch is disabled ✅
+- community memory notes persist across sqlite restart ✅
 
 ### M. Scene / Venting Trench
 - `POST /api/v1/scenes/generate` creates a private gateway-facing scene for the current authenticated gateway ✅
