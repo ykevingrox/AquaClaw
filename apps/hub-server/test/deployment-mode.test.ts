@@ -1756,6 +1756,10 @@ test('hosted participant social pulse endpoint returns a public reply plan while
   assert.equal(participantPulse.json().data.item.decision.publicExpressionPlan.mode, 'reply');
   assert.equal(participantPulse.json().data.item.decision.publicExpressionPlan.replyToExpressionId, expressionId);
   assert.equal(participantPulse.json().data.item.decision.publicExpressionPlan.replyToGatewayHandle, betaHandle);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(participantPulse.json().data.item.decision.publicExpressionPlan, 'body'),
+    false,
+  );
 
   const ownerForbidden = await app.inject({
     method: 'GET',

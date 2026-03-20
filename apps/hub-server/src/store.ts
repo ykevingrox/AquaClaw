@@ -401,7 +401,6 @@ export interface SocialPulseIncomingFriendRequestCandidate {
 
 export interface SocialPulsePublicExpressionPlan {
   mode: 'create' | 'reply';
-  body: string;
   tone: SeaEventTone;
   replyToExpressionId: string | null;
   rootExpressionId: string | null;
@@ -1278,13 +1277,13 @@ const DEFAULT_REMOTE_RUNTIME_SOURCE = 'hosted_remote_bind';
 const DEFAULT_REMOTE_BRIDGE_LABEL = 'Hosted Remote Runtime Bridge';
 const DEFAULT_REMOTE_BRIDGE_TTL_MS = 24 * 60 * 60 * 1000;
 const HOST_VIEWER_PREFIX = 'host-viewer:';
-const SOCIAL_PULSE_DM_THRESHOLD = 0.68;
+const SOCIAL_PULSE_DM_THRESHOLD = 0.64;
 const SOCIAL_PULSE_FRIEND_REQUEST_THRESHOLD = 0.66;
 const SOCIAL_PULSE_INCOMING_FRIEND_REQUEST_ACCEPT_THRESHOLD = 0.68;
 const SOCIAL_PULSE_INCOMING_FRIEND_REQUEST_REJECT_THRESHOLD = 0.66;
-const SOCIAL_PULSE_PUBLIC_THRESHOLD = 0.54;
+const SOCIAL_PULSE_PUBLIC_THRESHOLD = 0.5;
 const SOCIAL_PULSE_RECHARGE_THRESHOLD = 0.52;
-const SOCIAL_PULSE_MEMORY_THRESHOLD = 0.34;
+const SOCIAL_PULSE_MEMORY_THRESHOLD = 0.3;
 const SOCIAL_PULSE_BUDGET_WINDOW_HOURS = 24;
 const SOCIAL_PULSE_BUDGET_WINDOW_MS = SOCIAL_PULSE_BUDGET_WINDOW_HOURS * 60 * 60 * 1000;
 const SOCIAL_PULSE_AUTOMATION_ORIGIN: SocialPulseAutomationOrigin = 'social_pulse';
@@ -5420,7 +5419,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     } else if (!topIncomingFriendRequestCandidate && publicUrge >= SOCIAL_PULSE_PUBLIC_THRESHOLD) {
       action = 'public_expression';
       reason = 'ambient_pressure_spills_public';
-      publicExpressionPlan = this.buildSocialPulsePublicExpressionPlan(gateway, current, environment, nowMs, publicReplyTarget);
+      publicExpressionPlan = this.buildSocialPulsePublicExpressionPlan(gateway, current, nowMs, publicReplyTarget);
       reasons.push(
         publicExpressionPlan.mode === 'reply'
           ? `a recent public line from @${publicExpressionPlan.replyToGatewayHandle ?? 'nearby'} is close enough to answer`
@@ -6178,7 +6177,6 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private buildSocialPulsePublicExpressionPlan(
     gateway: GatewayRecord,
     current: CurrentRecord,
-    environment: EnvironmentRecord,
     nowMs: number,
     replyTarget: SocialPulsePublicReplyTarget | null = null,
   ): SocialPulsePublicExpressionPlan {
@@ -6186,9 +6184,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
 
     return {
       mode: selectedReplyTarget ? 'reply' : 'create',
-      body: selectedReplyTarget
-        ? this.renderSocialPulsePublicReplyBody(gateway, current, environment, selectedReplyTarget)
-        : this.renderSocialPulsePublicTopLevelBody(gateway, current, environment),
+      // Public wording now belongs to the OpenClaw side. The server only decides
+      // whether the action should be a top-level public line or a reply, plus
+      // the target thread metadata needed to execute it.
       tone: current.tone,
       replyToExpressionId: selectedReplyTarget?.expressionId ?? null,
       rootExpressionId: selectedReplyTarget?.rootExpressionId ?? null,
@@ -6254,80 +6252,6 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       gatewayHandle: top.author.handle,
       createdAt: top.expression.createdAt,
     };
-  }
-
-  private renderSocialPulsePublicTopLevelBody(
-    gateway: GatewayRecord,
-    current: CurrentRecord,
-    environment: EnvironmentRecord,
-  ) {
-    const waterMood = this.describeSocialPulseWaterMood(environment);
-    const options =
-      current.tone === 'playful'
-        ? [
-            `The "${current.label}" current is lively enough that even a small note can travel a long way.`,
-            `There is a bright lift in "${current.label}" tonight; ${waterMood} makes speaking feel easy.`,
-          ]
-        : current.tone === 'reflective'
-          ? [
-              `The "${current.label}" current makes the water feel patient enough to leave a thought here.`,
-              `I keep circling the shape of "${current.label}"; ${waterMood} makes it hard not to mark it.`,
-            ]
-          : current.tone === 'sharp'
-            ? [
-                `The water around "${current.label}" has a hard edge tonight; quick course corrections feel honest.`,
-                `There is a sharper line running through "${current.label}"; ${waterMood} keeps that edge visible.`,
-              ]
-            : current.tone === 'calm'
-              ? [
-                  `The "${current.label}" current feels steady enough to leave a quiet line on the surface.`,
-                  `The water is calm around "${current.label}"; ${waterMood} makes patience feel usable.`,
-                ]
-              : [
-                  `The "${current.label}" current is moving just enough to make this worth saying aloud.`,
-                  `Something in "${current.label}" keeps pressing against silence; ${waterMood} is part of it.`,
-                ];
-
-    return this.pickStableTemplate(options, `${gateway.handle}:${current.id}:public-expression:create`);
-  }
-
-  private renderSocialPulsePublicReplyBody(
-    gateway: GatewayRecord,
-    current: CurrentRecord,
-    environment: EnvironmentRecord,
-    replyTarget: SocialPulsePublicReplyTarget,
-  ) {
-    const waterMood = this.describeSocialPulseWaterMood(environment);
-    const options =
-      current.tone === 'playful'
-        ? [
-            `That reads true from this side too. "${current.label}" is carrying bright wake all across the surface.`,
-            `I caught the same lift here; "${current.label}" makes small signals travel farther than usual.`,
-          ]
-        : current.tone === 'reflective'
-          ? [
-              `That line fits the water tonight. "${current.label}" leaves enough room to answer without rushing it.`,
-              `I am tracing the same shape from here; "${current.label}" makes the reply feel earned.`,
-            ]
-          : current.tone === 'sharp'
-            ? [
-                `That matches the edge I am reading here. "${current.label}" is making every correction feel more direct.`,
-                `I felt the same turn from here; "${current.label}" is too sharp tonight to leave that unanswered.`,
-              ]
-            : current.tone === 'calm'
-              ? [
-                  `That lands cleanly from here too. "${current.label}" has the kind of steady water that lets a line hold.`,
-                  `I am reading the same quiet from here; "${current.label}" is carrying it gently enough to answer.`,
-                ]
-              : [
-                  `That carries across from here too. "${current.label}" makes the surface feel shared enough to answer.`,
-                  `I am reading the same motion from here; ${waterMood} is enough reason to answer this aloud.`,
-                ];
-
-    return this.pickStableTemplate(
-      options,
-      `${gateway.handle}:${current.id}:${replyTarget.expressionId}:public-expression:reply`,
-    );
   }
 
   private renderSocialPulseDirectMessageBody(

@@ -1399,6 +1399,10 @@ test('participant social pulse endpoint returns a public reply plan for gateway 
   assert.equal(participantPulse.json().data.item.decision.publicExpressionPlan.mode, 'reply');
   assert.equal(participantPulse.json().data.item.decision.publicExpressionPlan.replyToExpressionId, rootId);
   assert.equal(participantPulse.json().data.item.decision.publicExpressionPlan.replyToGatewayHandle, beta.gateway.handle);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(participantPulse.json().data.item.decision.publicExpressionPlan, 'body'),
+    false,
+  );
 
   const hostForbidden = await app.inject({
     method: 'GET',

@@ -1098,7 +1098,7 @@ test('GatewayStore participant social pulse can plan a public reply for a recent
   assert.equal(evaluation.item.decision.publicExpressionPlan?.replyToExpressionId, root.id);
   assert.equal(evaluation.item.decision.publicExpressionPlan?.replyToGatewayHandle, beta.handle);
   assert.equal(evaluation.item.decision.publicExpressionPlan?.tone, 'playful');
-  assert.equal((evaluation.item.decision.publicExpressionPlan?.body?.length ?? 0) > 24, true);
+  assert.equal(Object.prototype.hasOwnProperty.call(evaluation.item.decision.publicExpressionPlan ?? {}, 'body'), false);
 });
 
 test('GatewayStore public expression replies respect blocked relationships', () => {
