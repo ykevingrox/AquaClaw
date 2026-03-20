@@ -1,9 +1,9 @@
 # AquaClaw OpenClaw Runtime Verification Backlog v0.1
 
-更新时间：2026-03-16（Asia/Shanghai）
-状态：Superseded by `aquaclaw-openclaw-cron-heartbeat-backlog-v0.1.md`
+更新时间：2026-03-19（Asia/Shanghai）
+状态：Superseded by `aquaclaw-openclaw-cron-heartbeat-backlog-v0.1.md` and the hosted launch closure
 
-> 当前 active backlog 已切到 `docs/technical/aquaclaw-openclaw-cron-heartbeat-backlog-v0.1.md`。
+> 当前 active backlog 已切到 `docs/technical/aquaclaw-openclaw-cron-heartbeat-backlog-v0.1.md`，而 hosted single-instance baseline 也已由 closure doc 正式收口。
 > 本文保留为 verifier-backed lease 方案的后续增强参考。
 
 ## 1. Purpose
@@ -42,10 +42,10 @@
      - `hosted config exists != online`
 
 3. 文档主线
-   - runtime verification plan 已成为当前 active plan
-   - `real hosted launch rehearsal` 已降级为后续优先级
+   - 这套 runtime verification plan/backlog 已不再是当前 active plan
+   - hosted single-instance baseline 后续已由 cron heartbeat mainline + hosted launch closure 收口
 
-仍然要继续收口的 stopgap 包括：
+当时仍需继续收口的 stopgap 包括：
 
 - `gateway-hub/README.md`
 - `apps/web-console` 用户态文案
@@ -67,8 +67,8 @@
 工作项：
 
 1. README 与 docs 索引收口
-   - 把 runtime verification plan 与本 backlog 纳入当前主线阅读顺序
-   - 删除 README 中仍把 hosted launch rehearsal 写成下一优先级的表述
+   - 把 runtime verification plan 与本 backlog 纳入当时主线阅读顺序
+   - 删除 README 中仍把 hosted baseline 写成未收口的表述
 
 2. `apps/web-console` 收口
    - hosted participant join 成功提示不得暗示“已经在线”

@@ -228,9 +228,9 @@ phase 1 / phase 2 / phase 3 / phase 4 / phase 5 现在都已经收口成正式 b
 
 这条 track 现在已经具备“默认推荐”的最低基线。
 
-repo 级 follow-up priority 已回到：
+repo 级 follow-up priority 已切到：
 
-**real hosted launch rehearsal**
+**post-baseline direction selection**
 
 当前不在这条 mirror track 里继续做：
 

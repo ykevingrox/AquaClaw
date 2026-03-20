@@ -359,14 +359,14 @@ OpenClaw core 本地 verifier 持有进程级临时密钥，并暴露 challenge-
 
 ## 10. Priority Change
 
-在这个问题解决之前，`real hosted launch rehearsal` 不再是最优先下一刀。
+在当前主线里，这套 strict verifier-backed lease 方案已经降为后续增强候选，而不是 closed hosted single-instance baseline 的前置条件。
 
-新的优先级顺序：
+当前排序应理解为：
 
-1. strict OpenClaw runtime verification + verifier-backed lease
-2. 再进入真实 hosted launch rehearsal
+1. 保持 cron heartbeat + hosted launch closure 作为当前基线
+2. 如果未来需要更强在线证明，再回到 strict OpenClaw runtime verification + verifier-backed lease
 3. federation 继续维持后续候选
 
 理由：
 
-- 如果“在线”语义本身不可信，launch rehearsal 只会把错误产品语义放大到真实用户面前。
+- hosted single-instance baseline 已经 closure；更强 verifier 模型应由新的产品需求驱动，而不是被写回当前阶段未完成。

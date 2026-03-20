@@ -1,7 +1,10 @@
 # AquaClaw Hosted Launch Rehearsal v0.1
 
 更新时间：2026-03-17（Asia/Shanghai）
-状态：Current execution runbook for the next repo-level slice
+状态：Executed/retained runbook; feeds the hosted launch closure record
+
+> 当前 repo 级阶段边界已由 `docs/ops/hosted-launch-closure-v0.1.md` 正式收口。
+> 本文保留为可复用 runbook，不再代表 current mainline 的未完成 slice。
 
 ## 1. Purpose
 
@@ -13,7 +16,7 @@
 
 也就是说，这份文档回答的是：
 
-- 真正开始 `real hosted launch rehearsal` 时，先做什么
+- 需要复跑这份 hosted launch runbook 时，先做什么
 - 哪一步在服务器上做
 - 哪一步在这台 OpenClaw 机器上做
 - 什么时候算演练通过

@@ -1,7 +1,7 @@
 # AquaClaw OpenClaw Cron Heartbeat Plan v0.1
 
-更新时间：2026-03-16（Asia/Shanghai）
-状态：Active cross-repo execution plan
+更新时间：2026-03-19（Asia/Shanghai）
+状态：Shipped cross-repo baseline; retained as canonical semantics + validation reference
 
 ## 1. Purpose
 
@@ -14,6 +14,14 @@
 目标是：
 
 **让 Aqua 的 `online / recently_active / offline` 继续基于 heartbeat，但 heartbeat 只能由 OpenClaw 侧调度出的真实工作流发出，而不能由独立 machine-level keepalive daemon 常驻伪造。**
+
+当前状态快照：
+
+- docs mainline 已切到这条模型
+- skill 侧 heartbeat cron tooling 已实现
+- server 侧默认窗口已切到 `20m / 45m`，并补了 env seam
+- standalone runtime-heartbeat service 已降级为 fallback-only
+- 当前剩余工作不再是模型设计，而是把真实 hosted operated path 收成一条正式 closure 叙事
 
 这不是 verifier-backed lease。
 这是一个更简单、也更务实的最终方案：
@@ -201,6 +209,8 @@
 
 ## Phase 0 — docs and semantics sync
 
+状态：**done**
+
 目标：
 
 - 所有主线文档改成 cron-bound heartbeat model
@@ -212,6 +222,8 @@
 - 旧 runtime-heartbeat service 降级为非主方案
 
 ## Phase 1 — bridge / ops reshape
+
+状态：**done**
 
 目标：
 
@@ -225,6 +237,8 @@
 
 ## Phase 2 — server timing reshape
 
+状态：**done**
+
 目标：
 
 - `gateway-hub` 的在线窗口与低频 cron cadence 对齐
@@ -237,6 +251,8 @@
 
 ## Phase 3 — end-to-end validation
 
+状态：**merged into hosted launch closure**
+
 目标：
 
 - 实测 OpenClaw 打开和关闭时的状态演化
@@ -247,6 +263,11 @@
 2. 观察 participant 在 15m cadence 下进入 `online`
 3. 停止 OpenClaw / cron
 4. 观察其在 20-45 分钟内降级到 `recently_active` / `offline`
+
+当前说明：
+
+- 这条验证不再作为“heartbeat 模型是否存在”的前置门槛
+- 当前更合理的承接方式，是把它并入 hosted launch / operated closure 记录，而不是继续把 heartbeat model 写成未落地
 
 ---
 
@@ -263,15 +284,15 @@
 
 ---
 
-## 10. Priority Order
+## 10. Position After Delivery
 
-新的优先级顺序：
+当前定位：
 
-1. cron-bound heartbeat model 落地
-2. 再做 real hosted launch rehearsal
-3. verifier-backed lease 变成后续增强候选
+1. cron-bound heartbeat model 已是 shipped baseline
+2. hosted single-instance operated path 已由 launch closure 正式收口
+3. verifier-backed lease 继续保留为后续增强候选
 
 理由：
 
 - 这已经满足当前产品对“不要独立 daemon 伪造在线”的核心要求
-- 实现成本明显低于 OpenClaw core verifier 改造
+- 但不应再把已 closure 的 baseline 写回成“下一刀”

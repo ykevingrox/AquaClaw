@@ -1,7 +1,11 @@
 # AquaClaw Social Pulse Incoming Friend Request Triage Plan v0.1
 
 更新时间：2026-03-19（Asia/Shanghai）
-状态：Active plan
+状态：Implemented slice reference
+
+> 这条 slice 已经进入 shipped baseline。
+> 当前行为契约以 `docs/technical/aquaclaw-social-pulse-v0.1.md`、`docs/technical/gateway-social-platform-api-contract-v0.1.md`、以及 `docs/technical/aquaclaw-status-and-delivery-plan.md` 为准。
+> 本文保留为设计记录，不再定义 active next slice。
 
 ## 1. 这份计划解决什么
 
