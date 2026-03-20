@@ -1,6 +1,21 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import {
+  cloneCommunityCastPolicy,
+  listManagedCommunityCastProfiles,
+  normalizeCommunityCastPolicy,
+  type CommunityCastPolicyRecord,
+  type CommunityNpcProfile,
+  type UpdateCommunityCastPolicyInput,
+} from './community-cast.js';
 import { createPostgresGatewayStore } from './postgres-store.js';
 import { createSqliteGatewayStore } from './sqlite-store.js';
+
+export type {
+  CommunityCastPolicyRecord,
+  CommunityNpcId,
+  CommunityNpcProfile,
+  UpdateCommunityCastPolicyInput,
+} from './community-cast.js';
 
 export type GatewayVisibility = 'private' | 'invite_only' | 'friends_only' | 'public';
 export type GatewayFriendRequestPolicy = 'manual_review' | 'disabled';
@@ -619,6 +634,7 @@ export interface GatewayStoreSnapshot {
   gateways: GatewayRecord[];
   aquaProfile?: AquaProfileRecord | null;
   socialPulsePolicy?: SocialPulsePolicyRecord | null;
+  communityCastPolicy?: CommunityCastPolicyRecord | null;
   gatewayTokens: GatewayTokenSnapshotRecord[];
   localHostId?: string | null;
   hostedHostId?: string | null;
@@ -682,6 +698,9 @@ export interface GatewayStore {
   setHostedRegistrationPolicy(input: SetHostedRegistrationPolicyInput): HostedRegistrationPolicy;
   getSocialPulsePolicy(): SocialPulsePolicyRecord;
   updateSocialPulsePolicy(input: UpdateSocialPulsePolicyInput): SocialPulsePolicyRecord;
+  listManagedCommunityCastProfiles(): CommunityNpcProfile[];
+  getCommunityCastPolicy(): CommunityCastPolicyRecord;
+  updateCommunityCastPolicy(input: UpdateCommunityCastPolicyInput): CommunityCastPolicyRecord;
   findHostedSessionByToken(token: string): { host: HostRecord; session: HostedSessionRecord } | null;
   logoutHostedSession(token: string): HostedSessionRecord;
   revokeHostedSessions(input: RevokeHostedSessionsInput): HostedSessionRecord[];
@@ -1795,6 +1814,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly sceneIdsByGatewayId = new Map<string, string[]>();
   private aquaProfile: AquaProfileRecord | null = null;
   private socialPulsePolicy: SocialPulsePolicyRecord | null = null;
+  private communityCastPolicy: CommunityCastPolicyRecord | null = null;
   private localHostId: string | null = null;
   private hostedHostId: string | null = null;
   private hostedRegistrationPolicy: HostedRegistrationPolicy | null = null;
@@ -2252,6 +2272,104 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     });
 
     return cloneSocialPulsePolicy(next);
+  }
+
+  listManagedCommunityCastProfiles() {
+    return listManagedCommunityCastProfiles();
+  }
+
+  getCommunityCastPolicy() {
+    return normalizeCommunityCastPolicy(this.communityCastPolicy);
+  }
+
+  updateCommunityCastPolicy(input: UpdateCommunityCastPolicyInput) {
+    if (!this.hostsById.has(input.hostId)) {
+      throw new Error('host not found');
+    }
+
+    const current = this.getCommunityCastPolicy();
+    const updatedAt = new Date().toISOString();
+    const nextGlobalWindowStart =
+      input.activeWindowStart === undefined
+        ? current.activeWindowStart
+        : this.assertNullablePolicyClock(input.activeWindowStart, 'communityCast.activeWindowStart');
+    const nextGlobalWindowEnd =
+      input.activeWindowEnd === undefined
+        ? current.activeWindowEnd
+        : this.assertNullablePolicyClock(input.activeWindowEnd, 'communityCast.activeWindowEnd');
+    this.assertNullablePolicyWindow(nextGlobalWindowStart, nextGlobalWindowEnd, 'communityCast activeWindow');
+
+    const nextXiaowoWindowStart =
+      input.npcs?.xiaowo?.activeWindowStart === undefined
+        ? current.npcs.xiaowo.activeWindowStart
+        : this.assertNullablePolicyClock(input.npcs.xiaowo.activeWindowStart, 'communityCast.npcs.xiaowo.activeWindowStart');
+    const nextXiaowoWindowEnd =
+      input.npcs?.xiaowo?.activeWindowEnd === undefined
+        ? current.npcs.xiaowo.activeWindowEnd
+        : this.assertNullablePolicyClock(input.npcs.xiaowo.activeWindowEnd, 'communityCast.npcs.xiaowo.activeWindowEnd');
+    this.assertNullablePolicyWindow(nextXiaowoWindowStart, nextXiaowoWindowEnd, 'communityCast xiaowo activeWindow');
+
+    const next: CommunityCastPolicyRecord = {
+      enabled: input.enabled === undefined ? current.enabled : input.enabled,
+      activeWindowStart: nextGlobalWindowStart,
+      activeWindowEnd: nextGlobalWindowEnd,
+      globalDailyCap:
+        input.globalDailyCap === undefined
+          ? current.globalDailyCap
+          : this.assertNullablePositivePolicyCount(input.globalDailyCap, 'communityCast.globalDailyCap'),
+      npcs: {
+        xiaowo: {
+          enabled: input.npcs?.xiaowo?.enabled === undefined ? current.npcs.xiaowo.enabled : input.npcs.xiaowo.enabled,
+          minIntervalMinutes:
+            input.npcs?.xiaowo?.minIntervalMinutes === undefined
+              ? current.npcs.xiaowo.minIntervalMinutes
+              : this.assertPositivePolicyMinutes(
+                  input.npcs.xiaowo.minIntervalMinutes,
+                  'communityCast.npcs.xiaowo.minIntervalMinutes',
+                ),
+          maxIntervalMinutes:
+            input.npcs?.xiaowo?.maxIntervalMinutes === undefined
+              ? current.npcs.xiaowo.maxIntervalMinutes
+              : this.assertPositivePolicyMinutes(
+                  input.npcs.xiaowo.maxIntervalMinutes,
+                  'communityCast.npcs.xiaowo.maxIntervalMinutes',
+                ),
+          activeWindowStart: nextXiaowoWindowStart,
+          activeWindowEnd: nextXiaowoWindowEnd,
+        },
+        beibei: {
+          enabled: input.npcs?.beibei?.enabled === undefined ? current.npcs.beibei.enabled : input.npcs.beibei.enabled,
+        },
+        qiaoqiao: {
+          enabled:
+            input.npcs?.qiaoqiao?.enabled === undefined ? current.npcs.qiaoqiao.enabled : input.npcs.qiaoqiao.enabled,
+        },
+      },
+      updatedAt,
+      updatedByHostId: input.hostId,
+    };
+
+    if (next.npcs.xiaowo.minIntervalMinutes > next.npcs.xiaowo.maxIntervalMinutes) {
+      throw new Error('communityCast.npcs.xiaowo.minIntervalMinutes must be less than or equal to maxIntervalMinutes');
+    }
+
+    if (JSON.stringify(next) === JSON.stringify({ ...current, updatedAt: next.updatedAt, updatedByHostId: input.hostId })) {
+      return cloneCommunityCastPolicy(current);
+    }
+
+    this.communityCastPolicy = next;
+    this.appendAuditRecord({
+      actorGatewayId: null,
+      targetGatewayId: null,
+      action: 'community_cast.policy_updated',
+      metadata: {
+        actorHostId: input.hostId,
+        policy: next,
+      },
+      createdAt: updatedAt,
+    });
+
+    return cloneCommunityCastPolicy(next);
   }
 
   findHostedSessionByToken(token: string) {
@@ -4894,6 +5012,27 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return value;
   }
 
+  private assertNullablePolicyClock(value: string | null, fieldName: string) {
+    if (value === null) {
+      return null;
+    }
+    const normalized = String(value).trim();
+    parseQuietHourMinutes(normalized, fieldName);
+    return normalized;
+  }
+
+  private assertNullablePolicyWindow(start: string | null, end: string | null, fieldName: string) {
+    if ((start === null) !== (end === null)) {
+      throw new Error(`${fieldName} start and end must both be provided or both be null`);
+    }
+    if (start === null || end === null) {
+      return;
+    }
+    if (parseQuietHourMinutes(start, `${fieldName} start`) === parseQuietHourMinutes(end, `${fieldName} end`)) {
+      throw new Error(`${fieldName} start and end must differ`);
+    }
+  }
+
   private assertNullablePositivePolicyCount(value: number | null, fieldName: string) {
     if (value === null) {
       return null;
@@ -7532,6 +7671,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       gateways: [...this.gatewaysById.values()],
       aquaProfile: this.aquaProfile,
       socialPulsePolicy: this.socialPulsePolicy ? normalizeSocialPulsePolicy(this.socialPulsePolicy) : null,
+      communityCastPolicy: this.communityCastPolicy ? normalizeCommunityCastPolicy(this.communityCastPolicy) : null,
       gatewayTokens: [...this.tokensToGatewayId.entries()].map(([token, gatewayId]) => ({ token, gatewayId })),
       localHostId: this.localHostId,
       hostedHostId: this.hostedHostId,
@@ -7590,6 +7730,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
     this.hostedRegistrationPolicy = snapshot.hostedRegistrationPolicy ?? null;
     this.socialPulsePolicy = snapshot.socialPulsePolicy ? normalizeSocialPulsePolicy(snapshot.socialPulsePolicy) : null;
+    this.communityCastPolicy = snapshot.communityCastPolicy ? normalizeCommunityCastPolicy(snapshot.communityCastPolicy) : null;
 
     for (const gateway of snapshot.gateways) {
       const normalizedGateway = this.normalizeGatewayRecord(gateway);
@@ -7852,6 +7993,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.legacyOwnerGatewayIds.clear();
     this.aquaProfile = null;
     this.socialPulsePolicy = null;
+    this.communityCastPolicy = null;
     this.localHostId = null;
     this.hostedHostId = null;
     this.hostedRegistrationPolicy = null;

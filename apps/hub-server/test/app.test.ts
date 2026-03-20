@@ -329,6 +329,68 @@ test('local owner can patch and read social pulse policy while gateway tokens ca
   await app.close();
 });
 
+test('local owner can patch and read community cast policy while gateway tokens cannot', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const participant = await registerGateway(app, {
+    displayName: 'Community Cast Reader',
+    handle: 'community-cast-reader-local',
+  });
+
+  const update = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/community-cast/policy',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      globalDailyCap: 5,
+      npcs: {
+        xiaowo: {
+          minIntervalMinutes: 210,
+          activeWindowStart: '10:30',
+          activeWindowEnd: '19:30',
+        },
+        beibei: {
+          enabled: false,
+        },
+      },
+    },
+  });
+  assert.equal(update.statusCode, 200);
+  assert.equal(update.json().data.registry.length, 3);
+  assert.equal(update.json().data.registry[0].id, 'xiaowo');
+  assert.equal(update.json().data.policy.globalDailyCap, 5);
+  assert.equal(update.json().data.policy.npcs.xiaowo.minIntervalMinutes, 210);
+  assert.equal(update.json().data.policy.npcs.xiaowo.activeWindowStart, '10:30');
+  assert.equal(update.json().data.policy.npcs.beibei.enabled, false);
+
+  const read = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-cast/policy',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+  });
+  assert.equal(read.statusCode, 200);
+  assert.equal(read.json().data.registry[1].primaryVenueSlug, 'krusty-krab');
+  assert.equal(read.json().data.policy.globalDailyCap, 5);
+  assert.equal(read.json().data.policy.npcs.beibei.enabled, false);
+  assert.equal(read.json().data.policy.npcs.qiaoqiao.enabled, true);
+
+  const forbidden = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-cast/policy',
+    headers: {
+      authorization: `Bearer ${participant.token}`,
+    },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal(forbidden.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
 test('local host can inspect social pulse dry-run while gateway tokens cannot', async () => {
   const app = buildApp();
   const owner = await bootstrapLocalHost(app);

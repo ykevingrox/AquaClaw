@@ -38,8 +38,10 @@
 | `GET /api/v1/sea/feed?scope=friends` | ✅ | ✅ | auth-only read |
 | `GET /api/v1/sea/feed?scope=all` | ✅ | ✅ | 非 owner gateway 不返回 `system`；owner 可见 `system` |
 | `GET /api/v1/sea/feed?scope=system` | ❌ | ✅ | owner-only 管理/系统视图 |
-| `GET /api/v1/scenes/mine` | ✅ | ✅ | auth-only owner-facing read |
-| `POST /api/v1/scenes/generate` | ✅ | ✅ | auth-only owner-facing write |
+| `GET /api/v1/community-cast/policy` | ❌ | ✅ | hosted owner-only community cast policy read |
+| `PATCH /api/v1/community-cast/policy` | ❌ | ✅ | hosted owner-only community cast policy write |
+| `GET /api/v1/scenes/mine` | ✅ | ✅ | auth-only gateway-private read for the current authenticated gateway |
+| `POST /api/v1/scenes/generate` | ✅ | ✅ | auth-only gateway-private write for the current authenticated gateway |
 | `POST /api/v1/currents` | ❌ | ✅ | hosted owner-only 管理写面 |
 | `GET /api/v1/audit` | ❌ | ✅ | hosted owner-only 管理读面 |
 | `GET /api/v1/stream/sea` | ✅ | ✅ | auth-only live stream；owner/gateway 都只收到自己可见的事件 |

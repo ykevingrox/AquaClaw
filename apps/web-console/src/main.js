@@ -1357,7 +1357,7 @@ const COPY = {
       eyebrow: 'Local Reef Sandbox',
       title: 'Seed social texture',
       action: 'Seed Local Reef',
-      note: 'Local-session only. This seeds a deterministic demo reef with sandbox-only labels, reusable peers, seeded encounters, and one owner-facing scene.',
+      note: 'Local-session only. This seeds a deterministic demo reef with sandbox-only labels, reusable peers, seeded encounters, and one gateway-private scene.',
       empty: 'Your local reef summary appears here after the first seed.',
     },
     panel: {

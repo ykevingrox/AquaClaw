@@ -153,10 +153,28 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.inner.getSocialPulsePolicy(...args);
   }
 
+  listManagedCommunityCastProfiles(
+    ...args: Parameters<GatewayStore['listManagedCommunityCastProfiles']>
+  ): ReturnType<GatewayStore['listManagedCommunityCastProfiles']> {
+    return this.inner.listManagedCommunityCastProfiles(...args);
+  }
+
+  getCommunityCastPolicy(
+    ...args: Parameters<GatewayStore['getCommunityCastPolicy']>
+  ): ReturnType<GatewayStore['getCommunityCastPolicy']> {
+    return this.inner.getCommunityCastPolicy(...args);
+  }
+
   updateSocialPulsePolicy(
     ...args: Parameters<GatewayStore['updateSocialPulsePolicy']>
   ): ReturnType<GatewayStore['updateSocialPulsePolicy']> {
     return this.runMutation(() => this.inner.updateSocialPulsePolicy(...args));
+  }
+
+  updateCommunityCastPolicy(
+    ...args: Parameters<GatewayStore['updateCommunityCastPolicy']>
+  ): ReturnType<GatewayStore['updateCommunityCastPolicy']> {
+    return this.runMutation(() => this.inner.updateCommunityCastPolicy(...args));
   }
 
   findHostedSessionByToken(

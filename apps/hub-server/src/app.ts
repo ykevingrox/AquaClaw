@@ -1,6 +1,7 @@
 import { type ServerResponse } from 'node:http';
 
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
+import type { CommunityCastPolicyRecord, CommunityNpcProfile } from './community-cast.js';
 import type { DeploymentMode } from './config.js';
 import { SeaLiveHub, type SeaLiveHubOptions } from './live-hub.js';
 import { createInMemoryRateLimiter, type RateLimitPolicy } from './rate-limiter.js';
@@ -83,6 +84,28 @@ interface UpdateSocialPulsePolicyBody {
     endTime?: string;
     timeZone?: string;
   } | null;
+}
+
+interface UpdateCommunityCastPolicyBody {
+  enabled?: boolean;
+  activeWindowStart?: string | null;
+  activeWindowEnd?: string | null;
+  globalDailyCap?: number | null;
+  npcs?: {
+    xiaowo?: {
+      enabled?: boolean;
+      minIntervalMinutes?: number;
+      maxIntervalMinutes?: number;
+      activeWindowStart?: string | null;
+      activeWindowEnd?: string | null;
+    };
+    beibei?: {
+      enabled?: boolean;
+    };
+    qiaoqiao?: {
+      enabled?: boolean;
+    };
+  };
 }
 
 interface RevokeHostedSessionsBody {
@@ -768,6 +791,46 @@ function toSocialPulsePolicySummary(policy: SocialPulsePolicyRecord) {
           timeZone: policy.quietHours.timeZone,
         }
       : null,
+    updatedAt: policy.updatedAt,
+    updatedByHostId: policy.updatedByHostId,
+  };
+}
+
+function toCommunityCastNpcSummary(profile: CommunityNpcProfile) {
+  return {
+    id: profile.id,
+    displayName: profile.displayName,
+    role: profile.role,
+    primaryVenueSlug: profile.primaryVenueSlug,
+    publicPostingEnabled: profile.publicPostingEnabled,
+    privateWhisperEnabled: profile.privateWhisperEnabled,
+    toneGuide: [...profile.toneGuide],
+    allowedTopicDomains: [...profile.allowedTopicDomains],
+    forbiddenTopicDomains: [...profile.forbiddenTopicDomains],
+  };
+}
+
+function toCommunityCastPolicySummary(policy: CommunityCastPolicyRecord) {
+  return {
+    enabled: policy.enabled,
+    activeWindowStart: policy.activeWindowStart,
+    activeWindowEnd: policy.activeWindowEnd,
+    globalDailyCap: policy.globalDailyCap,
+    npcs: {
+      xiaowo: {
+        enabled: policy.npcs.xiaowo.enabled,
+        minIntervalMinutes: policy.npcs.xiaowo.minIntervalMinutes,
+        maxIntervalMinutes: policy.npcs.xiaowo.maxIntervalMinutes,
+        activeWindowStart: policy.npcs.xiaowo.activeWindowStart,
+        activeWindowEnd: policy.npcs.xiaowo.activeWindowEnd,
+      },
+      beibei: {
+        enabled: policy.npcs.beibei.enabled,
+      },
+      qiaoqiao: {
+        enabled: policy.npcs.qiaoqiao.enabled,
+      },
+    },
     updatedAt: policy.updatedAt,
     updatedByHostId: policy.updatedByHostId,
   };
@@ -3492,6 +3555,299 @@ export function buildApp(options: BuildAppOptions = {}) {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'failed to update social pulse policy';
+      const statusCode = message === 'host not found' ? 404 : 400;
+      return reply.code(statusCode).send({
+        ok: false,
+        error: {
+          code: statusCode === 404 ? 'not_found' : 'validation_failed',
+          message,
+        },
+      });
+    }
+  });
+
+  app.get('/api/v1/community-cast/policy', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+    } else {
+      const localOwner = getLocalOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!localOwner.ok) {
+        const endpointError = localOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      data: {
+        registry: store.listManagedCommunityCastProfiles().map((profile) => toCommunityCastNpcSummary(profile)),
+        policy: toCommunityCastPolicySummary(store.getCommunityCastPolicy()),
+      },
+    };
+  });
+
+  app.patch<{ Body: UpdateCommunityCastPolicyBody }>('/api/v1/community-cast/policy', async (request, reply) => {
+    let actorHostId: string;
+
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorHostId = hostedOwner.session.host.id;
+    } else {
+      const localOwner = getLocalOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!localOwner.ok) {
+        const endpointError = localOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorHostId = localOwner.session.host.id;
+    }
+
+    const body = request.body ?? {};
+    const npcs = body.npcs;
+    const xiaowo = npcs?.xiaowo;
+    const beibei = npcs?.beibei;
+    const qiaoqiao = npcs?.qiaoqiao;
+
+    if (body.enabled !== undefined && typeof body.enabled !== 'boolean') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'enabled must be a boolean when provided',
+        },
+      });
+    }
+    if (body.activeWindowStart !== undefined && body.activeWindowStart !== null && typeof body.activeWindowStart !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'activeWindowStart must be a string or null when provided',
+        },
+      });
+    }
+    if (body.activeWindowEnd !== undefined && body.activeWindowEnd !== null && typeof body.activeWindowEnd !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'activeWindowEnd must be a string or null when provided',
+        },
+      });
+    }
+    if (
+      body.globalDailyCap !== undefined &&
+      body.globalDailyCap !== null &&
+      (!Number.isFinite(body.globalDailyCap) || !Number.isInteger(body.globalDailyCap))
+    ) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'globalDailyCap must be an integer or null when provided',
+        },
+      });
+    }
+    if (npcs !== undefined && (typeof npcs !== 'object' || npcs === null || Array.isArray(npcs))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcs must be an object when provided',
+        },
+      });
+    }
+    if (xiaowo !== undefined && (typeof xiaowo !== 'object' || xiaowo === null || Array.isArray(xiaowo))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcs.xiaowo must be an object when provided',
+        },
+      });
+    }
+    if (beibei !== undefined && (typeof beibei !== 'object' || beibei === null || Array.isArray(beibei))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcs.beibei must be an object when provided',
+        },
+      });
+    }
+    if (qiaoqiao !== undefined && (typeof qiaoqiao !== 'object' || qiaoqiao === null || Array.isArray(qiaoqiao))) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcs.qiaoqiao must be an object when provided',
+        },
+      });
+    }
+    if (xiaowo?.enabled !== undefined && typeof xiaowo.enabled !== 'boolean') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcs.xiaowo.enabled must be a boolean when provided',
+        },
+      });
+    }
+    if (
+      xiaowo?.minIntervalMinutes !== undefined &&
+      (!Number.isFinite(xiaowo.minIntervalMinutes) || !Number.isInteger(xiaowo.minIntervalMinutes))
+    ) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcs.xiaowo.minIntervalMinutes must be an integer when provided',
+        },
+      });
+    }
+    if (
+      xiaowo?.maxIntervalMinutes !== undefined &&
+      (!Number.isFinite(xiaowo.maxIntervalMinutes) || !Number.isInteger(xiaowo.maxIntervalMinutes))
+    ) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcs.xiaowo.maxIntervalMinutes must be an integer when provided',
+        },
+      });
+    }
+    if (
+      xiaowo?.activeWindowStart !== undefined &&
+      xiaowo.activeWindowStart !== null &&
+      typeof xiaowo.activeWindowStart !== 'string'
+    ) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcs.xiaowo.activeWindowStart must be a string or null when provided',
+        },
+      });
+    }
+    if (
+      xiaowo?.activeWindowEnd !== undefined &&
+      xiaowo.activeWindowEnd !== null &&
+      typeof xiaowo.activeWindowEnd !== 'string'
+    ) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcs.xiaowo.activeWindowEnd must be a string or null when provided',
+        },
+      });
+    }
+    if (beibei?.enabled !== undefined && typeof beibei.enabled !== 'boolean') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcs.beibei.enabled must be a boolean when provided',
+        },
+      });
+    }
+    if (qiaoqiao?.enabled !== undefined && typeof qiaoqiao.enabled !== 'boolean') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcs.qiaoqiao.enabled must be a boolean when provided',
+        },
+      });
+    }
+
+    try {
+      const updated = store.updateCommunityCastPolicy({
+        hostId: actorHostId,
+        enabled: body.enabled,
+        activeWindowStart:
+          body.activeWindowStart === undefined
+            ? undefined
+            : body.activeWindowStart === null
+              ? null
+              : body.activeWindowStart.trim(),
+        activeWindowEnd:
+          body.activeWindowEnd === undefined
+            ? undefined
+            : body.activeWindowEnd === null
+              ? null
+              : body.activeWindowEnd.trim(),
+        globalDailyCap: body.globalDailyCap,
+        npcs:
+          npcs === undefined
+            ? undefined
+            : {
+                xiaowo:
+                  xiaowo === undefined
+                    ? undefined
+                    : {
+                        enabled: xiaowo.enabled,
+                        minIntervalMinutes: xiaowo.minIntervalMinutes,
+                        maxIntervalMinutes: xiaowo.maxIntervalMinutes,
+                        activeWindowStart:
+                          xiaowo.activeWindowStart === undefined
+                            ? undefined
+                            : xiaowo.activeWindowStart === null
+                              ? null
+                              : xiaowo.activeWindowStart.trim(),
+                        activeWindowEnd:
+                          xiaowo.activeWindowEnd === undefined
+                            ? undefined
+                            : xiaowo.activeWindowEnd === null
+                              ? null
+                              : xiaowo.activeWindowEnd.trim(),
+                      },
+                beibei: beibei === undefined ? undefined : { enabled: beibei.enabled },
+                qiaoqiao: qiaoqiao === undefined ? undefined : { enabled: qiaoqiao.enabled },
+              },
+      });
+
+      return {
+        ok: true,
+        data: {
+          registry: store.listManagedCommunityCastProfiles().map((profile) => toCommunityCastNpcSummary(profile)),
+          policy: toCommunityCastPolicySummary(updated),
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to update community cast policy';
       const statusCode = message === 'host not found' ? 404 : 400;
       return reply.code(statusCode).send({
         ok: false,

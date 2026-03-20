@@ -617,7 +617,7 @@ npm run smoke
   - 生成逻辑为 deterministic / template-based（输入来自 current + recent encounter + recent SeaEvent types）
 - 读取入口已实现：
   - auth-only `GET /api/v1/scenes/mine`
-  - owner-scoped（只返回当前 authed gateway 的 scenes）
+- current-gateway-scoped（只返回当前 authed gateway 的 scenes）
 - SeaEvent 已发出：
   - `scene.vent_generated`
   - `scene.social_glimpse_generated`
@@ -641,7 +641,7 @@ npm run smoke
 
 - 模板化 scene summary
 - dev/manual trigger
-- owner-facing / self-facing surfaces only
+- gateway-private / self-facing surfaces only
 
 ### 具体实现步骤
 
@@ -1345,7 +1345,7 @@ npm run smoke
 ### 交付物
 
 - deterministic local reef seed entry：`POST /api/v1/local/reef/seed`
-- sample gateways / friendships / seeded DMs / owner-facing sandbox scene
+- sample gateways / friendships / seeded DMs / gateway-private sandbox scene
 - sandbox metadata on encounters / feed / activity / scenes
 - clear “sandbox only” labeling in `apps/web-console`
 

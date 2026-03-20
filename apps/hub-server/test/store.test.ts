@@ -56,6 +56,68 @@ test('createGatewayStore accepts sqlite backend', () => {
   store.close();
 });
 
+test('GatewayStore exposes managed community cast registry and default policy', () => {
+  const store: GatewayStore = createGatewayStore();
+
+  const registry = store.listManagedCommunityCastProfiles();
+  assert.deepEqual(
+    registry.map((profile) => profile.id),
+    ['xiaowo', 'beibei', 'qiaoqiao'],
+  );
+  assert.equal(registry[0]?.publicPostingEnabled, true);
+  assert.equal(registry[1]?.primaryVenueSlug, 'krusty-krab');
+  assert.equal(registry[2]?.privateWhisperEnabled, true);
+
+  const policy = store.getCommunityCastPolicy();
+  assert.equal(policy.enabled, true);
+  assert.equal(policy.globalDailyCap, 4);
+  assert.equal(policy.npcs.xiaowo.minIntervalMinutes, 180);
+  assert.equal(policy.npcs.xiaowo.maxIntervalMinutes, 240);
+  assert.equal(policy.npcs.xiaowo.activeWindowStart, '10:00');
+  assert.equal(policy.npcs.xiaowo.activeWindowEnd, '20:00');
+  assert.equal(policy.npcs.beibei.enabled, true);
+  assert.equal(policy.npcs.qiaoqiao.enabled, true);
+});
+
+test('GatewayStore can patch community cast policy with nested NPC settings', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+
+  const updated = store.updateCommunityCastPolicy({
+    hostId: host.id,
+    globalDailyCap: 5,
+    activeWindowStart: '09:00',
+    activeWindowEnd: '21:00',
+    npcs: {
+      xiaowo: {
+        minIntervalMinutes: 210,
+        activeWindowStart: '10:30',
+        activeWindowEnd: '19:30',
+      },
+      beibei: {
+        enabled: false,
+      },
+    },
+  });
+
+  assert.equal(updated.globalDailyCap, 5);
+  assert.equal(updated.activeWindowStart, '09:00');
+  assert.equal(updated.activeWindowEnd, '21:00');
+  assert.equal(updated.npcs.xiaowo.enabled, true);
+  assert.equal(updated.npcs.xiaowo.minIntervalMinutes, 210);
+  assert.equal(updated.npcs.xiaowo.maxIntervalMinutes, 240);
+  assert.equal(updated.npcs.xiaowo.activeWindowStart, '10:30');
+  assert.equal(updated.npcs.xiaowo.activeWindowEnd, '19:30');
+  assert.equal(updated.npcs.beibei.enabled, false);
+  assert.equal(updated.npcs.qiaoqiao.enabled, true);
+  assert.equal(updated.updatedByHostId, host.id);
+
+  const readBack = store.getCommunityCastPolicy();
+  assert.equal(readBack.globalDailyCap, 5);
+  assert.equal(readBack.npcs.beibei.enabled, false);
+  assert.equal(readBack.npcs.xiaowo.minIntervalMinutes, 210);
+});
+
 test('createGatewayStore requires databaseUrl for postgres backend', () => {
   assert.throws(
     () => createGatewayStore({ backend: 'postgres' }),
@@ -1126,7 +1188,7 @@ test('GatewayStore public expression replies respect blocked relationships', () 
   );
 });
 
-test('GatewayStore scene seam writes owner-visible private scenes directly', () => {
+test('GatewayStore scene seam writes gateway-private scenes directly', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Scene Alpha', handle: 'scene-alpha-store' });
 

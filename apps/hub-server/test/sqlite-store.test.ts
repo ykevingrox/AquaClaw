@@ -790,6 +790,77 @@ test('sqlite backend preserves social pulse policy across restart', async () => 
   }
 });
 
+test('sqlite backend preserves community cast policy across restart', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-community-cast-'));
+  const databasePath = join(tempDir, 'aquaclaw.sqlite');
+
+  const store1 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+  const app1 = buildApp({ store: store1 });
+
+  try {
+    const owner = await bootstrapLocalSessionViaApi(app1, {
+      displayName: 'SQLite Community Cast Owner',
+      handle: 'sqlite-community-cast-owner',
+    });
+
+    const update = await app1.inject({
+      method: 'PATCH',
+      url: '/api/v1/community-cast/policy',
+      headers: { authorization: `Bearer ${owner.credential.token}` },
+      payload: {
+        globalDailyCap: 5,
+        npcs: {
+          xiaowo: {
+            minIntervalMinutes: 210,
+            activeWindowStart: '10:30',
+            activeWindowEnd: '19:30',
+          },
+          beibei: {
+            enabled: false,
+          },
+        },
+      },
+    });
+    assert.equal(update.statusCode, 200);
+    assert.equal(update.json().data.policy.globalDailyCap, 5);
+
+    await app1.close();
+    if (store1 instanceof SqliteGatewayStore) {
+      store1.close();
+    }
+
+    const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    const app2 = buildApp({ store: store2 });
+
+    try {
+      const ownerAgain = await bootstrapLocalSessionViaApi(app2, {
+        displayName: 'SQLite Community Cast Owner',
+        handle: 'sqlite-community-cast-owner',
+      });
+
+      const read = await app2.inject({
+        method: 'GET',
+        url: '/api/v1/community-cast/policy',
+        headers: { authorization: `Bearer ${ownerAgain.credential.token}` },
+      });
+      assert.equal(read.statusCode, 200);
+      assert.equal(read.json().data.registry[0].id, 'xiaowo');
+      assert.equal(read.json().data.policy.globalDailyCap, 5);
+      assert.equal(read.json().data.policy.npcs.xiaowo.minIntervalMinutes, 210);
+      assert.equal(read.json().data.policy.npcs.xiaowo.activeWindowStart, '10:30');
+      assert.equal(read.json().data.policy.npcs.beibei.enabled, false);
+      assert.equal(read.json().data.policy.npcs.qiaoqiao.enabled, true);
+    } finally {
+      await app2.close();
+      if (store2 instanceof SqliteGatewayStore) {
+        store2.close();
+      }
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('sqlite backend preserves gateway reconnect credentials across restart', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-reconnect-'));
   const databasePath = join(tempDir, 'aquaclaw.sqlite');

@@ -158,14 +158,21 @@ Latest result:
 - policy persists across sqlite restart ✅
 - participant-side Social Pulse responses expose `meta.policy` and `meta.policyState` ✅
 - disabling proactive DM or public expression downgrades outward Social Pulse actions to `memory_only` with stable policy reasons ✅
+
+### L.4 Community Cast Policy Foundation v0.1
+- `GET /api/v1/community-cast/policy` and `PATCH /api/v1/community-cast/policy` are owner-only in both local and hosted modes ✅
+- gateway bearer tokens cannot read or patch the managed community-cast policy surface ✅
+- the policy response returns both the managed registry (`小蜗 / 贝贝 / 壳壳`) and the persisted policy state ✅
+- community-cast policy persists across sqlite restart ✅
+- the first server slice is intentionally limited to registry + policy; bulletin generation / publish / whisper triggers remain follow-up slices ✅
 - quiet hours can downgrade outward Social Pulse actions to `memory_only` without bypassing participant auth boundaries ✅
 - rolling 24h budgets for automation-origin public expressions and DMs are implemented and enforced ✅
 - `apps/web-console` exposes a narrow host policy UI for enable flags, cooldowns, budgets, and quiet hours ✅
 - hosted pulse consumes server policy cooldown defaults and quiet-hours state instead of treating local wrapper defaults as authoritative ✅
 
 ### M. Scene / Venting Trench
-- `POST /api/v1/scenes/generate` creates a private owner-facing scene ✅
-- `GET /api/v1/scenes/mine` lists owner scenes only ✅
+- `POST /api/v1/scenes/generate` creates a private gateway-facing scene for the current authenticated gateway ✅
+- `GET /api/v1/scenes/mine` lists only the current authenticated gateway's private scenes ✅
 - generating a scene emits a private scene SeaEvent ✅
 - non-owners cannot read another gateway scenes ✅
 
@@ -230,7 +237,7 @@ Latest result:
 
 ### V. Local Reef Sandbox
 - `POST /api/v1/local/reef/seed` requires a local owner session and rejects manual registration bearer tokens ✅
-- the first reef seed creates deterministic sandbox peers, friendships, seeded DMs, and an owner-facing sandbox scene ✅
+- the first reef seed creates deterministic sandbox peers, friendships, seeded DMs, and a gateway-private sandbox scene ✅
 - repeated reef seed is idempotent and returns a reused world instead of duplicating sandbox state ✅
 - encounter / scene / activity / feed surfaces expose sandbox metadata for UI labeling ✅
 - `apps/web-console` can trigger reef seeding and render sandbox badges/result summaries without raw curl ✅
@@ -249,7 +256,7 @@ Latest result:
 ### X. Hosted Owner/Gateway Boundary Lock
 - hosted owner session no longer acts as generic gateway identity for social writes ✅
 - social write surfaces (friend request / invite claim / DM send / presence heartbeat) are gateway-bearer-only in hosted mode ✅
-- owner-only management surfaces stay owner-session-only (`currents` write / audit / system feed scope / stream / bridge credential lifecycle / registration policy) ✅
+- owner-only management surfaces stay owner-session-only (`currents` write / audit / system feed scope / stream / bridge credential lifecycle / registration policy / community-cast policy`) ✅
 
 ### Y. Remote Runtime Bridge v1 + Hosted Registration Policy v1
 - `POST /api/v1/runtime/remote/join-by-invite` supports public hosted invite-code onboarding without exposing owner secrets ✅

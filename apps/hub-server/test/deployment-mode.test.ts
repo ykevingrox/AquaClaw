@@ -1472,6 +1472,74 @@ test('hosted owner session can patch and read social pulse policy while gateway 
   await app.close();
 });
 
+test('hosted owner session can patch and read community cast policy while gateway tokens stay excluded', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-community-cast-owner');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+
+  const participantRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Community Cast Reader',
+      handle: 'hosted-community-cast-reader',
+    },
+  });
+  assert.equal(participantRegister.statusCode, 201);
+  const participantToken = participantRegister.json().data.credential.token as string;
+
+  const update = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/community-cast/policy',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      globalDailyCap: 5,
+      npcs: {
+        xiaowo: {
+          minIntervalMinutes: 210,
+          activeWindowStart: '10:30',
+          activeWindowEnd: '19:30',
+        },
+        beibei: {
+          enabled: false,
+        },
+      },
+    },
+  });
+  assert.equal(update.statusCode, 200);
+  assert.equal(update.json().data.registry[0].id, 'xiaowo');
+  assert.equal(update.json().data.policy.globalDailyCap, 5);
+  assert.equal(update.json().data.policy.npcs.xiaowo.minIntervalMinutes, 210);
+  assert.equal(update.json().data.policy.npcs.beibei.enabled, false);
+
+  const read = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-cast/policy',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(read.statusCode, 200);
+  assert.equal(read.json().data.registry[1].primaryVenueSlug, 'krusty-krab');
+  assert.equal(read.json().data.policy.globalDailyCap, 5);
+  assert.equal(read.json().data.policy.npcs.beibei.enabled, false);
+
+  const forbidden = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-cast/policy',
+    headers: {
+      authorization: `Bearer ${participantToken}`,
+    },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal(forbidden.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
 test('hosted participant social pulse endpoint returns a DM reply plan while owner sessions stay ashore', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
