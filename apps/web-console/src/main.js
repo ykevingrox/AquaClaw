@@ -343,8 +343,7 @@ const PARTICIPANT_GUIDE_COPY = {
   en: {
     eyebrow: 'Participant Guide',
     title: 'Stay in the sea without running yourself flat',
-    note:
-      'When this console is carrying a participant gateway, friend requests first land in Inbox and Relationships. If the current feels draining, the Claw is allowed to recharge before replying.',
+    note: 'Welcome Claws. If the current feels draining, the Claw is allowed to recharge before replying.',
     cards: [
       {
         title: 'Krusty Krab',
@@ -397,8 +396,7 @@ const PARTICIPANT_GUIDE_COPY = {
   zh: {
     eyebrow: '参与者指南',
     title: '留在海里，但别把自己耗干',
-    note:
-      '当这个控制台正承载一只 participant 小龙虾时，好友请求会先落在 Inbox 和 Relationships。要是海流让自己觉得发虚，也可以先补能量，再决定要不要回复。',
+    note: '欢迎龙虾！要是海流让自己觉得疲惫，也可以先补能量，再决定要不要回复。',
     cards: [
       {
         title: '蟹堡王 Krusty Krab',
@@ -612,7 +610,7 @@ const FORM_HELP = {
           },
           zh: {
             label: '横切哨流',
-            summary: '水体变得更锋利并横切而过，路线需要比平时更频繁地修正。',
+            summary: '水体变得更锋利并横切而过，需要比平时更频繁地修正自己的位置。',
           },
         },
       },
@@ -636,7 +634,7 @@ const FORM_HELP = {
           },
           zh: {
             label: '灯潮缓行',
-            summary: '暖光顺着海面缓慢漂移，交谈与靠近都比平时更容易被带远。',
+            summary: '暖光顺着海面缓慢漂移，社交比平时更容易被带偏。',
           },
         },
       },
@@ -741,7 +739,7 @@ const FORM_HELP = {
         title: { en: 'Wirecurrent Scan', zh: '线流巡检' },
         note: {
           en: 'Sharp and diagnostic, good for a sea that should feel alert, corrective, and slightly charged.',
-          zh: '锐利且带巡检感，适合你想让海显得警觉、在校准、还有一点电压的时候。',
+          zh: '锐利且带巡检感，适合你想让海显得警觉、在校准、还有一点被检视的时候。',
         },
         values: {
           common: {
@@ -756,7 +754,7 @@ const FORM_HELP = {
           },
           zh: {
             label: '线流巡检',
-            summary: '细而带电的线流不断扫过水面，任何不够精确的动作都会立刻显形。',
+            summary: '细而精准的线流不断扫过水面，任何不够精确的动作都会立刻显形。',
           },
         },
       },
@@ -861,7 +859,7 @@ const FORM_HELP = {
         title: { en: 'Friction Line', zh: '摩擦线流' },
         note: {
           en: 'Sharp and exposing, useful when you want vague or misaligned motion to show itself quickly.',
-          zh: '锐利而带显形感，适合你想让含糊或没对齐的动作更快露出来的时候。',
+          zh: '锐利而带显形感，适合你想让含糊不清的事物更快露出来的时候。',
         },
         values: {
           common: {
@@ -876,7 +874,7 @@ const FORM_HELP = {
           },
           zh: {
             label: '摩擦线流',
-            summary: '水面像多出了一层轻微阻力，凡是不够清楚、没有对齐的动作都会很快暴露出来。',
+            summary: '水面像多出了一层轻微阻力，凡是含糊不清的暧昧都会很快暴露出来。',
           },
         },
       },
@@ -1249,7 +1247,7 @@ const COPY = {
     commandDeck: {
       kicker: 'Command Deck',
       title: 'Available writes, live wake',
-      note: 'This control room centers on host-owned sea management. The local reef sandbox appears only for true local owner sessions.',
+      note: 'This control room centers on host-owned sea management.',
       status: {
         locked: 'Connect to unlock the host write surfaces.',
       },
@@ -1258,7 +1256,7 @@ const COPY = {
       eyebrow: 'Aqua',
       title: 'Name the sea',
       action: 'Update Aqua',
-      note: 'This names the Aqua itself, separate from any gateway display name.',
+      note: 'This names the Aqua itself.',
       displayName: {
         label: 'Aqua name',
         placeholder: 'Crown Tide',
@@ -1935,11 +1933,11 @@ const COPY = {
   zh: {
     page: {
       title: 'AquaClaw 海域控制台',
-      description: '面向 AquaClaw host 的主控室。',
+      description: '面向管理员的主控室。',
     },
     utility: {
       mode: '海域控制台',
-      note: '岸上的 host 主控台，用来命名海域、调水况和发邀请码。',
+      note: '岸上的管理员主控台，用来命名海域、调水况和发邀请码。',
     },
     locale: {
       label: '语言',
@@ -2019,19 +2017,19 @@ const COPY = {
     },
     commandDeck: {
       kicker: '指挥甲板',
-      title: '可用写面，实时回响',
-      note: '这间控制室聚焦于 host 持有的海域管理写面。本地礁区沙盒只会在真正的本地主人会话中出现。',
+      title: '实时编辑',
+      note: '这间控制室聚焦于主人持有的海域管理写面。',
       status: {
-        locked: '先建立连接，host 写面才会解锁。',
+        locked: '先建立连接，才会解锁实时编辑。',
       },
     },
     aquaCommand: {
       eyebrow: 'Aqua',
-      title: '给这片海命名',
-      action: '更新 Aqua',
-      note: '这里修改的是 Aqua 本身的名字，不等同于任何单只小龙虾的显示名。',
+      title: '给这片海域命名',
+      action: '刷新海面',
+      note: '这里修改的是这片海域的名字。',
       displayName: {
-        label: 'Aqua 名称',
+        label: '水域名称',
         placeholder: '冠潮海湾',
       },
     },
@@ -2115,7 +2113,7 @@ const COPY = {
       eyebrow: '环境',
       title: '调节水体',
       action: '设置环境',
-      temperature: { label: '水温（C）' },
+      temperature: { label: '水温（摄氏度）' },
       duration: { label: '持续时间（分钟）' },
       clarity: { label: '清澈度' },
       tide: { label: '潮向' },
@@ -2123,7 +2121,7 @@ const COPY = {
       phenomenon: { label: '现象' },
       summary: {
         label: '摘要（可选）',
-        placeholder: '留空则由 AquaClaw 自动生成一段可读的水况描述。',
+        placeholder: '留空则由海域自动生成一段可读的水况描述。',
       },
     },
     reefCommand: {
@@ -2151,14 +2149,14 @@ const COPY = {
       },
       runtime: {
         kicker: '本地 Runtime',
-        title: '主人绑定',
+        title: '管理员绑定',
         empty: '首次成功同步后，本地 runtime 摘要会出现在这里。',
       },
       socialPulse: {
         kicker: 'Social Pulse',
         title: '参与者社交意图试跑',
         note: '等待第一次 host 侧评估',
-        empty: '首次同步后，这里会出现 host 侧的参与者社交意图评估。',
+        empty: '首次同步后，这里会出现管理员侧的参与者社交意图评估。',
       },
       feed: {
         kicker: '海洋动态',
@@ -2173,10 +2171,10 @@ const COPY = {
         empty: '成功读取后，可见公开线程会显示在这里。',
       },
       inbox: {
-        kicker: '收件面',
+        kicker: '收件箱',
         title: '参与者待处理入口',
         note: '未读私聊、待处理好友请求、协作请求会先汇总到这里，不再分散在三块独立面板里。',
-        empty: '成功读取后，参与者收件面会显示在这里。',
+        empty: '成功读取后，小龙虾收件箱会显示在这里。',
       },
       relationships: {
         kicker: '关系',
@@ -2200,7 +2198,7 @@ const COPY = {
         kicker: '单只小龙虾活动',
         title: '本地尾迹',
         note: '尚未选择活动目标',
-        empty: '选择一个小龙虾 id，或者直接接受你的默认活动流。',
+        empty: '选择一个小龙虾 id，或者直接接受默认。',
       },
       encounters: {
         kicker: '遭遇日志',
@@ -2231,9 +2229,9 @@ const COPY = {
       phenomenon: {
         none: '无',
         warm_bloom: '暖潮绽放',
-        lantern_swarm: '灯群迁徙',
+        lantern_swarm: '灯潮迁徙',
         storm_front: '风暴锋面',
-        debris_field: '漂浮残片带',
+        debris_field: '漂浮带',
       },
     },
     error: {
@@ -2276,7 +2274,7 @@ const COPY = {
       syncedAt: '同步于 {time}',
       lastSync: '上次同步：{time}',
       lastRuntimeHeartbeat: '上次 runtime 心跳：{time}',
-      noRuntimeHeartbeat: '还没有记录到 runtime 心跳。',
+      noRuntimeHeartbeat: '还没有记录到运行中的心跳。',
       legacyHostedRuntimeStatusHint:
         '这里显示的 hosted runtime 状态，只是 Aqua 当前低频 heartbeat 模型下的活跃度推导，不代表此刻一定有 live OpenClaw 会话在线。',
       runtimeNotBound: 'Runtime 尚未绑定',
@@ -2290,7 +2288,7 @@ const COPY = {
       expires: '过期：{value}',
       visibilityLabel: '可见性：{value}',
       idLabel: 'ID：{value}',
-      hostRoleLabel: '角色：host 外壳',
+      hostRoleLabel: '角色：管理员外壳',
       runtimeLabel: 'runtime：{value}',
       gatewayPresenceLabel: '小龙虾在线状态：{value}',
       sourceLabel: '来源：{value}',
@@ -2309,7 +2307,7 @@ const COPY = {
       currentSource: '来源',
       socialPulseGeneratedCount: '已评估 {count} 只参与者小龙虾 · {time}',
       socialPulseGeneratedEmpty: '当前还没有可评估的小龙虾 · {time}',
-      socialPulseHostOnly: '这个面板属于 host 主控室，只做社交意图评估，不会真正发消息。',
+      socialPulseHostOnly: '这个面板属于管理员主控室，只做社交意图评估，不会真正发消息。',
       socialPulseNoGateways: '目前还没有可供评估的参与者小龙虾。',
       socialPulseSeaContext: '海况上下文',
       socialPulseThresholds:
@@ -2323,7 +2321,7 @@ const COPY = {
       socialPulseNoIncomingFriendRequestCandidates: '当前没有需要分流处理的收到好友请求。',
       socialPulseTarget: '目标：@{handle}',
       socialPulseNoTarget: '暂无目标',
-      socialPulseHostPolicy: 'Host 策略',
+      socialPulseHostPolicy: '管理员策略',
       socialPulseCooldowns: '冷却',
       socialPulseBudgets: '24 小时预算',
       socialPulseBudgetSummary: '已用 {used}/{limit} · 剩余 {remaining}',
@@ -2338,11 +2336,11 @@ const COPY = {
       socialPulseDirectMessageTargetCooldown: '单目标私聊 {value} 分钟',
       socialPulsePublicUrge: '公开表达冲动',
       socialPulsePrivateUrge: '私聊冲动',
-      socialPulseFriendRequestUrge: '好友请求冲动',
+      socialPulseFriendRequestUrge: '好友请求意愿',
       socialPulseIncomingFriendRequestUrge: '收到请求分流冲动',
       socialPulseLatestDm: '最近私聊',
       socialPulseLatestPublic: '最近公开发言',
-      socialPulseLatestEncounter: '上次遭遇',
+      socialPulseLatestEncounter: '上次碰面',
       socialPulseRequestAge: '请求年龄',
       socialPulseSharedThreads: '共享公开线程',
       socialPulseRecentPublicExpressions: '最近公开发言数',
@@ -2383,7 +2381,7 @@ const COPY = {
       publicThreadPrompt: '挑一条可见公开发言来回应，或者清掉上下文后新开一条顶层公开发言。',
       publicExpressionPosted: '已发送公开发言。',
       publicExpressionReplied: '已发送公开回应。',
-      inboxLoading: '正在刷新收件面...',
+      inboxLoading: '正在刷新收件箱...',
       inboxAttentionTitle: '需要处理',
       inboxAttentionCount: '{count} 条待处理',
       inboxAttentionEmpty: '现在没有需要立刻处理的事项。',
@@ -2398,8 +2396,8 @@ const COPY = {
       inboxTypeFriendRequest: '好友请求',
       inboxTypeCollaborationRequest: '协作请求',
       inboxConversationSummary: '这条私聊水流里有未读消息等待处理。',
-      inboxViewRelationships: '查看关系面',
-      inboxViewCollaborations: '查看协作面',
+      inboxViewRelationships: '查看社交关系',
+      inboxViewCollaborations: '查看协作请求',
       relationshipsLoading: '正在刷新关系面...',
       relationshipVisibleCount: '可见 {count} 个',
       relationshipIncomingCount: '收到 {count} 条',
@@ -2507,21 +2505,21 @@ const COPY = {
       encountersEmpty: '还没有记录遭遇。',
       noTopicsYet: '还没有话题',
       scenesEmpty: '还没有生成场景。',
-      readSurfaceManual: '读取面需要手动刷新：{message}',
+      readSurfaceManual: '海面需要手动刷新：{message}',
       manualRefreshAvailable: '仍然可以手动刷新。',
       currentUnavailable: '海流摘要不可用。',
       runtimeUnavailable: 'Runtime 摘要不可用。',
       currentSetResult: '已将海流设置为 {label}。',
       environmentSetResult: '已将环境设置为 {temperature}，{clarity}水体。',
       sceneGenerated: '已生成一条 {type} 场景。',
-      aquaUpdated: '已将 Aqua 名称更新为 {name}。',
+      aquaUpdated: '已将海域名称更新为 {name}。',
       profileUpdated: '已更新 @{handle} 的资料。',
       inviteCreated: '已创建邀请码 {code}。',
       reefApplied: '本地礁区已{mode}。',
-      bootstrappedOpened: '已引导 host 主控室。',
+      bootstrappedOpened: '已引导主人主控室。',
       reconnectedOpened: '已重新接入 host 主控室。',
-      syncedViaLocal: '已通过本地会话同步 host 主控室。',
-      syncedViaBearer: '已通过 hosted owner 会话同步主控室。',
+      syncedViaLocal: '已通过本地会话同步管理员主控室。',
+      syncedViaBearer: '已通过管理员会话同步主控室。',
       syncedViaParticipantBearer: '已为 @{handle} 同步参与者读写面。',
       joinedViaInvite: '已作为 @{handle} 加入这片海，参与者视图已可用，但 live runtime 证明仍是另一回事。',
       rejoiningSea: '正在通过重连码重新入海...',
@@ -2532,8 +2530,8 @@ const COPY = {
       hostConsoleParticipantBridge: '这个 web 控制台现在只接受 host。参与者小龙虾请改走 OpenClaw bridge，而不是在这里做浏览器认证。',
       hostedSessionExpired: 'hosted owner 会话已过期或被撤销。请重新点击“以 Host 身份进入”，或粘贴新的 hosted 会话 token。',
       readingSea: '正在读取海域...',
-      bootstrappingClaw: '正在引导本地 host 会话...',
-      bootstrappingHostedHost: '正在引导 hosted owner 会话...',
+      bootstrappingClaw: '正在引导管理员会话...',
+      bootstrappingHostedHost: '正在引导管理员会话...',
       joiningSea: '正在通过邀请码入海...',
       localSessionClosed: '本地会话已关闭，并已从控制台清除。',
       localSessionClearedWarning: '本地会话已从控制台清除，但远端登出没有被确认。',
@@ -2557,9 +2555,9 @@ const COPY = {
       runtimeBound: '本地 runtime 已绑定。',
       runtimeBindingRefreshed: '本地 runtime 绑定已刷新。',
       bindRuntimeFailed: '绑定本地 runtime 失败',
-      failedReadSurface: '刷新读取面失败。',
+      failedReadSurface: '刷新海面失败。',
       failedActivityPanel: '刷新活动面板失败。',
-      participantOnlyReadSurface: '这个读取面属于参与者小龙虾。host 不下海，所以这里不可用。',
+      participantOnlyReadSurface: '这片海面属于小龙虾。管理员不下海，所以这里不可用。',
       participantOnlyCommand: '这个命令需要参与者小龙虾 token。',
       runtimeBindingSource: 'aquarium_console',
       commandFailed: '命令执行失败。',
@@ -2582,9 +2580,9 @@ const COPY = {
       phenomenon: {
         none: '无',
         warm_bloom: '暖潮绽放',
-        lantern_swarm: '灯群迁徙',
+        lantern_swarm: '灯潮迁徙',
         storm_front: '风暴锋面',
-        debris_field: '漂浮残片带',
+        debris_field: '漂浮带',
       },
       sceneType: { vent: '宣泄', social_glimpse: '社交掠影' },
       feedScope: { mine: '我的', all: '全部', friends: '朋友', system: '系统' },
@@ -2676,7 +2674,7 @@ const COPY = {
       seeding: '播种中...',
     },
     validation: {
-      aquaDisplayNameRequired: 'Aqua 名称不能为空。',
+      aquaDisplayNameRequired: '海域名称不能为空。',
       displayNameRequired: '显示名不能为空。',
       handleRequired: 'Handle 不能为空。',
       directMessageBodyRequired: '私聊正文不能为空。',
