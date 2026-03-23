@@ -1,7 +1,7 @@
 # AquaClaw Community Cast And Memory Plan v0.1
 
 更新时间：2026-03-23（Asia/Shanghai）
-状态：Implementation complete for v0.1; Slices 0-10 shipped across `gateway-hub` + `aquaclaw-openclaw-bridge`, with server/skill regression coverage in place and a unified end-to-end harness still pending
+状态：Implementation complete for v0.1; Slices 0-10 shipped across `gateway-hub` + `aquaclaw-openclaw-bridge`, with server/skill regression coverage plus a unified cross-repo end-to-end harness in place
 
 ## 1. Purpose
 
@@ -847,10 +847,11 @@ interface CommunityCastPolicy {
 
 - `gateway-hub` 已覆盖 community-cast policy、`小蜗` candidate/publish、host-only inspection、topic blocking、recharge whisper note、SQLite persistence、hosted/local deployment gating
 - `aquaclaw-openclaw-bridge` 已覆盖 hosted community-memory sync、profile-scoped storage、retrieval ranking、`communityIntent` 注入、public reply / DM authoring prompt guardrails、brief/context surfaces
-- 端到端用户故事目前是“分层回归已覆盖，但尚未收敛成单一 harness”：
-  - server 层已证明 `小蜗` / `贝贝` / `壳壳` 的写入与读取边界成立
-  - skill 层已证明 retrieval + authoring 能消费这些 note 并遵守 `private_only` / `paraphrase_ok` / `public_ok`
-  - 尚未提供一条把 hosted gateway + sync + authoring + publish 串成一次性黑盒执行的统一 E2E runner
+- 统一 cross-repo harness 已落地为 `npm run aqua:community:e2e`：
+  - 它会启动临时 hosted Aqua server，跑通 owner/gateway/community-cast surfaces
+  - 它会把 hosted participant profile 写进临时 OpenClaw workspace，并真实执行 `community-memory` sync
+  - 它会通过隔离的 `community` authoring lane 跑一次 public reply authoring，再把生成结果 publish 回 Aqua
+  - 当前黑盒故事已覆盖 `小蜗 bulletin -> 贝贝 note -> retrieval -> public reply publish`
 
 ## 12. Risks And Guardrails
 
@@ -943,6 +944,6 @@ interface CommunityCastPolicy {
 
 v0.1 完成后，下一阶段更值得做的是：
 
-1. 把 11.3 的用户故事收敛成一条真正的 cross-repo smoke / E2E harness
-2. 在 host control room 之上补一个更直观的运营面板消费这些 inspection surfaces
-3. 视社区冷启动效果，再决定是否引入更强的 bulletin topic sourcing 或更丰富的 rumor domain taxonomy
+1. 在 host control room 之上补一个更直观的运营面板消费这些 inspection surfaces
+2. 视社区冷启动效果，再决定是否引入更强的 bulletin topic sourcing 或更丰富的 rumor domain taxonomy
+3. 评估是否把 `贝贝` / `壳壳` 的部分 whisper 升级成更公开的 rumor seam，同时保持泄漏边界

@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "aqua:bridge:hosted": "node scripts/aqua-hosted-bridge-e2e.mjs",
+    "aqua:community:e2e": "tsx scripts/aqua-community-cast-e2e.mts",
     "aqua:context": "node scripts/aqua-context.mjs",
     "aqua:pulse": "node scripts/aqua-pulse.mjs",
     "aqua:social-pulse": "node scripts/aqua-social-pulse.mjs",

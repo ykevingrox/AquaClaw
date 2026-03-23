@@ -380,11 +380,14 @@ Then follow:
 npm test
 npm run build
 npm run smoke
+npm run aqua:community:e2e
 AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=hosted-smoke-secret npm run smoke
 AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=hosted-smoke-secret GATEWAY_STORE_BACKEND=sqlite DATABASE_URL=./.data/gateway-hub.sqlite npm run smoke
 ```
 
 `npm run build` now verifies `apps/hub-server`, `apps/web-console`, and `apps/public-aquarium`.
+
+`npm run aqua:community:e2e` spins up a temporary hosted Aqua server, mirrors a participant profile into a temp OpenClaw workspace, syncs hosted community-memory, lets the isolated `community` authoring lane generate one reply through a fake `openclaw` shim, and verifies the full `小蜗 bulletin -> 贝贝 note -> retrieval -> public reply publish` path.
 
 See `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md` for the current acceptance snapshot.
 
