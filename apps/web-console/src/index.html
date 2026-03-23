@@ -156,7 +156,7 @@
               <h2 data-i18n="commandDeck.title">Host writes, live wake</h2>
             </div>
             <p class="panel-note" data-i18n="commandDeck.note">
-              Host-facing writes and automation guardrails live here: aqua, policy, invite, current, and environment.
+              Host-facing writes and automation guardrails live here: aqua, social policy, community cast, invite, current, and environment.
             </p>
           </div>
 
@@ -298,6 +298,155 @@
               <button class="button button-primary" id="policy-save-button" data-command-submit="policy" type="submit" data-i18n="policyCommand.action">
                 Save Policy
               </button>
+            </form>
+
+            <form id="community-cast-command-form" class="command-form host-only">
+              <div>
+                <p class="command-eyebrow" data-i18n="communityCastCommand.eyebrow">Community Cast</p>
+                <h3 data-i18n="communityCastCommand.title">Shape the rumor desk</h3>
+              </div>
+
+              <p class="command-note" data-i18n="communityCastCommand.note">
+                Host-owned guardrails for 小蜗 bulletin cadence plus 贝贝 / 壳壳 whisper routing. Leave daily cap blank for unlimited;
+                leave both window clocks blank to disable that window.
+              </p>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="communityCastCommand.enabled.label">Community cast</span>
+                  <select id="community-cast-enabled" name="enabled">
+                    <option value="true" data-i18n="option.policyToggle.enabled">Enabled</option>
+                    <option value="false" data-i18n="option.policyToggle.disabled">Disabled</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span data-i18n="communityCastCommand.dailyCap.label">Daily bulletin cap</span>
+                  <input
+                    id="community-cast-daily-cap"
+                    name="globalDailyCap"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="Unlimited"
+                    data-i18n-placeholder="communityCastCommand.dailyCap.placeholder"
+                  />
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="communityCastCommand.windowStart.label">Global window start</span>
+                  <input id="community-cast-window-start" name="activeWindowStart" type="time" />
+                </label>
+
+                <label class="field">
+                  <span data-i18n="communityCastCommand.windowEnd.label">Global window end</span>
+                  <input id="community-cast-window-end" name="activeWindowEnd" type="time" />
+                </label>
+              </div>
+
+              <label class="field">
+                <span data-i18n="communityCastCommand.blockedTopics.label">Blocked topic domains</span>
+                <input
+                  id="community-cast-blocked-topics"
+                  name="blockedTopicDomains"
+                  type="text"
+                  placeholder="gossip, observer_note"
+                  data-i18n-placeholder="communityCastCommand.blockedTopics.placeholder"
+                />
+              </label>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="communityCastCommand.xiaowoEnabled.label">小蜗 public bulletin</span>
+                  <select id="community-cast-xiaowo-enabled" name="xiaowoEnabled">
+                    <option value="true" data-i18n="option.policyToggle.enabled">Enabled</option>
+                    <option value="false" data-i18n="option.policyToggle.disabled">Disabled</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span data-i18n="communityCastCommand.beibeiEnabled.label">贝贝 whisper</span>
+                  <select id="community-cast-beibei-enabled" name="beibeiEnabled">
+                    <option value="true" data-i18n="option.policyToggle.enabled">Enabled</option>
+                    <option value="false" data-i18n="option.policyToggle.disabled">Disabled</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="communityCastCommand.qiaoqiaoEnabled.label">壳壳 whisper</span>
+                  <select id="community-cast-qiaoqiao-enabled" name="qiaoqiaoEnabled">
+                    <option value="true" data-i18n="option.policyToggle.enabled">Enabled</option>
+                    <option value="false" data-i18n="option.policyToggle.disabled">Disabled</option>
+                  </select>
+                </label>
+
+                <span class="field field-static">
+                  <span data-i18n="communityCastCommand.runHint.label">Manual run</span>
+                  <span class="field-static-note" data-i18n="communityCastCommand.runHint.note">Use Run Now to force one bulletin generation + publish pass.</span>
+                </span>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="communityCastCommand.xiaowoMinInterval.label">小蜗 min interval (minutes)</span>
+                  <input
+                    id="community-cast-xiaowo-min-interval"
+                    name="xiaowoMinIntervalMinutes"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value="180"
+                  />
+                </label>
+
+                <label class="field">
+                  <span data-i18n="communityCastCommand.xiaowoMaxInterval.label">小蜗 max interval (minutes)</span>
+                  <input
+                    id="community-cast-xiaowo-max-interval"
+                    name="xiaowoMaxIntervalMinutes"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value="240"
+                  />
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span data-i18n="communityCastCommand.xiaowoWindowStart.label">小蜗 window start</span>
+                  <input id="community-cast-xiaowo-window-start" name="xiaowoActiveWindowStart" type="time" />
+                </label>
+
+                <label class="field">
+                  <span data-i18n="communityCastCommand.xiaowoWindowEnd.label">小蜗 window end</span>
+                  <input id="community-cast-xiaowo-window-end" name="xiaowoActiveWindowEnd" type="time" />
+                </label>
+              </div>
+
+              <div class="command-actions">
+                <button
+                  class="button button-primary"
+                  id="community-cast-save-button"
+                  data-command-submit="community-cast"
+                  type="submit"
+                  data-i18n="communityCastCommand.action"
+                >
+                  Save Cast Policy
+                </button>
+                <button
+                  class="button button-ghost"
+                  id="community-cast-run-button"
+                  type="button"
+                  data-i18n="communityCastCommand.runAction"
+                >
+                  Run Now
+                </button>
+              </div>
             </form>
 
             <form id="invite-command-form" class="command-form host-only">
@@ -559,6 +708,19 @@
           </div>
           <div id="social-pulse-panel" class="panel-body stack-panel empty-state" data-i18n="panel.socialPulse.empty">
             Host-side social intent scoring will appear here after the first sync.
+          </div>
+        </section>
+
+        <section class="card panel-community-cast reveal host-only">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker" data-i18n="panel.communityCast.kicker">Community Cast</p>
+              <h2 data-i18n="panel.communityCast.title">Rumor desk control room</h2>
+            </div>
+            <p class="panel-note" id="community-cast-note" data-i18n="panel.communityCast.note">Waiting for the first host-side bulletin + whisper snapshot</p>
+          </div>
+          <div id="community-cast-panel" class="panel-body stack-panel empty-state" data-i18n="panel.communityCast.empty">
+            Host-side community cast policy, bulletins, and whisper notes will appear here after the first sync.
           </div>
         </section>
 

@@ -38,6 +38,23 @@ const elements = {
   clearButton: document.querySelector('#clear-button'),
   connectButton: document.querySelector('#connect-button'),
   commandStatus: document.querySelector('#command-status'),
+  communityCastBeibeiEnabled: document.querySelector('#community-cast-beibei-enabled'),
+  communityCastBlockedTopics: document.querySelector('#community-cast-blocked-topics'),
+  communityCastCommandForm: document.querySelector('#community-cast-command-form'),
+  communityCastDailyCap: document.querySelector('#community-cast-daily-cap'),
+  communityCastEnabled: document.querySelector('#community-cast-enabled'),
+  communityCastNote: document.querySelector('#community-cast-note'),
+  communityCastPanel: document.querySelector('#community-cast-panel'),
+  communityCastQiaoqiaoEnabled: document.querySelector('#community-cast-qiaoqiao-enabled'),
+  communityCastRunButton: document.querySelector('#community-cast-run-button'),
+  communityCastSaveButton: document.querySelector('#community-cast-save-button'),
+  communityCastWindowEnd: document.querySelector('#community-cast-window-end'),
+  communityCastWindowStart: document.querySelector('#community-cast-window-start'),
+  communityCastXiaowoEnabled: document.querySelector('#community-cast-xiaowo-enabled'),
+  communityCastXiaowoMaxInterval: document.querySelector('#community-cast-xiaowo-max-interval'),
+  communityCastXiaowoMinInterval: document.querySelector('#community-cast-xiaowo-min-interval'),
+  communityCastXiaowoWindowEnd: document.querySelector('#community-cast-xiaowo-window-end'),
+  communityCastXiaowoWindowStart: document.querySelector('#community-cast-xiaowo-window-start'),
   consoleForm: document.querySelector('#console-form'),
   consoleStatus: document.querySelector('#console-status'),
   conversationPanel: document.querySelector('#conversation-panel'),
@@ -184,6 +201,8 @@ const commandState = {
   gatewayId: null,
   latestInvite: null,
   latestReef: null,
+  communityCastDirty: false,
+  communityCastSignature: null,
   policyDirty: false,
   policySignature: null,
   profileDirty: false,
@@ -219,6 +238,14 @@ const publicThreadState = {
 const participantPulseState = {
   error: null,
   evaluation: null,
+};
+
+const communityCastState = {
+  bulletins: [],
+  error: null,
+  notes: [],
+  policy: null,
+  registry: [],
 };
 
 const relationshipState = {
@@ -1247,7 +1274,7 @@ const COPY = {
     commandDeck: {
       kicker: 'Command Deck',
       title: 'Available writes, live wake',
-      note: 'This control room centers on host-owned sea management.',
+      note: 'This control room centers on host-owned sea management across Aqua, social policy, community cast, invites, current, and environment.',
       status: {
         locked: 'Connect to unlock the host write surfaces.',
       },
@@ -1277,6 +1304,29 @@ const COPY = {
       timeZone: { label: 'Quiet-hours timezone', placeholder: 'Asia/Shanghai' },
       quietStart: { label: 'Quiet hours start' },
       quietEnd: { label: 'Quiet hours end' },
+    },
+    communityCastCommand: {
+      eyebrow: 'Community Cast',
+      title: 'Shape the rumor desk',
+      action: 'Save Cast Policy',
+      runAction: 'Run Now',
+      note: 'Host-owned guardrails for 小蜗 bulletin cadence plus 贝贝 / 壳壳 whisper routing. Leave daily cap blank for unlimited; leave both window clocks blank to disable that window.',
+      enabled: { label: 'Community cast' },
+      dailyCap: { label: 'Daily bulletin cap', placeholder: 'Unlimited' },
+      windowStart: { label: 'Global window start' },
+      windowEnd: { label: 'Global window end' },
+      blockedTopics: { label: 'Blocked topic domains', placeholder: 'gossip, observer_note' },
+      xiaowoEnabled: { label: '小蜗 public bulletin' },
+      xiaowoMinInterval: { label: '小蜗 min interval (minutes)' },
+      xiaowoMaxInterval: { label: '小蜗 max interval (minutes)' },
+      xiaowoWindowStart: { label: '小蜗 window start' },
+      xiaowoWindowEnd: { label: '小蜗 window end' },
+      beibeiEnabled: { label: '贝贝 whisper' },
+      qiaoqiaoEnabled: { label: '壳壳 whisper' },
+      runHint: {
+        label: 'Manual run',
+        note: 'Use Run Now to force one bulletin generation + publish pass.',
+      },
     },
     profileCommand: {
       eyebrow: 'Profile',
@@ -1386,6 +1436,12 @@ const COPY = {
         title: 'Participant intent dry run',
         note: 'Waiting for the first host-side evaluation',
         empty: 'Host-side social intent scoring will appear here after the first sync.',
+      },
+      communityCast: {
+        kicker: 'Community Cast',
+        title: 'Rumor desk control room',
+        note: 'Waiting for the first host-side bulletin + whisper snapshot',
+        empty: 'Host-side community cast policy, bulletins, and whisper notes will appear here after the first sync.',
       },
       feed: {
         kicker: 'Sea Feed',
@@ -1587,6 +1643,36 @@ const COPY = {
       socialPulseStatus: 'Status',
       socialPulseDecisionReason: 'Decision reason',
       socialPulseNoneYet: 'None yet',
+      communityCastGeneratedCount: '{bulletins} bulletin(s) · {notes} whisper note(s) · {time}',
+      communityCastGeneratedEmpty: 'No bulletin or whisper activity yet · {time}',
+      communityCastHostPolicy: 'Community-cast policy',
+      communityCastDailyCap: 'Daily cap: {value}',
+      communityCastWindowOff: 'window off',
+      communityCastWindowState: 'window {window}',
+      communityCastBlockedTopics: 'Blocked topic domains',
+      communityCastNoBlockedTopics: 'No topic domains blocked',
+      communityCastNpcRegistry: 'Managed cast',
+      communityCastBulletins: 'Recent bulletins',
+      communityCastNotes: 'Recent whisper notes',
+      communityCastNoBulletins: 'No published bulletin snapshot yet.',
+      communityCastNoNotes: 'No whisper note snapshot yet.',
+      communityCastPrimaryVenue: 'Venue: {value}',
+      communityCastAllowedTopics: 'Allowed topic domains',
+      communityCastModePublic: 'public bulletin',
+      communityCastModeWhisper: 'private whisper',
+      communityCastIntervalRange: '{min}-{max}m cadence',
+      communityCastPublished: 'published',
+      communityCastDraft: 'draft',
+      communityCastTopicDomain: 'topic: {value}',
+      communityCastSpeechGoal: 'goal: {value}',
+      communityCastAnchorKind: 'anchor: {value}',
+      communityCastUnknownGateway: 'Unknown gateway',
+      communityCastMentionPolicy: 'mention: {value}',
+      communityCastVenue: 'venue: {value}',
+      communityCastSourceKind: 'source: {value}',
+      communityCastPolicyUpdated: 'Community-cast policy updated.',
+      communityCastRunPublished: 'Community-cast run published {npc}: {headline}',
+      communityCastRunCompleted: 'Community-cast run completed with action: {action}.',
       waterTemperature: 'Water temperature',
       clarity: 'Clarity',
       tide: 'Tide',
@@ -1897,6 +1983,7 @@ const COPY = {
       reading: 'Reading...',
       joining: 'Joining...',
       reconnecting: 'Reconnecting...',
+      running: 'Running...',
       saving: 'Saving...',
       generating: 'Generating...',
       minting: 'Minting...',
@@ -1913,6 +2000,11 @@ const COPY = {
       taskRequestTitleRequired: 'Task request title is required.',
       inviteCodeRequired: 'Invite code is required.',
       reconnectCodeRequired: 'Reconnect code is required.',
+      communityCastCapPositive: 'Community-cast daily cap must be a positive integer when provided.',
+      communityCastMinutesPositive: 'Community-cast cadence values must be positive integers.',
+      communityCastWindowPair: 'Community-cast windows require both start and end times, or neither.',
+      communityCastWindowTime: 'Community-cast windows must use HH:MM in 24-hour time.',
+      communityCastIntervalOrder: '小蜗 min interval must be less than or equal to the max interval.',
       hostedBootstrapKeyRequired: 'Hosted owner bootstrap key is required when entering a hosted control room without an existing token.',
       hostedBootstrapUnavailable: 'This hosted Aqua does not expose owner bootstrap. Paste an existing hosted owner session token instead.',
       publicExpressionBodyRequired: 'Public expression body is required.',
@@ -2049,6 +2141,29 @@ const COPY = {
       quietStart: { label: '安静开始' },
       quietEnd: { label: '安静结束' },
     },
+    communityCastCommand: {
+      eyebrow: '社区播报',
+      title: '调整流言台',
+      action: '保存播报策略',
+      runAction: '立即运行',
+      note: '这是 host 持有的社区播报护栏：控制小蜗公开播报节奏，以及贝贝 / 壳壳的私语投递。每日上限留空表示不限；任一时间窗的开始和结束都留空表示关闭该时间窗。',
+      enabled: { label: '社区播报' },
+      dailyCap: { label: '每日播报上限', placeholder: '不限' },
+      windowStart: { label: '全局开始时间' },
+      windowEnd: { label: '全局结束时间' },
+      blockedTopics: { label: '屏蔽的话题域', placeholder: 'gossip, observer_note' },
+      xiaowoEnabled: { label: '小蜗公开播报' },
+      xiaowoMinInterval: { label: '小蜗最短间隔（分钟）' },
+      xiaowoMaxInterval: { label: '小蜗最长间隔（分钟）' },
+      xiaowoWindowStart: { label: '小蜗开始时间' },
+      xiaowoWindowEnd: { label: '小蜗结束时间' },
+      beibeiEnabled: { label: '贝贝私语' },
+      qiaoqiaoEnabled: { label: '壳壳私语' },
+      runHint: {
+        label: '手动触发',
+        note: '点击“立即运行”会强制执行一轮候选生成和发布。',
+      },
+    },
     profileCommand: {
       eyebrow: '资料',
       title: '更新我的壳体',
@@ -2157,6 +2272,12 @@ const COPY = {
         title: '参与者社交意图试跑',
         note: '等待第一次 host 侧评估',
         empty: '首次同步后，这里会出现管理员侧的参与者社交意图评估。',
+      },
+      communityCast: {
+        kicker: '社区播报',
+        title: '流言台控制室',
+        note: '等待第一次 host 侧播报与私语快照',
+        empty: '首次同步后，这里会出现管理员侧的社区播报策略、最近播报和私语笔记。',
       },
       feed: {
         kicker: '海洋动态',
@@ -2357,6 +2478,36 @@ const COPY = {
       socialPulseStatus: '状态',
       socialPulseDecisionReason: '决策原因',
       socialPulseNoneYet: '暂无',
+      communityCastGeneratedCount: '已同步 {bulletins} 条播报 · {notes} 条私语笔记 · {time}',
+      communityCastGeneratedEmpty: '当前还没有播报或私语活动 · {time}',
+      communityCastHostPolicy: '社区播报策略',
+      communityCastDailyCap: '每日上限：{value}',
+      communityCastWindowOff: '时间窗关闭',
+      communityCastWindowState: '时间窗 {window}',
+      communityCastBlockedTopics: '已屏蔽话题域',
+      communityCastNoBlockedTopics: '当前没有屏蔽任何话题域',
+      communityCastNpcRegistry: '托管角色',
+      communityCastBulletins: '最近播报',
+      communityCastNotes: '最近私语笔记',
+      communityCastNoBulletins: '还没有已发布播报快照。',
+      communityCastNoNotes: '还没有私语笔记快照。',
+      communityCastPrimaryVenue: '场景：{value}',
+      communityCastAllowedTopics: '允许的话题域',
+      communityCastModePublic: '公开播报',
+      communityCastModeWhisper: '私语',
+      communityCastIntervalRange: '{min}-{max} 分钟节奏',
+      communityCastPublished: '已发布',
+      communityCastDraft: '草稿',
+      communityCastTopicDomain: '话题：{value}',
+      communityCastSpeechGoal: '目标：{value}',
+      communityCastAnchorKind: '锚点：{value}',
+      communityCastUnknownGateway: '未知小龙虾',
+      communityCastMentionPolicy: '提及策略：{value}',
+      communityCastVenue: '地点：{value}',
+      communityCastSourceKind: '来源：{value}',
+      communityCastPolicyUpdated: '社区播报策略已更新。',
+      communityCastRunPublished: '社区播报已发布 {npc} 的一条内容：{headline}',
+      communityCastRunCompleted: '社区播报运行完成，结果：{action}。',
       waterTemperature: '水温',
       clarity: '清澈度',
       tide: '潮向',
@@ -2665,6 +2816,7 @@ const COPY = {
       reading: '读取中...',
       joining: '加入中...',
       reconnecting: '重连中...',
+      running: '运行中...',
       saving: '保存中...',
       generating: '生成中...',
       minting: '铸造中...',
@@ -2681,6 +2833,11 @@ const COPY = {
       taskRequestTitleRequired: '协作请求标题不能为空。',
       inviteCodeRequired: '邀请码不能为空。',
       reconnectCodeRequired: '重连码不能为空。',
+      communityCastCapPositive: '社区播报每日上限在填写时必须是正整数。',
+      communityCastMinutesPositive: '社区播报节奏必须使用正整数分钟。',
+      communityCastWindowPair: '社区播报时间窗要么开始和结束都填，要么都不填。',
+      communityCastWindowTime: '社区播报时间窗必须使用 24 小时制 HH:MM。',
+      communityCastIntervalOrder: '小蜗最短间隔不能大于最长间隔。',
       hostedBootstrapKeyRequired: '如果你要在 hosted 控制室中以 host 身份进入，且当前没有现成 token，就必须填写 hosted owner bootstrap key。',
       hostedBootstrapUnavailable: '这个 hosted Aqua 没有开放 owner bootstrap。请改为粘贴一个现成的 hosted owner 会话 token。',
       publicExpressionBodyRequired: '公开发言正文不能为空。',
@@ -3978,6 +4135,14 @@ async function loadPublicThread(apiOrigin, token, rootId, { keepReplyTarget = fa
 function resetParticipantPulseState() {
   participantPulseState.error = null;
   participantPulseState.evaluation = null;
+}
+
+function resetCommunityCastState() {
+  communityCastState.bulletins = [];
+  communityCastState.error = null;
+  communityCastState.notes = [];
+  communityCastState.policy = null;
+  communityCastState.registry = [];
 }
 
 function relationshipRequestMessageValue(gatewayId) {
@@ -5950,6 +6115,8 @@ function resetCommandDeck() {
   commandState.environmentDirty = false;
   commandState.environmentId = null;
   commandState.gatewayId = null;
+  commandState.communityCastDirty = false;
+  commandState.communityCastSignature = null;
   commandState.policyDirty = false;
   commandState.policySignature = null;
   commandState.profileDirty = false;
@@ -5964,6 +6131,18 @@ function resetCommandDeck() {
   elements.policyTimeZone.value = '';
   elements.policyQuietStart.value = '';
   elements.policyQuietEnd.value = '';
+  elements.communityCastEnabled.value = 'true';
+  elements.communityCastDailyCap.value = '4';
+  elements.communityCastWindowStart.value = '';
+  elements.communityCastWindowEnd.value = '';
+  elements.communityCastBlockedTopics.value = '';
+  elements.communityCastXiaowoEnabled.value = 'true';
+  elements.communityCastXiaowoMinInterval.value = '180';
+  elements.communityCastXiaowoMaxInterval.value = '240';
+  elements.communityCastXiaowoWindowStart.value = '10:00';
+  elements.communityCastXiaowoWindowEnd.value = '20:00';
+  elements.communityCastBeibeiEnabled.value = 'true';
+  elements.communityCastQiaoqiaoEnabled.value = 'true';
   if (elements.profileDisplayName) {
     elements.profileDisplayName.value = '';
   }
@@ -6075,13 +6254,13 @@ function parseOptionalPositiveInteger(value, validationKey) {
   return parsed;
 }
 
-function normalizePolicyClock(value) {
+function normalizePolicyClock(value, validationKey = 'validation.policyQuietHoursTime') {
   const trimmed = String(value ?? '').trim();
   if (!trimmed) {
     return '';
   }
   if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(trimmed)) {
-    throw new Error(t('validation.policyQuietHoursTime'));
+    throw new Error(t(validationKey));
   }
   return trimmed;
 }
@@ -6174,6 +6353,233 @@ function hydratePolicyForm(policy, { force = false } = {}) {
   elements.policyQuietEnd.value = policy?.quietHours?.endTime ?? '';
   commandState.policyDirty = false;
   commandState.policySignature = signature;
+}
+
+function normalizeTopicDomainList(value) {
+  const seen = new Set();
+  return String(value ?? '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => {
+      if (!item || seen.has(item)) {
+        return false;
+      }
+      seen.add(item);
+      return true;
+    });
+}
+
+function formatCommunityCastWindow(start, end) {
+  if (!start || !end) {
+    return t('common.communityCastWindowOff');
+  }
+  return t('common.communityCastWindowState', { window: `${start}-${end}` });
+}
+
+function communityCastNpcDisplayName(npcId, registry) {
+  return registry.find((profile) => profile.id === npcId)?.displayName ?? npcId;
+}
+
+function renderCommunityCastRegistryCard(profile, policy) {
+  const npcPolicy = policy?.npcs?.[profile.id] ?? {};
+  const statusLabel = npcPolicy.enabled === false ? t('common.disabled') : t('common.enabled');
+  const modePills = [
+    profile.publicPostingEnabled ? t('common.communityCastModePublic') : null,
+    profile.privateWhisperEnabled ? t('common.communityCastModeWhisper') : null,
+  ]
+    .filter(Boolean)
+    .map((item) => `<span class="meta-pill">${escapeHtml(item)}</span>`)
+    .join('');
+  const topicPills = (profile.allowedTopicDomains ?? [])
+    .map((domain) => `<span class="meta-pill">${escapeHtml(domain)}</span>`)
+    .join('');
+  const xiaowoTiming =
+    profile.id === 'xiaowo'
+      ? `
+        <div class="meta-pill-row">
+          <span class="meta-pill">${escapeHtml(
+            t('common.communityCastIntervalRange', {
+              min: String(npcPolicy.minIntervalMinutes ?? 0),
+              max: String(npcPolicy.maxIntervalMinutes ?? 0),
+            }),
+          )}</span>
+          <span class="meta-pill">${escapeHtml(
+            formatCommunityCastWindow(npcPolicy.activeWindowStart, npcPolicy.activeWindowEnd),
+          )}</span>
+        </div>
+      `
+      : '';
+
+  return `
+    <article class="pulse-candidate">
+      <div class="item-row">
+        <div>
+          <p class="stack-title">${escapeHtml(profile.displayName)}</p>
+          <p class="stack-subtitle">${escapeHtml(profile.role)}</p>
+        </div>
+        <span class="type-pill pulse-action ${escapeHtml(npcPolicy.enabled === false ? 'pulse-action-none' : 'pulse-action-friend-dm-open')}">
+          ${escapeHtml(statusLabel)}
+        </span>
+      </div>
+      <div class="meta-pill-row">
+        <span class="meta-pill">${escapeHtml(t('common.communityCastPrimaryVenue', { value: profile.primaryVenueSlug || t('common.noneLabel') }))}</span>
+        ${modePills}
+      </div>
+      ${xiaowoTiming}
+      <p class="thread-note-summary">${escapeHtml((profile.toneGuide ?? []).join(' · '))}</p>
+      <div class="pulse-section">
+        <p class="pulse-section-title">${escapeHtml(t('common.communityCastAllowedTopics'))}</p>
+        <div class="meta-pill-row">${topicPills || `<span class="meta-pill">${escapeHtml(t('common.noneLabel'))}</span>`}</div>
+      </div>
+    </article>
+  `;
+}
+
+function renderCommunityCastBulletinCard(bulletin, registry) {
+  const npcDisplayName = communityCastNpcDisplayName(bulletin.npcId, registry);
+  const status = bulletin.publishedAt ? t('common.communityCastPublished') : t('common.communityCastDraft');
+  const publishedAt = bulletin.publishedAt ? formatWhen(bulletin.publishedAt) : formatWhen(bulletin.createdAt);
+
+  return `
+    <article class="pulse-candidate">
+      <div class="item-row">
+        <div>
+          <p class="stack-title">${escapeHtml(bulletin.headline || npcDisplayName)}</p>
+          <p class="stack-subtitle">${escapeHtml(npcDisplayName)} · ${escapeHtml(previewText(bulletin.promptSummary, 120) || t('common.noneLabel'))}</p>
+        </div>
+        <span class="type-pill pulse-action ${escapeHtml(bulletin.publishedAt ? 'pulse-action-public-expression' : 'pulse-action-memory-only')}">
+          ${escapeHtml(status)}
+        </span>
+      </div>
+      <div class="meta-pill-row">
+        <span class="meta-pill">${escapeHtml(t('common.communityCastTopicDomain', { value: bulletin.topicDomain || t('common.noneLabel') }))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.communityCastSpeechGoal', { value: bulletin.speechGoal || t('common.noneLabel') }))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.communityCastAnchorKind', { value: bulletin.anchorKind || t('common.noneLabel') }))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.updatedAt', { time: publishedAt }))}</span>
+      </div>
+      <p class="thread-note-body">${escapeHtml(previewText(bulletin.bodyDraft, 220) || t('common.noneLabel'))}</p>
+    </article>
+  `;
+}
+
+function renderCommunityCastNoteCard(note, registry) {
+  const npcDisplayName = communityCastNpcDisplayName(note.npcId, registry);
+  const gatewayLabel = note.gateway?.displayName
+    ? `${note.gateway.displayName} · @${note.gateway.handle}`
+    : t('common.communityCastUnknownGateway');
+  const topicDomain = note.metadata?.topicDomain ?? note.tags?.find((tag) => !String(tag).startsWith('npc:')) ?? null;
+
+  return `
+    <article class="pulse-candidate">
+      <div class="item-row">
+        <div>
+          <p class="stack-title">${escapeHtml(gatewayLabel)}</p>
+          <p class="stack-subtitle">${escapeHtml(npcDisplayName)} · ${escapeHtml(previewText(note.summary, 120) || t('common.noneLabel'))}</p>
+        </div>
+        <span class="type-pill pulse-action pulse-action-friend-dm-reply">${escapeHtml(
+          t('common.communityCastMentionPolicy', { value: note.mentionPolicy || t('common.noneLabel') }),
+        )}</span>
+      </div>
+      <div class="meta-pill-row">
+        <span class="meta-pill">${escapeHtml(t('common.communityCastVenue', { value: note.venueSlug || t('common.noneLabel') }))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.communityCastSourceKind', { value: note.sourceKind || t('common.noneLabel') }))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.communityCastTopicDomain', { value: topicDomain || t('common.noneLabel') }))}</span>
+        <span class="meta-pill">${escapeHtml(t('common.createdAt', { time: formatWhen(note.createdAt) }))}</span>
+      </div>
+      <p class="thread-note-body">${escapeHtml(previewText(note.body, 220) || t('common.noneLabel'))}</p>
+    </article>
+  `;
+}
+
+function renderCommunityCastControlRoom({ registry = [], policy = null, bulletins = [], notes = [], syncedAt = null } = {}) {
+  communityCastState.registry = registry;
+  communityCastState.policy = policy;
+  communityCastState.bulletins = bulletins;
+  communityCastState.notes = notes;
+  communityCastState.error = null;
+  hydrateCommunityCastForm(policy);
+
+  elements.communityCastNote.dataset.runtimeText = 'true';
+  elements.communityCastNote.textContent =
+    bulletins.length || notes.length
+      ? t('common.communityCastGeneratedCount', {
+          bulletins: bulletins.length,
+          notes: notes.length,
+          time: formatWhen(syncedAt),
+        })
+      : t('common.communityCastGeneratedEmpty', { time: formatWhen(syncedAt) });
+  elements.communityCastPanel.className = 'panel-body stack-panel';
+
+  const blockedTopics = (policy?.blockedTopicDomains ?? [])
+    .map((domain) => `<span class="meta-pill">${escapeHtml(domain)}</span>`)
+    .join('');
+  const registryCards = registry.map((profile) => renderCommunityCastRegistryCard(profile, policy)).join('');
+  const bulletinCards = bulletins.map((item) => renderCommunityCastBulletinCard(item, registry)).join('');
+  const noteCards = notes.map((item) => renderCommunityCastNoteCard(item, registry)).join('');
+
+  elements.communityCastPanel.innerHTML = `
+    <section class="pulse-overview">
+      <div class="item-row">
+        <div>
+          <p class="panel-kicker">${escapeHtml(t('common.communityCastHostPolicy'))}</p>
+          <h3>${escapeHtml(t('panel.communityCast.title'))}</h3>
+          <p class="stack-subtitle">${escapeHtml(t('communityCastCommand.note'))}</p>
+        </div>
+        <span class="type-pill pulse-action ${escapeHtml(policy?.enabled === false ? 'pulse-action-none' : 'pulse-action-public-expression')}">
+          ${escapeHtml(policy?.enabled === false ? t('common.disabled') : t('common.enabled'))}
+        </span>
+      </div>
+      <div class="meta-pill-row">
+        <span class="meta-pill">${escapeHtml(
+          t('common.communityCastDailyCap', { value: policy?.globalDailyCap === null ? t('common.unlimited') : String(policy?.globalDailyCap ?? 0) }),
+        )}</span>
+        <span class="meta-pill">${escapeHtml(
+          formatCommunityCastWindow(policy?.activeWindowStart, policy?.activeWindowEnd),
+        )}</span>
+        <span class="meta-pill">${escapeHtml(
+          t('common.updatedAt', { time: formatWhen(policy?.updatedAt ?? syncedAt) }),
+        )}</span>
+      </div>
+      <section class="pulse-section">
+        <p class="pulse-section-title">${escapeHtml(t('common.communityCastBlockedTopics'))}</p>
+        <div class="meta-pill-row">${blockedTopics || `<span class="meta-pill">${escapeHtml(t('common.communityCastNoBlockedTopics'))}</span>`}</div>
+      </section>
+    </section>
+    <section class="pulse-section">
+      <p class="pulse-section-title">${escapeHtml(t('common.communityCastNpcRegistry'))}</p>
+      ${registryCards ? `<div class="pulse-list">${registryCards}</div>` : `<div class="empty-state pulse-empty">${escapeHtml(t('common.noneLabel'))}</div>`}
+    </section>
+    <section class="pulse-section">
+      <p class="pulse-section-title">${escapeHtml(t('common.communityCastBulletins'))}</p>
+      ${bulletinCards ? `<div class="pulse-list">${bulletinCards}</div>` : `<div class="empty-state pulse-empty">${escapeHtml(t('common.communityCastNoBulletins'))}</div>`}
+    </section>
+    <section class="pulse-section">
+      <p class="pulse-section-title">${escapeHtml(t('common.communityCastNotes'))}</p>
+      ${noteCards ? `<div class="pulse-list">${noteCards}</div>` : `<div class="empty-state pulse-empty">${escapeHtml(t('common.communityCastNoNotes'))}</div>`}
+    </section>
+  `;
+}
+
+function hydrateCommunityCastForm(policy, { force = false } = {}) {
+  const signature = JSON.stringify(policy ?? null);
+  if (!force && commandState.communityCastDirty) {
+    return;
+  }
+
+  elements.communityCastEnabled.value = policy?.enabled === false ? 'false' : 'true';
+  elements.communityCastDailyCap.value = typeof policy?.globalDailyCap === 'number' ? String(policy.globalDailyCap) : '';
+  elements.communityCastWindowStart.value = policy?.activeWindowStart ?? '';
+  elements.communityCastWindowEnd.value = policy?.activeWindowEnd ?? '';
+  elements.communityCastBlockedTopics.value = Array.isArray(policy?.blockedTopicDomains) ? policy.blockedTopicDomains.join(', ') : '';
+  elements.communityCastXiaowoEnabled.value = policy?.npcs?.xiaowo?.enabled === false ? 'false' : 'true';
+  elements.communityCastXiaowoMinInterval.value = String(policy?.npcs?.xiaowo?.minIntervalMinutes ?? 180);
+  elements.communityCastXiaowoMaxInterval.value = String(policy?.npcs?.xiaowo?.maxIntervalMinutes ?? 240);
+  elements.communityCastXiaowoWindowStart.value = policy?.npcs?.xiaowo?.activeWindowStart ?? '';
+  elements.communityCastXiaowoWindowEnd.value = policy?.npcs?.xiaowo?.activeWindowEnd ?? '';
+  elements.communityCastBeibeiEnabled.value = policy?.npcs?.beibei?.enabled === false ? 'false' : 'true';
+  elements.communityCastQiaoqiaoEnabled.value = policy?.npcs?.qiaoqiao?.enabled === false ? 'false' : 'true';
+  commandState.communityCastDirty = false;
+  commandState.communityCastSignature = signature;
 }
 
 function hydrateProfileForm(gateway, { force = false } = {}) {
@@ -6605,6 +7011,7 @@ function resetAquariumSurface() {
   renderEmpty(elements.environmentPanel, t('panel.environment.empty'));
   renderEmpty(elements.runtimePanel, t('panel.runtime.empty'));
   renderEmpty(elements.socialPulsePanel, t('panel.socialPulse.empty'));
+  renderEmpty(elements.communityCastPanel, t('panel.communityCast.empty'));
   renderEmpty(elements.feedPanel, t('panel.feed.empty'));
   renderEmpty(elements.publicThreadPanel, t('panel.publicThreads.empty'));
   renderEmpty(elements.inboxPanel, t('panel.inbox.empty'));
@@ -6616,6 +7023,8 @@ function resetAquariumSurface() {
   renderEmpty(elements.scenePanel, t('panel.scenes.empty'));
   delete elements.socialPulseNote.dataset.runtimeText;
   elements.socialPulseNote.textContent = t('panel.socialPulse.note');
+  delete elements.communityCastNote.dataset.runtimeText;
+  elements.communityCastNote.textContent = t('panel.communityCast.note');
   elements.feedNote.textContent = t('panel.feed.note');
   if (elements.activityNote) {
     elements.activityNote.textContent = t('panel.activity.note');
@@ -6670,6 +7079,15 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     : isParticipantGateway
       ? requestJson('/api/v1/social-pulse/me', { apiOrigin, token })
       : null;
+  const communityCastPolicyRequest = isHostViewer
+    ? requestJson('/api/v1/community-cast/policy', { apiOrigin, token })
+    : null;
+  const communityCastBulletinsRequest = isHostViewer
+    ? requestJson('/api/v1/community-cast/bulletins?published=true&limit=6', { apiOrigin, token })
+    : null;
+  const communityCastNotesRequest = isHostViewer
+    ? requestJson('/api/v1/community-cast/notes?limit=6', { apiOrigin, token })
+    : null;
   const participantRecoveryRequest = isParticipantGateway
     ? requestJson('/api/v1/runtime/remote/reconnect-credential', { apiOrigin, token })
     : null;
@@ -6702,6 +7120,9 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     environmentRequest,
     feedRequest,
     socialPulseRequest ?? Promise.resolve(null),
+    communityCastPolicyRequest ?? Promise.resolve(null),
+    communityCastBulletinsRequest ?? Promise.resolve(null),
+    communityCastNotesRequest ?? Promise.resolve(null),
     participantRecoveryRequest ?? Promise.resolve(null),
     conversationsRequest ?? Promise.resolve(null),
     taskRequestIncomingRequest ?? Promise.resolve(null),
@@ -6722,6 +7143,9 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     environmentResult,
     feedResult,
     socialPulseResult,
+    communityCastPolicyResult,
+    communityCastBulletinsResult,
+    communityCastNotesResult,
     participantRecoveryResult,
     conversationsResult,
     taskRequestIncomingResult,
@@ -6969,6 +7393,38 @@ async function refreshReadSurfaces({ includeRuntime = false } = {}) {
     delete elements.socialPulseNote.dataset.runtimeText;
     elements.socialPulseNote.textContent = t('panel.socialPulse.note');
     renderError(elements.socialPulsePanel, socialPulseResult.reason.message);
+  }
+
+  if (!isHostViewer) {
+    delete elements.communityCastNote.dataset.runtimeText;
+    elements.communityCastNote.textContent = t('common.socialPulseHostOnly');
+    renderEmpty(elements.communityCastPanel, t('common.socialPulseHostOnly'));
+    resetCommunityCastState();
+  } else if (
+    communityCastPolicyResult.status === 'fulfilled' &&
+    communityCastBulletinsResult.status === 'fulfilled' &&
+    communityCastNotesResult.status === 'fulfilled'
+  ) {
+    renderCommunityCastControlRoom({
+      registry: communityCastPolicyResult.value.data.registry,
+      policy: communityCastPolicyResult.value.data.policy,
+      bulletins: communityCastBulletinsResult.value.data.items,
+      notes: communityCastNotesResult.value.data.items,
+      syncedAt,
+    });
+  } else {
+    const communityCastError =
+      communityCastPolicyResult.status === 'rejected'
+        ? communityCastPolicyResult.reason.message
+        : communityCastBulletinsResult.status === 'rejected'
+          ? communityCastBulletinsResult.reason.message
+          : communityCastNotesResult.status === 'rejected'
+            ? communityCastNotesResult.reason.message
+            : t('common.failedReadSurface');
+    delete elements.communityCastNote.dataset.runtimeText;
+    elements.communityCastNote.textContent = t('panel.communityCast.note');
+    renderError(elements.communityCastPanel, communityCastError);
+    communityCastState.error = communityCastError;
   }
 
   if (!isParticipantGateway) {
@@ -7571,6 +8027,28 @@ for (const control of [
   });
 }
 
+for (const control of [
+  elements.communityCastEnabled,
+  elements.communityCastDailyCap,
+  elements.communityCastWindowStart,
+  elements.communityCastWindowEnd,
+  elements.communityCastBlockedTopics,
+  elements.communityCastXiaowoEnabled,
+  elements.communityCastXiaowoMinInterval,
+  elements.communityCastXiaowoMaxInterval,
+  elements.communityCastXiaowoWindowStart,
+  elements.communityCastXiaowoWindowEnd,
+  elements.communityCastBeibeiEnabled,
+  elements.communityCastQiaoqiaoEnabled,
+]) {
+  control.addEventListener('input', () => {
+    commandState.communityCastDirty = true;
+  });
+  control.addEventListener('change', () => {
+    commandState.communityCastDirty = true;
+  });
+}
+
 elements.profileDisplayName?.addEventListener('input', () => {
   commandState.profileDirty = true;
 });
@@ -7723,6 +8201,111 @@ elements.policyCommandForm.addEventListener('submit', (event) => {
 
     return {
       successMessage: t('common.policyUpdated'),
+    };
+  });
+});
+
+elements.communityCastCommandForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void runDeckCommand(elements.communityCastSaveButton, t('pending.saving'), async ({ apiOrigin, token }) => {
+    const globalDailyCap = parseOptionalPositiveInteger(
+      elements.communityCastDailyCap.value,
+      'validation.communityCastCapPositive',
+    );
+    const xiaowoMinIntervalMinutes = parseOptionalPositiveInteger(
+      elements.communityCastXiaowoMinInterval.value,
+      'validation.communityCastMinutesPositive',
+    );
+    const xiaowoMaxIntervalMinutes = parseOptionalPositiveInteger(
+      elements.communityCastXiaowoMaxInterval.value,
+      'validation.communityCastMinutesPositive',
+    );
+    const activeWindowStart = normalizePolicyClock(
+      elements.communityCastWindowStart.value,
+      'validation.communityCastWindowTime',
+    );
+    const activeWindowEnd = normalizePolicyClock(
+      elements.communityCastWindowEnd.value,
+      'validation.communityCastWindowTime',
+    );
+    const xiaowoActiveWindowStart = normalizePolicyClock(
+      elements.communityCastXiaowoWindowStart.value,
+      'validation.communityCastWindowTime',
+    );
+    const xiaowoActiveWindowEnd = normalizePolicyClock(
+      elements.communityCastXiaowoWindowEnd.value,
+      'validation.communityCastWindowTime',
+    );
+
+    if ((activeWindowStart && !activeWindowEnd) || (!activeWindowStart && activeWindowEnd)) {
+      throw new Error(t('validation.communityCastWindowPair'));
+    }
+    if ((xiaowoActiveWindowStart && !xiaowoActiveWindowEnd) || (!xiaowoActiveWindowStart && xiaowoActiveWindowEnd)) {
+      throw new Error(t('validation.communityCastWindowPair'));
+    }
+    if (xiaowoMinIntervalMinutes === null || xiaowoMaxIntervalMinutes === null) {
+      throw new Error(t('validation.communityCastMinutesPositive'));
+    }
+    if (xiaowoMinIntervalMinutes > xiaowoMaxIntervalMinutes) {
+      throw new Error(t('validation.communityCastIntervalOrder'));
+    }
+
+    const payload = await requestJson('/api/v1/community-cast/policy', {
+      apiOrigin,
+      token,
+      method: 'PATCH',
+      payload: {
+        enabled: elements.communityCastEnabled.value === 'true',
+        activeWindowStart: activeWindowStart || null,
+        activeWindowEnd: activeWindowEnd || null,
+        globalDailyCap,
+        blockedTopicDomains: normalizeTopicDomainList(elements.communityCastBlockedTopics.value),
+        npcs: {
+          xiaowo: {
+            enabled: elements.communityCastXiaowoEnabled.value === 'true',
+            minIntervalMinutes: xiaowoMinIntervalMinutes,
+            maxIntervalMinutes: xiaowoMaxIntervalMinutes,
+            activeWindowStart: xiaowoActiveWindowStart || null,
+            activeWindowEnd: xiaowoActiveWindowEnd || null,
+          },
+          beibei: {
+            enabled: elements.communityCastBeibeiEnabled.value === 'true',
+          },
+          qiaoqiao: {
+            enabled: elements.communityCastQiaoqiaoEnabled.value === 'true',
+          },
+        },
+      },
+    });
+
+    hydrateCommunityCastForm(payload.data.policy, { force: true });
+
+    return {
+      successMessage: t('common.communityCastPolicyUpdated'),
+    };
+  });
+});
+
+elements.communityCastRunButton.addEventListener('click', () => {
+  void runDeckCommand(elements.communityCastRunButton, t('pending.running'), async ({ apiOrigin, token }) => {
+    const payload = await requestJson('/api/v1/community-cast/run', {
+      apiOrigin,
+      token,
+      method: 'POST',
+    });
+    const publishedExpression = payload.data.publish?.expression;
+    const publishedCandidate = payload.data.publish?.candidate;
+    const publishedNpcId = payload.data.publish?.candidate?.npcId ?? 'xiaowo';
+    const publishedHeadline =
+      previewText(publishedCandidate?.headline || publishedExpression?.body, 96)
+      || communityCastNpcDisplayName(publishedNpcId, communityCastState.registry);
+    return {
+      successMessage: publishedExpression
+        ? t('common.communityCastRunPublished', {
+            npc: communityCastNpcDisplayName(publishedNpcId, communityCastState.registry),
+            headline: publishedHeadline,
+          })
+        : t('common.communityCastRunCompleted', { action: payload.data.generation?.action ?? 'suppressed' }),
     };
   });
 });

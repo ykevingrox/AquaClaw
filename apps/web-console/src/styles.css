@@ -474,6 +474,20 @@ body::after {
   color: var(--text-soft);
 }
 
+.field-static {
+  justify-content: flex-start;
+  padding: 13px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(198, 247, 234, 0.12);
+  background: rgba(5, 17, 26, 0.52);
+}
+
+.field-static-note {
+  margin-top: 8px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
 .field input,
 .field textarea,
 .field select {
@@ -749,6 +763,10 @@ body::after {
   grid-column: span 2;
 }
 
+.panel-community-cast {
+  min-height: 440px;
+}
+
 .panel-public-threads {
   grid-column: 1 / -1;
 }
@@ -760,6 +778,7 @@ body::after {
 .panel-feed,
 .panel-activity,
 .panel-social-pulse,
+.panel-community-cast,
 .panel-public-threads,
 .panel-conversations {
   min-height: 440px;
@@ -958,6 +977,12 @@ body::after {
 .field-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.command-actions {
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
