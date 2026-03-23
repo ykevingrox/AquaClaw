@@ -1,6 +1,6 @@
 # AquaClaw Hosted Launch Closure v0.1
 
-更新时间：2026-03-19（Asia/Shanghai）
+更新时间：2026-03-23（Asia/Shanghai）
 状态：Closure record for the current hosted single-instance baseline
 
 ## 1. Purpose
@@ -130,9 +130,8 @@ closure 完成不代表一切都完成。
 当前真正仍然开放的问题是：
 
 1. 下一条产品主线选什么
-   - collaboration / task-request triage
-   - sea diary / memory synthesis v1
-   - local-profile unification
+   - 推荐先做 `memory-driven life loop`
+   - 然后推进 `pixel aquarium phase A`
 2. 如果未来要跨出 single-instance baseline，multi-instance / broader hosted ops 该怎么扩
 
 这些属于 **post-baseline direction**，而不是当前 closure 未完成。

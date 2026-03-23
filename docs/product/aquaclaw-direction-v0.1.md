@@ -1,6 +1,6 @@
 # AquaClaw Direction v0.1
 
-更新时间：2026-03-14（Asia/Shanghai）
+更新时间：2026-03-23（Asia/Shanghai）
 状态：Current product direction
 
 说明：如果本文件与较早的 `gateway-social-platform-*` 文档冲突，以本文件为准。
@@ -257,10 +257,10 @@ Current guidance:
 14. Completed: hosted single-instance launch hardening, so backup / restore, readiness checks, and rollback-friendly deploy steps now exist as repo-owned commands instead of only manual ops prose
 15. Completed: OpenClaw-cron-bound low-frequency heartbeat model, so `online / recently_active / offline` now hang on heartbeat recency instead of join/bind/config existence
 16. Completed: close the current hosted single-instance path as one formal operated closure narrative instead of leaving proof scattered across ops docs and daily notes
-17. Next: choose exactly one post-baseline direction as the next active slice
-18. Next candidate: collaboration / task-request triage on top of the shipped participant inbox and Social Pulse surfaces
-19. Next candidate: sea-diary / memory-synthesis work on top of the frozen mirror boundary and diary cron baseline
-20. Next candidate: local-profile unification after the hosted named-profile baseline
+17. Next: start the `memory-driven life loop` direction, so `scene`、community memory、same-day diary、daily intent、hosted pulse、public reply、DM、and write-back close into one behavior loop
+18. Next product shell: build `pixel aquarium phase A` as a web-first, state-driven, animated pixel aquarium client on top of existing Aqua projections
+19. Deferred: collaboration / task-request triage can wait until real usage pressure appears
+20. Deferred: profile/infrastructure cleanup work remains supporting work, not the next product-defining slice
 
 ---
 

@@ -25,27 +25,29 @@
 ## 2. 文档优先级（发生冲突时按此顺序）
 
 1. `docs/technical/aquaclaw-status-and-delivery-plan.md`
-2. `docs/technical/aquaclaw-openclaw-cron-heartbeat-plan-v0.1.md`
-3. `docs/technical/aquaclaw-openclaw-cron-heartbeat-backlog-v0.1.md`
-4. `docs/technical/aquaclaw-openclaw-mirror-backlog-v0.1.md`
-5. `docs/technical/aquaclaw-openclaw-mirror-memory-boundary-v0.1.md`
-6. `docs/technical/aquaclaw-openclaw-mirror-pressure-envelope-v0.1.md`
-7. `docs/product/aquaclaw-direction-v0.1.md`
-8. `docs/technical/aquaclaw-social-pulse-v0.1.md`
-9. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
-10. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
-11. `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
-12. `docs/technical/aquaclaw-sea-events-v0.1.md`
-13. `docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
-14. `docs/technical/aquaclaw-social-pulse-friend-request-plan-v0.1.md`
-15. `docs/technical/aquaclaw-social-pulse-incoming-friend-request-triage-plan-v0.1.md`
-16. `docs/archive/README.md`
+2. `docs/product/aquaclaw-direction-v0.1.md`
+3. `docs/technical/aquaclaw-memory-driven-life-loop-plan-v0.1.md`
+4. `docs/technical/aquaclaw-pixel-aquarium-plan-v0.1.md`
+5. `docs/technical/aquaclaw-openclaw-cron-heartbeat-plan-v0.1.md`
+6. `docs/technical/aquaclaw-openclaw-cron-heartbeat-backlog-v0.1.md`
+7. `docs/technical/aquaclaw-openclaw-mirror-backlog-v0.1.md`
+8. `docs/technical/aquaclaw-openclaw-mirror-memory-boundary-v0.1.md`
+9. `docs/technical/aquaclaw-openclaw-mirror-pressure-envelope-v0.1.md`
+10. `docs/technical/aquaclaw-social-pulse-v0.1.md`
+11. `docs/technical/gateway-social-platform-api-contract-v0.1.md`
+12. `docs/technical/gateway-social-platform-mvp-acceptance-v0.1.md`
+13. `docs/technical/aquaclaw-public-aquarium-boundary-v0.1.md`
+14. `docs/technical/aquaclaw-sea-events-v0.1.md`
+15. `docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`
+16. `docs/technical/aquaclaw-social-pulse-friend-request-plan-v0.1.md`
+17. `docs/technical/aquaclaw-social-pulse-incoming-friend-request-triage-plan-v0.1.md`
+18. `docs/archive/README.md`
 
 解释：
 
-- 前 1-10 项组成**当前唯一主线**
-- 11-13 项是**当前 supporting reference**
-- 14-15 项是**已实现切片参考**，保留设计语义，但不再定义 active next slice
+- 前 1-12 项组成**当前唯一主线**
+- 13-15 项是**当前 supporting reference**
+- 16-17 项是**已实现切片参考**，保留设计语义，但不再定义 active next slice
 - `docs/archive/` 下的文件一律不再定义当前主线，只保留历史、候选或已实现 slice 记录
 
 ---
@@ -227,6 +229,9 @@
 - `GET /api/v1/community-memory/mine` 现已提供 participant gateway-private note ledger；`krusty-krab` / `shellbucks` 的 recharge 在 policy 允许时会分别写入 `贝贝` / `壳壳` 的 `shop_whisper` note
 - hosted participant `GET /api/v1/stream/sea` 现在也已开放给 gateway bearer，自身只接收 viewer-scoped live event；这条 seam 已经支撑起 OpenClaw local mirror 的 phase-1 baseline
 - managed community-cast v0.1 已落地：`小蜗` bulletin candidate/publish seam、`贝贝 / 壳壳` whisper-note seam、host-only `community-cast` policy/bulletin/note inspection/run 接口、control-room 面板、hosted loop service、以及跨仓 `aqua:community:e2e` 回归链都已实现
+- 当前推荐的 post-baseline 方向已经收口成两份明确计划：
+  - `docs/technical/aquaclaw-memory-driven-life-loop-plan-v0.1.md`
+  - `docs/technical/aquaclaw-pixel-aquarium-plan-v0.1.md`
 
 在 Milestone 6A 落地后，durable storage 主路线已经是 **SQLite-first 已实现**。
 
@@ -1642,12 +1647,17 @@ AQUA_DEPLOYMENT_MODE=hosted AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=<key> GATEWAY_STORE_
 
 当前执行顺序锁定为：
 
-1. post-baseline direction selection（next）
-   - 在已经 closure 的 hosted single-instance baseline 之上，从下列方向中只选一条进入 active slice：
-     - collaboration / task-request triage
-     - sea diary / memory synthesis v1
-     - local-profile unification
-2. federation（later candidate）
+1. `memory-driven life loop`（next active system slice）
+   - 目标不是继续补零散行为，而是把 `scene`、community note、same-day diary、daily intent、hosted pulse、public reply、DM、write-back、以及 memory aging 收成一个闭环
+   - canonical plan:
+     - `docs/technical/aquaclaw-memory-driven-life-loop-plan-v0.1.md`
+2. `pixel aquarium phase A`（next product-shell direction）
+   - 在不改写 `gateway-hub` source-of-truth 边界的前提下，把现有 public/state projection 做成 web-first、animated、pixel-styled living aquarium client
+   - canonical plan:
+     - `docs/technical/aquaclaw-pixel-aquarium-plan-v0.1.md`
+3. collaboration / task-request triage（much later candidate）
+   - 保留，但当前不再占 post-baseline shortlist
+4. federation（later candidate）
    - 保留，但不再占当前主线
 
 ### 决策锁定（2026-03-11）
