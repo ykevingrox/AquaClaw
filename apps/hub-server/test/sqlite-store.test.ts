@@ -809,6 +809,7 @@ test('sqlite backend preserves community cast policy across restart', async () =
       headers: { authorization: `Bearer ${owner.credential.token}` },
       payload: {
         globalDailyCap: 5,
+        blockedTopicDomains: ['community_callback', 'observer_note'],
         npcs: {
           xiaowo: {
             minIntervalMinutes: 210,
@@ -823,6 +824,7 @@ test('sqlite backend preserves community cast policy across restart', async () =
     });
     assert.equal(update.statusCode, 200);
     assert.equal(update.json().data.policy.globalDailyCap, 5);
+    assert.deepEqual(update.json().data.policy.blockedTopicDomains, ['community_callback', 'observer_note']);
 
     await app1.close();
     if (store1 instanceof SqliteGatewayStore) {
@@ -846,6 +848,7 @@ test('sqlite backend preserves community cast policy across restart', async () =
       assert.equal(read.statusCode, 200);
       assert.equal(read.json().data.registry[0].id, 'xiaowo');
       assert.equal(read.json().data.policy.globalDailyCap, 5);
+      assert.deepEqual(read.json().data.policy.blockedTopicDomains, ['community_callback', 'observer_note']);
       assert.equal(read.json().data.policy.npcs.xiaowo.minIntervalMinutes, 210);
       assert.equal(read.json().data.policy.npcs.xiaowo.activeWindowStart, '10:30');
       assert.equal(read.json().data.policy.npcs.beibei.enabled, false);

@@ -1497,6 +1497,7 @@ test('hosted owner session can patch and read community cast policy while gatewa
     },
     payload: {
       globalDailyCap: 5,
+      blockedTopicDomains: ['community_callback', 'observer_note'],
       npcs: {
         xiaowo: {
           minIntervalMinutes: 210,
@@ -1512,6 +1513,7 @@ test('hosted owner session can patch and read community cast policy while gatewa
   assert.equal(update.statusCode, 200);
   assert.equal(update.json().data.registry[0].id, 'xiaowo');
   assert.equal(update.json().data.policy.globalDailyCap, 5);
+  assert.deepEqual(update.json().data.policy.blockedTopicDomains, ['community_callback', 'observer_note']);
   assert.equal(update.json().data.policy.npcs.xiaowo.minIntervalMinutes, 210);
   assert.equal(update.json().data.policy.npcs.beibei.enabled, false);
 
@@ -1525,6 +1527,7 @@ test('hosted owner session can patch and read community cast policy while gatewa
   assert.equal(read.statusCode, 200);
   assert.equal(read.json().data.registry[1].primaryVenueSlug, 'krusty-krab');
   assert.equal(read.json().data.policy.globalDailyCap, 5);
+  assert.deepEqual(read.json().data.policy.blockedTopicDomains, ['community_callback', 'observer_note']);
   assert.equal(read.json().data.policy.npcs.beibei.enabled, false);
 
   const forbidden = await app.inject({
@@ -1621,6 +1624,134 @@ test('hosted owner session can run community cast publishing while gateway token
   assert.equal(forbidden.statusCode, 403);
   assert.equal(forbidden.json().error.code, 'forbidden');
 
+  await app.close();
+});
+
+test('hosted owner session can inspect community cast bulletins and notes while gateway tokens stay excluded', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-community-cast-inspection-owner');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+
+  const alphaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Inspection Alpha',
+      handle: 'hosted-inspection-alpha',
+      visibility: 'public',
+    },
+  });
+  assert.equal(alphaRegister.statusCode, 201);
+  const alphaToken = alphaRegister.json().data.credential.token as string;
+  const alphaGatewayId = alphaRegister.json().data.gateway.id as string;
+
+  const betaRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Inspection Beta',
+      handle: 'hosted-inspection-beta',
+      visibility: 'public',
+    },
+  });
+  assert.equal(betaRegister.statusCode, 201);
+  const betaToken = betaRegister.json().data.credential.token as string;
+  const betaGatewayId = betaRegister.json().data.gateway.id as string;
+
+  const policy = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/community-cast/policy',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      activeWindowStart: null,
+      activeWindowEnd: null,
+      npcs: {
+        xiaowo: {
+          minIntervalMinutes: 60,
+          activeWindowStart: null,
+          activeWindowEnd: null,
+        },
+      },
+    },
+  });
+  assert.equal(policy.statusCode, 200);
+
+  const root = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${alphaToken}`,
+    },
+    payload: {
+      body: 'The hosted reef keeps echoing the same bright little rumor.',
+    },
+  });
+  assert.equal(root.statusCode, 201);
+
+  const run = await app.inject({
+    method: 'POST',
+    url: '/api/v1/community-cast/run',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(run.statusCode, 200);
+  assert.equal(run.json().data.publish.action, 'published');
+
+  const recharge = await app.inject({
+    method: 'POST',
+    url: '/api/v1/recharge-events',
+    headers: {
+      authorization: `Bearer ${betaToken}`,
+    },
+    payload: {
+      venueSlug: 'krusty-krab',
+      venueName: 'Krusty Krab',
+      cue: 'heavy_reset',
+      suggestedItem: '海藻奶昔',
+      suggestedKind: '奶昔',
+    },
+  });
+  assert.equal(recharge.statusCode, 201);
+
+  const bulletins = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-cast/bulletins?published=true&npcId=xiaowo',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(bulletins.statusCode, 200);
+  assert.equal(bulletins.json().data.items.length, 1);
+  assert.equal(bulletins.json().data.items[0].npcId, 'xiaowo');
+
+  const notes = await app.inject({
+    method: 'GET',
+    url: `/api/v1/community-cast/notes?gatewayId=${encodeURIComponent(betaGatewayId)}&npcId=beibei`,
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(notes.statusCode, 200);
+  assert.equal(notes.json().data.items.length, 1);
+  assert.equal(notes.json().data.items[0].gateway.id, betaGatewayId);
+  assert.equal(notes.json().data.items[0].npcId, 'beibei');
+  assert.equal(notes.json().data.items[0].relatedSeaEventIds[0], recharge.json().data.event.id);
+
+  const forbidden = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-cast/bulletins',
+    headers: {
+      authorization: `Bearer ${alphaToken}`,
+    },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal(forbidden.json().error.code, 'forbidden');
+
+  assert.notEqual(alphaGatewayId, betaGatewayId);
   await app.close();
 });
 

@@ -828,6 +828,7 @@ export interface GatewayStore {
   recordRechargeActivity(input: RecordRechargeActivityInput): SeaEvent;
   createCommunityMemoryNote(input: CreateCommunityMemoryNoteInput): CommunityMemoryNote;
   listCommunityMemoryNotes(input: ListCommunityMemoryNotesInput): CommunityMemoryNotePage;
+  inspectCommunityMemoryNotes(input?: InspectCommunityMemoryNotesInput): CommunityMemoryNotePage;
   listCommunityBulletins(input?: ListCommunityBulletinsInput): CommunityBulletinPage;
   generateCommunityBulletinCandidate(input?: GenerateCommunityBulletinCandidateInput): CommunityBulletinGenerationResult;
   publishCommunityBulletinCandidate(input?: PublishCommunityBulletinCandidateInput): CommunityBulletinPublishResult;
@@ -1226,6 +1227,15 @@ export interface CreateCommunityMemoryNoteInput {
 
 export interface ListCommunityMemoryNotesInput {
   gatewayId: string;
+  cursor?: string;
+  limit?: number;
+  venueSlug?: string;
+  tag?: string;
+}
+
+export interface InspectCommunityMemoryNotesInput {
+  gatewayId?: string;
+  npcId?: CommunityNpcId;
   cursor?: string;
   limit?: number;
   venueSlug?: string;
@@ -2496,6 +2506,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         ? current.npcs.xiaowo.activeWindowEnd
         : this.assertNullablePolicyClock(input.npcs.xiaowo.activeWindowEnd, 'communityCast.npcs.xiaowo.activeWindowEnd');
     this.assertNullablePolicyWindow(nextXiaowoWindowStart, nextXiaowoWindowEnd, 'communityCast xiaowo activeWindow');
+    const nextBlockedTopicDomains =
+      input.blockedTopicDomains === undefined
+        ? [...current.blockedTopicDomains]
+        : this.assertPolicyTopicDomains(input.blockedTopicDomains, 'communityCast.blockedTopicDomains');
 
     const next: CommunityCastPolicyRecord = {
       enabled: input.enabled === undefined ? current.enabled : input.enabled,
@@ -2505,6 +2519,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         input.globalDailyCap === undefined
           ? current.globalDailyCap
           : this.assertNullablePositivePolicyCount(input.globalDailyCap, 'communityCast.globalDailyCap'),
+      blockedTopicDomains: nextBlockedTopicDomains,
       npcs: {
         xiaowo: {
           enabled: input.npcs?.xiaowo?.enabled === undefined ? current.npcs.xiaowo.enabled : input.npcs.xiaowo.enabled,
@@ -4495,6 +4510,38 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     };
   }
 
+  inspectCommunityMemoryNotes(input: InspectCommunityMemoryNotesInput = {}): CommunityMemoryNotePage {
+    if (input.gatewayId && !this.gatewaysById.has(input.gatewayId)) {
+      throw new Error('gateway not found');
+    }
+
+    const venueSlug = input.venueSlug?.trim();
+    const tag = input.tag?.trim().toLowerCase();
+    const normalizedCursor = input.cursor?.trim() || null;
+    const pageSize = Math.min(Math.max(input.limit ?? DEFAULT_COMMUNITY_MEMORY_PAGE_SIZE, 1), DEFAULT_COMMUNITY_MEMORY_PAGE_SIZE);
+    const items = Array.from(this.communityMemoryNotesById.values())
+      .map((note) => cloneCommunityMemoryNote(note))
+      .filter((note) => note.visibility === 'gateway_private')
+      .filter((note) => (input.gatewayId ? note.gatewayId === input.gatewayId : true))
+      .filter((note) => (input.npcId ? note.npcId === input.npcId : true))
+      .filter((note) => (!venueSlug ? true : note.venueSlug === venueSlug))
+      .filter((note) => (!tag ? true : note.tags.includes(tag)))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+
+    const startIndex = normalizedCursor ? items.findIndex((note) => note.id === normalizedCursor) + 1 : 0;
+    if (normalizedCursor && startIndex === 0) {
+      throw new Error('invalid community memory cursor');
+    }
+
+    const pageItems = items.slice(startIndex, startIndex + pageSize);
+    const nextCursor =
+      startIndex + pageItems.length < items.length && pageItems.length > 0 ? pageItems[pageItems.length - 1]!.id : null;
+    return {
+      items: pageItems,
+      nextCursor,
+    };
+  }
+
   listCommunityBulletins(input: ListCommunityBulletinsInput = {}): CommunityBulletinPage {
     const normalizedCursor = input.cursor?.trim() || null;
     const pageSize = Math.min(Math.max(input.limit ?? DEFAULT_SEA_PAGE_SIZE, 1), DEFAULT_SEA_PAGE_SIZE);
@@ -4676,6 +4723,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       publishingWindowStartAt: this.buildPolicyClockBoundaryIso(policy.npcs.xiaowo.activeWindowStart, nowMs),
       publishingWindowEndAt: this.buildPolicyClockBoundaryIso(policy.npcs.xiaowo.activeWindowEnd, nowMs),
     });
+    if (this.isBlockedCommunityTopic(policy, draft.topicDomain)) {
+      reasons.push(`community cast topic domain "${draft.topicDomain}" is blocked`);
+      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
+    }
     const duplicate = recentBulletins.find(
       (candidate) => createCommunityBulletinFingerprint(candidate) === createCommunityBulletinFingerprint(draft),
     );
@@ -4757,6 +4808,17 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
     if (candidate.publishedAt !== null) {
       reasons.push('community bulletin candidate is already published');
+      return {
+        attemptedAt,
+        action: 'suppressed',
+        candidate: cloneCommunityBulletinCandidateRecord(candidate),
+        expression: null,
+        reasons,
+        policy,
+      };
+    }
+    if (this.isBlockedCommunityTopic(policy, candidate.topicDomain)) {
+      reasons.push(`community cast topic domain "${candidate.topicDomain}" is blocked`);
       return {
         attemptedAt,
         action: 'suppressed',
@@ -5744,6 +5806,38 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       throw new Error(`${fieldName} must be a positive integer or null`);
     }
     return value;
+  }
+
+  private assertPolicyTopicDomains(value: string[], fieldName: string) {
+    if (!Array.isArray(value)) {
+      throw new Error(`${fieldName} must be an array of non-empty strings`);
+    }
+
+    const normalized: string[] = [];
+    const seen = new Set<string>();
+    for (const item of value) {
+      if (typeof item !== 'string') {
+        throw new Error(`${fieldName} must be an array of non-empty strings`);
+      }
+      const topicDomain = item.trim().toLowerCase();
+      if (!topicDomain) {
+        throw new Error(`${fieldName} must be an array of non-empty strings`);
+      }
+      if (seen.has(topicDomain)) {
+        continue;
+      }
+      seen.add(topicDomain);
+      normalized.push(topicDomain);
+    }
+    return normalized;
+  }
+
+  private isBlockedCommunityTopic(policy: CommunityCastPolicyRecord, topicDomain: string | null | undefined) {
+    const normalized = String(topicDomain ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    return policy.blockedTopicDomains.includes(normalized);
   }
 
   private resolveGatewayFriendRequestPolicy(gatewayId: string, policy: GatewayFriendRequestPolicy | null | undefined) {
@@ -7887,6 +7981,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       clarity: environment.clarity,
       createdAt: input.event.createdAt,
     });
+    if (this.isBlockedCommunityTopic(communityCastPolicy, draft.topicDomain)) {
+      return;
+    }
 
     this.createCommunityMemoryNote({
       gatewayId: input.gateway.id,
@@ -7905,6 +8002,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       metadata: {
         sourceSeaEventId: input.event.id,
         sourceSeaEventType: input.event.type,
+        topicDomain: draft.topicDomain,
         currentId: current.id,
         environmentId: environment.id,
         venueSlug: input.venueSlug,

@@ -29,6 +29,7 @@ export interface CommunityCastPolicyRecord {
   activeWindowStart: string | null;
   activeWindowEnd: string | null;
   globalDailyCap: number | null;
+  blockedTopicDomains: string[];
   npcs: {
     xiaowo: CommunityCastXiaowoPolicyRecord;
     beibei: CommunityCastNpcEnabledPolicy;
@@ -44,6 +45,7 @@ export interface UpdateCommunityCastPolicyInput {
   activeWindowStart?: string | null;
   activeWindowEnd?: string | null;
   globalDailyCap?: number | null;
+  blockedTopicDomains?: string[];
   npcs?: {
     xiaowo?: {
       enabled?: boolean;
@@ -77,6 +79,7 @@ export interface VenueWhisperDraftInput {
 }
 
 export interface VenueWhisperDraft {
+  topicDomain: string;
   summary: string;
   body: string;
   tags: string[];
@@ -127,6 +130,7 @@ const DEFAULT_COMMUNITY_CAST_POLICY: CommunityCastPolicyRecord = {
   activeWindowStart: null,
   activeWindowEnd: null,
   globalDailyCap: 4,
+  blockedTopicDomains: [],
   npcs: {
     xiaowo: {
       enabled: true,
@@ -163,6 +167,23 @@ function normalizeClockOrNull(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+function normalizeTopicDomainList(values: string[] | null | undefined, fallback: string[] = []) {
+  const next = Array.isArray(values) ? values : fallback;
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of next) {
+    const topicDomain = String(value ?? '').trim().toLowerCase();
+    if (!topicDomain || seen.has(topicDomain)) {
+      continue;
+    }
+    seen.add(topicDomain);
+    normalized.push(topicDomain);
+  }
+
+  return normalized;
+}
+
 export function listManagedCommunityCastProfiles(): CommunityNpcProfile[] {
   return MANAGED_COMMUNITY_CAST.map((profile) => cloneCommunityNpcProfile(profile));
 }
@@ -186,6 +207,10 @@ export function normalizeCommunityCastPolicy(
         : typeof next.globalDailyCap === 'number'
           ? next.globalDailyCap
           : DEFAULT_COMMUNITY_CAST_POLICY.globalDailyCap,
+    blockedTopicDomains: normalizeTopicDomainList(
+      next.blockedTopicDomains,
+      DEFAULT_COMMUNITY_CAST_POLICY.blockedTopicDomains,
+    ),
     npcs: {
       xiaowo: {
         enabled: xiaowo.enabled ?? DEFAULT_COMMUNITY_CAST_POLICY.npcs.xiaowo.enabled,
@@ -270,6 +295,7 @@ export function buildVenueWhisperDraft(input: VenueWhisperDraftInput): VenueWhis
         ? '今天来这里补能的，多半嘴比平时更松一点。'
         : '今晚这种轻提神的节奏，很适合听谁先把场子点热。';
     return {
+      topicDomain: 'gossip',
       summary: `贝贝在${input.venueName}递来一条轻八卦，提醒你留意谁会先把话头吹热。`,
       body: `${opening}她把${pickup}朝你推了推，说：“${waterRead} ${cueRead} 你要是待会儿在公开海面听见有人先夸路线、夸补能、夸自己会看潮，记一下是谁先开的头。”`,
       tags: ['npc:beibei', `venue:${input.venueSlug}`, `current:${input.currentKey}`, `phenomenon:${input.phenomenon}`, 'gossip'],
@@ -297,6 +323,7 @@ export function buildVenueWhisperDraft(input: VenueWhisperDraftInput): VenueWhis
       ? '要是今天有人忽然把情绪说得很满，多半是在给自己撑场面。'
       : '这种轻提神的时段，最适合看谁在借别人的热闹抬高自己。';
   return {
+    topicDomain: 'observer_note',
     summary: `壳壳在${input.venueName}丢下一句带刺的观察，提醒你留意谁在借浪表演。`,
     body: `${opening}他把${pickup}推到一边，淡淡地说：“${waterRead} ${cueRead} 真要开口，不如先记住谁最爱重复别人的亮点，却装得像是自己先想到的。”`,
     tags: ['npc:qiaoqiao', `venue:${input.venueSlug}`, `current:${input.currentKey}`, `phenomenon:${input.phenomenon}`, 'observer_note'],

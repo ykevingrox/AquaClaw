@@ -345,6 +345,7 @@ test('local owner can patch and read community cast policy while gateway tokens 
     },
     payload: {
       globalDailyCap: 5,
+      blockedTopicDomains: ['community_callback', 'observer_note'],
       npcs: {
         xiaowo: {
           minIntervalMinutes: 210,
@@ -361,6 +362,7 @@ test('local owner can patch and read community cast policy while gateway tokens 
   assert.equal(update.json().data.registry.length, 3);
   assert.equal(update.json().data.registry[0].id, 'xiaowo');
   assert.equal(update.json().data.policy.globalDailyCap, 5);
+  assert.deepEqual(update.json().data.policy.blockedTopicDomains, ['community_callback', 'observer_note']);
   assert.equal(update.json().data.policy.npcs.xiaowo.minIntervalMinutes, 210);
   assert.equal(update.json().data.policy.npcs.xiaowo.activeWindowStart, '10:30');
   assert.equal(update.json().data.policy.npcs.beibei.enabled, false);
@@ -375,6 +377,7 @@ test('local owner can patch and read community cast policy while gateway tokens 
   assert.equal(read.statusCode, 200);
   assert.equal(read.json().data.registry[1].primaryVenueSlug, 'krusty-krab');
   assert.equal(read.json().data.policy.globalDailyCap, 5);
+  assert.deepEqual(read.json().data.policy.blockedTopicDomains, ['community_callback', 'observer_note']);
   assert.equal(read.json().data.policy.npcs.beibei.enabled, false);
   assert.equal(read.json().data.policy.npcs.qiaoqiao.enabled, true);
 
@@ -470,6 +473,190 @@ test('local owner can run community cast publishing while gateway tokens stay ex
   });
   assert.equal(forbidden.statusCode, 403);
   assert.equal(forbidden.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
+test('local owner can inspect community cast bulletins and notes while gateway tokens stay excluded', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const alpha = await registerGateway(app, {
+    displayName: 'Inspection Alpha',
+    handle: 'inspection-alpha-local',
+    visibility: 'public',
+  });
+  const beta = await registerGateway(app, {
+    displayName: 'Inspection Beta',
+    handle: 'inspection-beta-local',
+    visibility: 'public',
+  });
+
+  const policy = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/community-cast/policy',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      activeWindowStart: null,
+      activeWindowEnd: null,
+      npcs: {
+        xiaowo: {
+          minIntervalMinutes: 60,
+          activeWindowStart: null,
+          activeWindowEnd: null,
+        },
+      },
+    },
+  });
+  assert.equal(policy.statusCode, 200);
+
+  const root = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      body: 'The reef keeps carrying one bright rumor back to the same ledge.',
+    },
+  });
+  assert.equal(root.statusCode, 201);
+
+  const run = await app.inject({
+    method: 'POST',
+    url: '/api/v1/community-cast/run',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+  });
+  assert.equal(run.statusCode, 200);
+  assert.equal(run.json().data.publish.action, 'published');
+
+  const recharge = await app.inject({
+    method: 'POST',
+    url: '/api/v1/recharge-events',
+    headers: {
+      authorization: `Bearer ${beta.token}`,
+    },
+    payload: {
+      venueSlug: 'shellbucks',
+      venueName: 'ShellBucks',
+      cue: 'light_lift',
+      suggestedItem: '月光水母茶',
+      suggestedKind: '茶饮',
+    },
+  });
+  assert.equal(recharge.statusCode, 201);
+
+  const bulletins = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-cast/bulletins?published=true&npcId=xiaowo',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+  });
+  assert.equal(bulletins.statusCode, 200);
+  assert.equal(bulletins.json().data.items.length, 1);
+  assert.equal(bulletins.json().data.items[0].npcId, 'xiaowo');
+  assert.ok(bulletins.json().data.items[0].publishedAt);
+
+  const notes = await app.inject({
+    method: 'GET',
+    url: `/api/v1/community-cast/notes?gatewayId=${encodeURIComponent(beta.gateway.id)}&npcId=qiaoqiao`,
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+  });
+  assert.equal(notes.statusCode, 200);
+  assert.equal(notes.json().data.items.length, 1);
+  assert.equal(notes.json().data.items[0].npcId, 'qiaoqiao');
+  assert.equal(notes.json().data.items[0].gateway.id, beta.gateway.id);
+  assert.equal(notes.json().data.items[0].relatedSeaEventIds[0], recharge.json().data.event.id);
+
+  const forbidden = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-cast/notes',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal(forbidden.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
+test('local owner community cast run stays no-write when globally disabled', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const alpha = await registerGateway(app, {
+    displayName: 'Disabled Alpha',
+    handle: 'disabled-alpha-local',
+    visibility: 'public',
+  });
+
+  const root = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      body: 'The reef keeps carrying one bright rumor back to the same ledge.',
+    },
+  });
+  assert.equal(root.statusCode, 201);
+  const rootExpressionId = root.json().data.expression.id as string;
+
+  const disable = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/community-cast/policy',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      enabled: false,
+      activeWindowStart: null,
+      activeWindowEnd: null,
+      npcs: {
+        xiaowo: {
+          activeWindowStart: null,
+          activeWindowEnd: null,
+        },
+      },
+    },
+  });
+  assert.equal(disable.statusCode, 200);
+
+  const run = await app.inject({
+    method: 'POST',
+    url: '/api/v1/community-cast/run',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+  });
+  assert.equal(run.statusCode, 200);
+  assert.equal(run.json().data.generation.action, 'suppressed');
+  assert.equal(run.json().data.generation.candidate, null);
+  assert.equal(run.json().data.publish, null);
+
+  const bulletins = await app.inject({
+    method: 'GET',
+    url: '/api/v1/community-cast/bulletins',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+  });
+  assert.equal(bulletins.statusCode, 200);
+  assert.equal(bulletins.json().data.items.length, 0);
+
+  const thread = await app.inject({
+    method: 'GET',
+    url: `/api/v1/public-expressions?rootExpressionId=${encodeURIComponent(rootExpressionId)}`,
+  });
+  assert.equal(thread.statusCode, 200);
+  assert.equal(thread.json().data.items.length, 1);
 
   await app.close();
 });

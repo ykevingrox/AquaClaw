@@ -1,7 +1,7 @@
 import { type ServerResponse } from 'node:http';
 
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import type { CommunityCastPolicyRecord, CommunityNpcProfile } from './community-cast.js';
+import type { CommunityCastPolicyRecord, CommunityNpcId, CommunityNpcProfile } from './community-cast.js';
 import type { DeploymentMode } from './config.js';
 import { SeaLiveHub, type SeaLiveHubOptions } from './live-hub.js';
 import { createInMemoryRateLimiter, type RateLimitPolicy } from './rate-limiter.js';
@@ -95,6 +95,7 @@ interface UpdateCommunityCastPolicyBody {
   activeWindowStart?: string | null;
   activeWindowEnd?: string | null;
   globalDailyCap?: number | null;
+  blockedTopicDomains?: string[];
   npcs?: {
     xiaowo?: {
       enabled?: boolean;
@@ -230,6 +231,22 @@ interface CommunityMemoryQuerystring {
   tag?: string;
 }
 
+interface CommunityCastBulletinsQuerystring {
+  limit?: string;
+  cursor?: string;
+  npcId?: string;
+  published?: string;
+}
+
+interface CommunityCastNotesQuerystring {
+  limit?: string;
+  cursor?: string;
+  gatewayId?: string;
+  npcId?: string;
+  venueSlug?: string;
+  tag?: string;
+}
+
 interface PublicGatewayQuerystring {
   limit?: string;
   cursor?: string;
@@ -343,6 +360,8 @@ interface CreateBlockBody {
   gatewayId?: string;
   reason?: string;
 }
+
+const VALID_COMMUNITY_NPC_IDS = new Set<CommunityNpcId>(['xiaowo', 'beibei', 'qiaoqiao']);
 
 function extractBearerToken(value: string | undefined) {
   if (!value) return null;
@@ -833,6 +852,7 @@ function toCommunityCastPolicySummary(policy: CommunityCastPolicyRecord) {
     activeWindowStart: policy.activeWindowStart,
     activeWindowEnd: policy.activeWindowEnd,
     globalDailyCap: policy.globalDailyCap,
+    blockedTopicDomains: [...policy.blockedTopicDomains],
     npcs: {
       xiaowo: {
         enabled: policy.npcs.xiaowo.enabled,
@@ -924,6 +944,14 @@ function toCommunityMemoryNoteSummary(note: CommunityMemoryNote) {
     lastRetrievedAt: note.lastRetrievedAt,
     lastUsedAt: note.lastUsedAt,
     metadata: { ...note.metadata },
+  };
+}
+
+function toCommunityMemoryHostNoteSummary(store: GatewayStore, note: CommunityMemoryNote) {
+  const gateway = store.findById(note.gatewayId);
+  return {
+    ...toCommunityMemoryNoteSummary(note),
+    gateway: gateway ? toGatewaySummary(gateway) : null,
   };
 }
 
@@ -1447,6 +1475,13 @@ function communityMemoryErrorToHttp(message: string) {
     return { statusCode: 404, code: 'not_found' };
   }
   if (message === 'invalid community memory cursor') {
+    return { statusCode: 400, code: 'invalid_cursor' };
+  }
+  return { statusCode: 400, code: 'validation_failed' };
+}
+
+function communityBulletinErrorToHttp(message: string) {
+  if (message === 'invalid community bulletin cursor') {
     return { statusCode: 400, code: 'invalid_cursor' };
   }
   return { statusCode: 400, code: 'validation_failed' };
@@ -3780,6 +3815,19 @@ export function buildApp(options: BuildAppOptions = {}) {
         },
       });
     }
+    if (
+      body.blockedTopicDomains !== undefined &&
+      (!Array.isArray(body.blockedTopicDomains) ||
+        body.blockedTopicDomains.some((item) => typeof item !== 'string' || !item.trim()))
+    ) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'blockedTopicDomains must be an array of non-empty strings when provided',
+        },
+      });
+    }
     if (npcs !== undefined && (typeof npcs !== 'object' || npcs === null || Array.isArray(npcs))) {
       return reply.code(400).send({
         ok: false,
@@ -3911,6 +3959,10 @@ export function buildApp(options: BuildAppOptions = {}) {
               ? null
               : body.activeWindowEnd.trim(),
         globalDailyCap: body.globalDailyCap,
+        blockedTopicDomains:
+          body.blockedTopicDomains === undefined
+            ? undefined
+            : body.blockedTopicDomains.map((item) => item.trim()),
         npcs:
           npcs === undefined
             ? undefined
@@ -3955,6 +4007,195 @@ export function buildApp(options: BuildAppOptions = {}) {
         error: {
           code: statusCode === 404 ? 'not_found' : 'validation_failed',
           message,
+        },
+      });
+    }
+  });
+
+  app.get<{ Querystring: CommunityCastBulletinsQuerystring }>('/api/v1/community-cast/bulletins', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+    } else {
+      const localOwner = getLocalOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!localOwner.ok) {
+        const endpointError = localOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+    }
+
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+    const parsedPublished = parseBooleanQuery(request.query.published, 'published');
+    if ('error' in parsedPublished) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedPublished.error,
+        },
+      });
+    }
+    if (request.query.npcId !== undefined && !VALID_COMMUNITY_NPC_IDS.has(request.query.npcId.trim() as CommunityNpcId)) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcId must be one of: xiaowo, beibei, qiaoqiao',
+        },
+      });
+    }
+
+    try {
+      const bulletins = store.listCommunityBulletins({
+        npcId: request.query.npcId?.trim() as CommunityNpcId | undefined,
+        published: parsedPublished.value,
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+      });
+
+      return {
+        ok: true,
+        data: {
+          items: bulletins.items.map((candidate) => toCommunityBulletinCandidateSummary(candidate)),
+          nextCursor: bulletins.nextCursor,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list community bulletins';
+      const mapped = communityBulletinErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.get<{ Querystring: CommunityCastNotesQuerystring }>('/api/v1/community-cast/notes', async (request, reply) => {
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+    } else {
+      const localOwner = getLocalOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!localOwner.ok) {
+        const endpointError = localOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+    }
+
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+    if (request.query.gatewayId !== undefined && !request.query.gatewayId.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'gatewayId must be a non-empty string when provided',
+        },
+      });
+    }
+    if (request.query.npcId !== undefined && !VALID_COMMUNITY_NPC_IDS.has(request.query.npcId.trim() as CommunityNpcId)) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'npcId must be one of: xiaowo, beibei, qiaoqiao',
+        },
+      });
+    }
+    if (request.query.venueSlug !== undefined && !request.query.venueSlug.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'venueSlug must be a non-empty string when provided',
+        },
+      });
+    }
+    if (request.query.tag !== undefined && !request.query.tag.trim()) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'tag must be a non-empty string when provided',
+        },
+      });
+    }
+
+    try {
+      const notes = store.inspectCommunityMemoryNotes({
+        gatewayId: request.query.gatewayId?.trim() || undefined,
+        npcId: request.query.npcId?.trim() as CommunityNpcId | undefined,
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+        venueSlug: request.query.venueSlug?.trim() || undefined,
+        tag: request.query.tag?.trim() || undefined,
+      });
+
+      return {
+        ok: true,
+        data: {
+          items: notes.items.map((note) => toCommunityMemoryHostNoteSummary(store, note)),
+          nextCursor: notes.nextCursor,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to inspect community memory';
+      const mapped = communityMemoryErrorToHttp(messageText);
+      return reply.code(mapped.statusCode).send({
+        ok: false,
+        error: {
+          code: mapped.code,
+          message: messageText,
         },
       });
     }

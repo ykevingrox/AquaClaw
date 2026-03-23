@@ -71,6 +71,7 @@ test('GatewayStore exposes managed community cast registry and default policy', 
   const policy = store.getCommunityCastPolicy();
   assert.equal(policy.enabled, true);
   assert.equal(policy.globalDailyCap, 4);
+  assert.deepEqual(policy.blockedTopicDomains, []);
   assert.equal(policy.npcs.xiaowo.minIntervalMinutes, 180);
   assert.equal(policy.npcs.xiaowo.maxIntervalMinutes, 240);
   assert.equal(policy.npcs.xiaowo.activeWindowStart, '10:00');
@@ -88,6 +89,7 @@ test('GatewayStore can patch community cast policy with nested NPC settings', ()
     globalDailyCap: 5,
     activeWindowStart: '09:00',
     activeWindowEnd: '21:00',
+    blockedTopicDomains: [' community_callback ', 'observer_note', 'community_callback'],
     npcs: {
       xiaowo: {
         minIntervalMinutes: 210,
@@ -101,6 +103,7 @@ test('GatewayStore can patch community cast policy with nested NPC settings', ()
   });
 
   assert.equal(updated.globalDailyCap, 5);
+  assert.deepEqual(updated.blockedTopicDomains, ['community_callback', 'observer_note']);
   assert.equal(updated.activeWindowStart, '09:00');
   assert.equal(updated.activeWindowEnd, '21:00');
   assert.equal(updated.npcs.xiaowo.enabled, true);
@@ -114,6 +117,7 @@ test('GatewayStore can patch community cast policy with nested NPC settings', ()
 
   const readBack = store.getCommunityCastPolicy();
   assert.equal(readBack.globalDailyCap, 5);
+  assert.deepEqual(readBack.blockedTopicDomains, ['community_callback', 'observer_note']);
   assert.equal(readBack.npcs.beibei.enabled, false);
   assert.equal(readBack.npcs.xiaowo.minIntervalMinutes, 210);
 });
@@ -156,6 +160,51 @@ test('GatewayStore can generate and reuse a xiaowo bulletin candidate from a rec
   });
   assert.equal(second.action, 'reused');
   assert.equal(second.candidate?.id, first.candidate?.id);
+});
+
+test('GatewayStore suppresses blocked community-cast topic domains for both bulletins and venue whispers', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = registerGateway(store, { displayName: 'Blocked Topic Alpha', handle: 'blocked-topic-alpha-store' });
+
+  store.updateCommunityCastPolicy({
+    hostId: host.id,
+    activeWindowStart: null,
+    activeWindowEnd: null,
+    blockedTopicDomains: ['community_callback', 'observer_note'],
+    npcs: {
+      xiaowo: {
+        activeWindowStart: null,
+        activeWindowEnd: null,
+      },
+    },
+  });
+
+  store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'The tide keeps dragging old routes back into view.',
+    createdAt: '2026-03-23T10:00:00.000Z',
+  });
+
+  const generation = store.generateCommunityBulletinCandidate({
+    createdAt: '2026-03-23T11:00:00.000Z',
+  });
+  assert.equal(generation.action, 'suppressed');
+  assert.equal(generation.candidate, null);
+  assert.match(generation.reasons.join(' | '), /topic domain "community_callback" is blocked/i);
+  assert.equal(store.listCommunityBulletins().items.length, 0);
+
+  store.recordRechargeActivity({
+    gatewayId: alpha.id,
+    venueSlug: 'shellbucks',
+    venueName: 'ShellBucks',
+    cue: 'light_lift',
+    suggestedItem: '月光水母茶',
+    suggestedKind: '茶饮',
+    createdAt: '2026-03-23T12:00:00.000Z',
+  });
+  const notes = store.listCommunityMemoryNotes({ gatewayId: alpha.id });
+  assert.equal(notes.items.length, 0);
 });
 
 test('GatewayStore suppresses xiaowo bulletin generation when the public surface is already hot', () => {
@@ -502,6 +551,21 @@ test('GatewayStore community memory notes stay gateway-private and support filte
     gatewayId: beta.id,
   });
   assert.equal(betaNotes.items.length, 1);
+
+  const hostInspection = store.inspectCommunityMemoryNotes({
+    npcId: 'beibei',
+    limit: 5,
+  });
+  assert.equal(hostInspection.items.length, 2);
+  assert.equal(hostInspection.items[0]?.gatewayId, beta.id);
+  assert.equal(hostInspection.items[1]?.gatewayId, alpha.id);
+
+  const hostAlphaOnly = store.inspectCommunityMemoryNotes({
+    gatewayId: alpha.id,
+    venueSlug: 'shellbucks',
+  });
+  assert.equal(hostAlphaOnly.items.length, 1);
+  assert.equal(hostAlphaOnly.items[0]?.id, second.id);
 
   assert.throws(
     () =>
