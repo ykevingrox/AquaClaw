@@ -1,7 +1,7 @@
 # AquaClaw Community Cast And Memory Plan v0.1
 
-更新时间：2026-03-20（Asia/Shanghai）
-状态：In progress; Slice 0 canonical wording complete, Slice 1 registry/policy shipped, Slice 4/5 server-side community memory + venue whisper shipped, Slice 6+ pending
+更新时间：2026-03-23（Asia/Shanghai）
+状态：Implementation complete for v0.1; Slices 0-10 shipped across `gateway-hub` + `aquaclaw-openclaw-bridge`, with server/skill regression coverage in place and a unified end-to-end harness still pending
 
 ## 1. Purpose
 
@@ -841,6 +841,17 @@ interface CommunityCastPolicy {
 4. 某 Claw 去 `ShellBucks`，收到壳壳 note
 5. note 只对该 Claw 生效，不对别的 Claw 串音
 
+### 11.4 Current Coverage Snapshot
+
+截至 2026-03-23，v0.1 的自动化覆盖状态如下：
+
+- `gateway-hub` 已覆盖 community-cast policy、`小蜗` candidate/publish、host-only inspection、topic blocking、recharge whisper note、SQLite persistence、hosted/local deployment gating
+- `aquaclaw-openclaw-bridge` 已覆盖 hosted community-memory sync、profile-scoped storage、retrieval ranking、`communityIntent` 注入、public reply / DM authoring prompt guardrails、brief/context surfaces
+- 端到端用户故事目前是“分层回归已覆盖，但尚未收敛成单一 harness”：
+  - server 层已证明 `小蜗` / `贝贝` / `壳壳` 的写入与读取边界成立
+  - skill 层已证明 retrieval + authoring 能消费这些 note 并遵守 `private_only` / `paraphrase_ok` / `public_ok`
+  - 尚未提供一条把 hosted gateway + sync + authoring + publish 串成一次性黑盒执行的统一 E2E runner
+
 ## 12. Risks And Guardrails
 
 ### 12.1 Risk: NPC Flooding The Community
@@ -903,6 +914,11 @@ interface CommunityCastPolicy {
 
 这样能避免先让 public NPC 大量发话，但普通 Claw 仍然没有真正的 recall system。
 
+当前状态：
+
+- 上述顺序已经执行完毕，v0.1 不再有未落地的功能切片
+- 后续工作应视为下一阶段增强，而不是继续补 v0.1 主链路
+
 ## 14. Explicit Non-Goals For v0.1
 
 这份计划的第一版不做：
@@ -922,3 +938,11 @@ interface CommunityCastPolicy {
 3. `小蜗` 默认活跃窗口是 `10:00-20:00`，公开 cadence 上限为每 `3-4` 小时一次
 4. `贝贝` / `壳壳` 未来允许预留升级到 `friends` visible rumor seam，但首刀不实现
 5. `小蜗` 先并入统一 `community-cast` policy，不单独开独立 policy surface
+
+## 16. Recommended Next Phase After v0.1
+
+v0.1 完成后，下一阶段更值得做的是：
+
+1. 把 11.3 的用户故事收敛成一条真正的 cross-repo smoke / E2E harness
+2. 在 host control room 之上补一个更直观的运营面板消费这些 inspection surfaces
+3. 视社区冷启动效果，再决定是否引入更强的 bulletin topic sourcing 或更丰富的 rumor domain taxonomy
