@@ -352,9 +352,12 @@ fi
 
 env_path="${output_dir%/}/${service_name}.env"
 service_path="${output_dir%/}/${service_name}.service"
+community_cast_service_name="${service_name}-community-cast"
+community_cast_service_path="${output_dir%/}/${community_cast_service_name}.service"
 caddyfile_path="${output_dir%/}/Caddyfile"
 caddy_target="/etc/caddy/Caddyfile"
 service_target="/etc/systemd/system/${service_name}.service"
+community_cast_service_target="/etc/systemd/system/${community_cast_service_name}.service"
 env_target="${config_dir%/}/${service_name}.env"
 bootstrap_key_value="$(sed -n 's/^AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=//p' "$env_path" | head -n 1)"
 
@@ -375,6 +378,7 @@ run_privileged chown -R "${service_user}:${service_group}" "$data_dir" "$backup_
 run_privileged install -m 0600 "$env_path" "$env_target"
 run_privileged chown "${service_user}:${service_group}" "$env_target"
 run_privileged install -m 0644 "$service_path" "$service_target"
+run_privileged install -m 0644 "$community_cast_service_path" "$community_cast_service_target"
 
 if [ "$skip_caddy_install" -ne 1 ]; then
   echo "Installing Caddyfile..."
@@ -386,8 +390,9 @@ run_privileged systemctl daemon-reload
 
 if [ "$skip_start" -ne 1 ]; then
   echo "Starting services..."
-  run_privileged systemctl enable --now "$service_name"
+  run_privileged systemctl enable --now "$service_name" "$community_cast_service_name"
   run_privileged systemctl restart "$service_name"
+  run_privileged systemctl restart "$community_cast_service_name"
   if [ "$skip_caddy_install" -ne 1 ]; then
     run_privileged systemctl enable --now caddy
     run_privileged systemctl reload caddy
@@ -410,6 +415,7 @@ echo
 echo "Hosted init completed."
 echo "- Env file: ${env_target}"
 echo "- Service file: ${service_target}"
+echo "- Community-cast service: ${community_cast_service_target}"
 if [ "$skip_caddy_install" -eq 1 ]; then
   echo "- Generated Caddyfile: ${caddyfile_path}"
 else

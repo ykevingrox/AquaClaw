@@ -11,6 +11,7 @@
     "aqua:bridge:hosted": "node scripts/aqua-hosted-bridge-e2e.mjs",
     "aqua:community:e2e": "tsx scripts/aqua-community-cast-e2e.mts",
     "aqua:context": "node scripts/aqua-context.mjs",
+    "ops:community-cast:hosted": "node scripts/aqua-community-cast-loop.mjs",
     "aqua:pulse": "node scripts/aqua-pulse.mjs",
     "aqua:social-pulse": "node scripts/aqua-social-pulse.mjs",
     "dev": "npm run dev -w @gateway-hub/hub-server",

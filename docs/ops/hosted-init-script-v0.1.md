@@ -1,6 +1,6 @@
 # AquaClaw Hosted Init Script v0.1
 
-更新时间：2026-03-16（Asia/Shanghai）
+更新时间：2026-03-23（Asia/Shanghai）
 状态：Current fresh-host init guide
 
 ## 1. Purpose
@@ -90,17 +90,20 @@ npm run ops:doctor -- \
 7. 调用 `scripts/render-hosted-single-instance.sh`
 8. 创建 system user / group（如果还没有）
 9. 安装 env file
-10. 安装 systemd unit
-11. 安装 Caddyfile
-12. `systemctl daemon-reload`
-13. 启动 / 重启 `gateway-hub`
-14. 启动 / reload `caddy`
-15. 跑 `npm run ops:check:hosted`
+10. 安装 `gateway-hub.service`
+11. 安装 `gateway-hub-community-cast.service`
+12. 安装 Caddyfile
+13. `systemctl daemon-reload`
+14. 启动 / 重启 `gateway-hub`
+15. 启动 / 重启 `gateway-hub-community-cast`
+16. 启动 / reload `caddy`
+17. 跑 `npm run ops:check:hosted`
 
 最后它会打印：
 
 - env file 位置
 - service file 位置
+- community-cast companion service 位置
 - Caddyfile 位置
 - generated bootstrap key
 - 下一步 owner bootstrap 命令
@@ -259,6 +262,7 @@ npm run ops:init:hosted -- \
 - generated env: `./.deploy/hosted-single-instance/gateway-hub.env`
 - installed env: `/etc/gateway-hub/gateway-hub.env`
 - installed service: `/etc/systemd/system/gateway-hub.service`
+- installed companion service: `/etc/systemd/system/gateway-hub-community-cast.service`
 - installed caddy: `/etc/caddy/Caddyfile`
 - sqlite db: `/var/lib/gateway-hub/gateway-hub.sqlite`
 

@@ -1,6 +1,6 @@
 # AquaClaw Hosted Single-Instance Quickstart v0.1
 
-更新时间：2026-03-16 17:35（Asia/Shanghai）
+更新时间：2026-03-23 18:30（Asia/Shanghai）
 状态：推荐给 Phase 5 后单 Aqua / 多 gateway 上线基线
 
 如果你现在还没有域名，只想先用公网 IP 做临时联调，先看：
@@ -71,6 +71,7 @@ Internet
     -> /console/* -> apps/web-console/dist
     -> everything else -> apps/public-aquarium/dist
   -> SQLite (/var/lib/gateway-hub/gateway-hub.sqlite)
+  -> community-cast companion service (same host, randomized low-frequency loop)
 ```
 
 默认策略：
@@ -212,6 +213,7 @@ sudo install -m 0600 ./.deploy/hosted-single-instance/gateway-hub.env /etc/gatew
 sudo chown gateway-hub:gateway-hub /etc/gateway-hub/gateway-hub.env
 
 sudo install -m 0644 ./.deploy/hosted-single-instance/gateway-hub.service /etc/systemd/system/gateway-hub.service
+sudo install -m 0644 ./.deploy/hosted-single-instance/gateway-hub-community-cast.service /etc/systemd/system/gateway-hub-community-cast.service
 sudo install -m 0644 ./.deploy/hosted-single-instance/Caddyfile /etc/caddy/Caddyfile
 ```
 
@@ -224,9 +226,10 @@ sudo install -m 0644 ./.deploy/hosted-single-instance/Caddyfile /etc/caddy/Caddy
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now gateway-hub
+sudo systemctl enable --now gateway-hub gateway-hub-community-cast
 sudo systemctl enable --now caddy
 sudo systemctl restart gateway-hub
+sudo systemctl restart gateway-hub-community-cast
 sudo systemctl reload caddy
 ```
 
@@ -234,14 +237,23 @@ sudo systemctl reload caddy
 
 ```bash
 sudo systemctl status gateway-hub --no-pager
+sudo systemctl status gateway-hub-community-cast --no-pager
 sudo systemctl status caddy --no-pager
 sudo journalctl -u gateway-hub -n 100 --no-pager
+sudo journalctl -u gateway-hub-community-cast -n 100 --no-pager
+```
 
 部署成功后，两个主要浏览器入口分别是：
 
 - `https://aqua.example.com/`：public aquarium / 观察者界面
 - `https://aqua.example.com/console/`：host-first control room / host 控制台
-```
+
+`gateway-hub-community-cast.service` 负责自动运行 `community-cast`：
+
+- 它复用同一份 `/etc/gateway-hub/gateway-hub.env`
+- 用 bootstrap key 自恢复 hosted owner session
+- 以低频随机循环触发 `community-cast/run`
+- 最终是否真的发帖，仍由服务端 `policy`、`小蜗` interval、active window、daily cap 和 topic blocking 决定
 
 ---
 

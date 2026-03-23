@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import { buildApp } from '../apps/hub-server/src/app.js';
 import {
@@ -27,6 +30,9 @@ interface GatewayAuthResult {
   handle: string;
   displayName: string;
 }
+
+const execFileAsync = promisify(execFile);
+const communityCastLoopScriptPath = fileURLToPath(new URL('./aqua-community-cast-loop.mjs', import.meta.url));
 
 function formatSummaryLine(label: string, value: string) {
   return `${label}: ${value}`;
@@ -133,6 +139,58 @@ async function createRechargeEvent(baseUrl: string, token: string) {
   });
   return payload.data.event as {
     id: string;
+  };
+}
+
+async function runCommunityCastLoopOnce(baseUrl: string, bootstrapKey: string, rootDir: string) {
+  const envFilePath = path.join(rootDir, 'community-cast-loop.env');
+  const stateFilePath = path.join(rootDir, 'community-cast-loop-state.json');
+  await writeFile(
+    envFilePath,
+    [
+      'AQUA_DEPLOYMENT_MODE=hosted',
+      'HOST=127.0.0.1',
+      `PORT=${new URL(baseUrl).port || '80'}`,
+      `AQUA_HOSTED_OWNER_BOOTSTRAP_KEY=${bootstrapKey}`,
+    ].join('\n'),
+    'utf8',
+  );
+
+  const { stdout } = await execFileAsync(process.execPath, [
+    communityCastLoopScriptPath,
+    '--once',
+    '--config-env-file',
+    envFilePath,
+    '--state-file',
+    stateFilePath,
+    '--timeout-ms',
+    '15000',
+  ]);
+  const payload = JSON.parse(stdout) as {
+    ok: boolean;
+    run?: {
+      publishAction: string | null;
+      publishedExpressionId: string | null;
+      candidateId: string | null;
+    };
+  };
+  assert.equal(payload.ok, true);
+
+  const savedState = JSON.parse(await readFile(stateFilePath, 'utf8')) as {
+    ownerSession?: {
+      sessionId?: string;
+    };
+    lastRun?: {
+      publishAction?: string | null;
+      publishedExpressionId?: string | null;
+    };
+  };
+  assert.ok(savedState.ownerSession?.sessionId);
+
+  return {
+    payload,
+    stateFilePath,
+    savedState,
   };
 }
 
@@ -292,13 +350,31 @@ async function main() {
     const bulletinAnchor = await createPublicExpression(baseUrl, beta.token, {
       body: '今天海面最先把话头吹热的，还是蟹堡王那一圈吗？',
     });
-    const bulletinRun = await requestHosted(baseUrl, '/api/v1/community-cast/run', {
-      method: 'POST',
+    const bulletinRun = await runCommunityCastLoopOnce(baseUrl, 'community-cast-e2e-secret', tempRoot);
+    assert.equal(bulletinRun.payload.run?.publishAction, 'published');
+
+    const publishedBulletins = await requestHosted(baseUrl, '/api/v1/community-cast/bulletins?published=true&npcId=xiaowo', {
       token: owner.token,
     });
-    assert.equal(bulletinRun.data.publish.action, 'published');
-    assert.equal(bulletinRun.data.publish.expression.parentExpressionId, bulletinAnchor.id);
-    assert.equal(bulletinRun.data.publish.expression.gateway.displayName, '小蜗');
+    assert.equal(publishedBulletins.data.items.length, 1);
+    assert.equal(publishedBulletins.data.items[0].anchorId, bulletinAnchor.id);
+
+    const publishedExpressionId = bulletinRun.payload.run?.publishedExpressionId;
+    assert.ok(publishedExpressionId);
+    const publishedThread = await requestHosted(
+      baseUrl,
+      `/api/v1/public-expressions?rootExpressionId=${encodeURIComponent(bulletinAnchor.id)}`,
+    );
+    const xiaowoReply = (publishedThread.data.items as Array<{
+      id: string;
+      parentExpressionId: string | null;
+      gateway: {
+        displayName: string;
+      };
+    }>).find((item) => item.id === publishedExpressionId);
+    assert.ok(xiaowoReply);
+    assert.equal(xiaowoReply.parentExpressionId, bulletinAnchor.id);
+    assert.equal(xiaowoReply.gateway.displayName, '小蜗');
 
     const rechargeEvent = await createRechargeEvent(baseUrl, alpha.token);
     const alphaMine = await requestHosted(baseUrl, '/api/v1/community-memory/mine', {
@@ -414,7 +490,7 @@ async function main() {
         formatSummaryLine('Base URL', baseUrl),
         formatSummaryLine('Owner host', owner.hostId),
         formatSummaryLine('Participant', `${alpha.handle} (${alpha.id})`),
-        formatSummaryLine('Published bulletin', bulletinRun.data.publish.expression.id as string),
+        formatSummaryLine('Published bulletin', publishedExpressionId),
         formatSummaryLine('Retrieved note', authored.retrievedNoteIds[0] as string),
         formatSummaryLine('Reply body', authored.body),
       ].join('\n'),

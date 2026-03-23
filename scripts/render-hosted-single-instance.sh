@@ -40,6 +40,7 @@ Optional:
 Generated files:
   <output-dir>/<service-name>.env
   <output-dir>/<service-name>.service
+  <output-dir>/<service-name>-community-cast.service
   <output-dir>/Caddyfile
   <output-dir>/DEPLOYMENT_SUMMARY.md
 EOF
@@ -156,10 +157,14 @@ fi
 db_path="${data_dir%/}/${service_name}.sqlite"
 env_path="${output_dir%/}/${service_name}.env"
 service_path="${output_dir%/}/${service_name}.service"
+community_cast_service_name="${service_name}-community-cast"
+community_cast_state_path="${data_dir%/}/${service_name}-community-cast-loop-state.json"
+community_cast_service_path="${output_dir%/}/${community_cast_service_name}.service"
 caddyfile_path="${output_dir%/}/Caddyfile"
 summary_path="${output_dir%/}/DEPLOYMENT_SUMMARY.md"
 env_target_path="${config_dir%/}/${service_name}.env"
 service_target_path="/etc/systemd/system/${service_name}.service"
+community_cast_service_target_path="/etc/systemd/system/${community_cast_service_name}.service"
 caddy_target_path="/etc/caddy/Caddyfile"
 public_aquarium_root="${repo_root%/}/apps/public-aquarium/dist"
 web_console_root="${repo_root%/}/apps/web-console/dist"
@@ -189,6 +194,30 @@ WorkingDirectory=${repo_root}/apps/hub-server
 Environment=NODE_ENV=production
 EnvironmentFile=${env_target_path}
 ExecStart=${npm_bin} run start
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat >"$community_cast_service_path" <<EOF
+[Unit]
+Description=AquaClaw Community Cast Loop
+After=network-online.target ${service_name}.service
+Wants=network-online.target ${service_name}.service
+PartOf=${service_name}.service
+
+[Service]
+Type=simple
+User=${service_user}
+Group=${service_group}
+WorkingDirectory=${repo_root}
+Environment=NODE_ENV=production
+EnvironmentFile=${env_target_path}
+ExecStart=${npm_bin} run ops:community-cast:hosted -- --config-env-file ${env_target_path} --state-file ${community_cast_state_path}
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
@@ -245,14 +274,17 @@ Generated for domain: \`${domain}\`
 
 - Env file: \`${env_path}\`
 - systemd unit: \`${service_path}\`
+- companion unit: \`${community_cast_service_path}\`
 - Caddyfile: \`${caddyfile_path}\`
 
 ## Target paths
 
 - Env file target: \`${env_target_path}\`
 - systemd target: \`${service_target_path}\`
+- companion target: \`${community_cast_service_target_path}\`
 - Caddyfile target: \`${caddy_target_path}\`
 - SQLite target: \`${db_path}\`
+- Community-cast loop state: \`${community_cast_state_path}\`
 - Backup dir: \`${backup_dir}\`
 - Public aquarium root: \`${public_aquarium_root}\`
 - Web console root: \`${web_console_root}\`
@@ -269,6 +301,7 @@ Keep this secret. Anyone who has it can bootstrap the hosted owner session.
 sudo install -d -m 0750 ${config_dir} ${data_dir} ${backup_dir}
 sudo install -m 0600 ${env_path} ${env_target_path}
 sudo install -m 0644 ${service_path} ${service_target_path}
+sudo install -m 0644 ${community_cast_service_path} ${community_cast_service_target_path}
 sudo install -m 0644 ${caddyfile_path} ${caddy_target_path}
 \`\`\`
 
@@ -289,7 +322,7 @@ If \`${caddy_target_path}\` already contains other sites, merge this site block 
 
 \`\`\`bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now ${service_name}
+sudo systemctl enable --now ${service_name} ${community_cast_service_name}
 sudo systemctl reload caddy
 \`\`\`
 EOF
@@ -297,6 +330,7 @@ EOF
 echo "Rendered hosted bundle:"
 echo "  env:      ${env_path}"
 echo "  service:  ${service_path}"
+echo "  cast:     ${community_cast_service_path}"
 echo "  caddy:    ${caddyfile_path}"
 echo "  summary:  ${summary_path}"
 echo "  bootstrap key: ${bootstrap_key}"
