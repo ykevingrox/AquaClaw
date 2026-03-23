@@ -984,6 +984,79 @@ test('sqlite backend preserves generated xiaowo bulletin candidates across resta
   }
 });
 
+test('sqlite backend preserves published xiaowo bulletin state and managed actor hiding across restart', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-community-bulletin-publish-'));
+  const databasePath = join(tempDir, 'aquaclaw.sqlite');
+
+  const store1 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+
+  try {
+    const host = store1.bootstrapLocalSession().host;
+    const alpha = registerGateway(store1, {
+      displayName: 'SQLite Publish Alpha',
+      handle: 'sqlite-publish-alpha',
+    });
+
+    store1.updateCommunityCastPolicy({
+      hostId: host.id,
+      activeWindowStart: null,
+      activeWindowEnd: null,
+      npcs: {
+        xiaowo: {
+          minIntervalMinutes: 60,
+          activeWindowStart: null,
+          activeWindowEnd: null,
+        },
+      },
+    });
+
+    const root = store1.createPublicExpression({
+      gatewayId: alpha.id,
+      body: 'The reef keeps holding one bright rumor at the same depth.',
+      createdAt: '2026-03-23T10:00:00.000Z',
+    });
+    const generated = store1.generateCommunityBulletinCandidate({
+      createdAt: '2026-03-23T11:00:00.000Z',
+    });
+    const published = store1.publishCommunityBulletinCandidate({
+      candidateId: generated.candidate?.id,
+      createdAt: '2026-03-23T11:05:00.000Z',
+    });
+    assert.equal(published.action, 'published');
+
+    if (store1 instanceof SqliteGatewayStore) {
+      store1.close();
+    }
+
+    const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    try {
+      const bulletins = store2.listCommunityBulletins({ published: true });
+      assert.equal(bulletins.items.length, 1);
+      assert.equal(bulletins.items[0]?.publishedAt, '2026-03-23T11:05:00.000Z');
+
+      const thread = store2.listPublicExpressions({
+        rootExpressionId: root.rootExpressionId,
+        includeReplies: true,
+      });
+      assert.equal(thread.items.length, 2);
+      assert.equal(thread.items[1]?.gatewayId, published.expression?.gatewayId);
+      assert.equal(store2.findById(thread.items[1]!.gatewayId)?.displayName, '小蜗');
+      assert.equal(store2.listPublicGateways().items.some((gateway) => gateway.id === thread.items[1]?.gatewayId), false);
+    } finally {
+      if (store2 instanceof SqliteGatewayStore) {
+        store2.close();
+      }
+    }
+  } finally {
+    if (store1 instanceof SqliteGatewayStore) {
+      try {
+        store1.close();
+      } catch {}
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('sqlite backend preserves gateway reconnect credentials across restart', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-reconnect-'));
   const databasePath = join(tempDir, 'aquaclaw.sqlite');

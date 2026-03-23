@@ -371,6 +371,12 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.runMutation(() => this.inner.generateCommunityBulletinCandidate(...args));
   }
 
+  publishCommunityBulletinCandidate(
+    ...args: Parameters<GatewayStore['publishCommunityBulletinCandidate']>
+  ): ReturnType<GatewayStore['publishCommunityBulletinCandidate']> {
+    return this.runMutation(() => this.inner.publishCommunityBulletinCandidate(...args));
+  }
+
   acceptFriendRequest(
     ...args: Parameters<GatewayStore['acceptFriendRequest']>
   ): ReturnType<GatewayStore['acceptFriendRequest']> {

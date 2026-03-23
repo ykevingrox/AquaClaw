@@ -391,6 +391,89 @@ test('local owner can patch and read community cast policy while gateway tokens 
   await app.close();
 });
 
+test('local owner can run community cast publishing while gateway tokens stay excluded', async () => {
+  const app = buildApp();
+  const owner = await bootstrapLocalHost(app);
+  const alpha = await registerGateway(app, {
+    displayName: 'Community Cast Alpha',
+    handle: 'community-cast-alpha-local',
+    visibility: 'public',
+  });
+
+  const policy = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/community-cast/policy',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+    payload: {
+      activeWindowStart: null,
+      activeWindowEnd: null,
+      npcs: {
+        xiaowo: {
+          minIntervalMinutes: 60,
+          activeWindowStart: null,
+          activeWindowEnd: null,
+        },
+      },
+    },
+  });
+  assert.equal(policy.statusCode, 200);
+
+  const root = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      body: 'The reef keeps carrying one bright rumor back to the same ledge.',
+    },
+  });
+  assert.equal(root.statusCode, 201);
+  const rootExpressionId = root.json().data.expression.id as string;
+
+  const run = await app.inject({
+    method: 'POST',
+    url: '/api/v1/community-cast/run',
+    headers: {
+      authorization: `Bearer ${owner.token}`,
+    },
+  });
+  assert.equal(run.statusCode, 200);
+  assert.equal(run.json().data.generation.action, 'created');
+  assert.equal(run.json().data.publish.action, 'published');
+  assert.equal(run.json().data.publish.expression.gateway.displayName, '小蜗');
+  assert.equal(run.json().data.publish.expression.parentExpressionId, rootExpressionId);
+
+  const thread = await app.inject({
+    method: 'GET',
+    url: `/api/v1/public-expressions?rootExpressionId=${encodeURIComponent(rootExpressionId)}`,
+  });
+  assert.equal(thread.statusCode, 200);
+  assert.equal(thread.json().data.items.length, 2);
+  assert.equal(thread.json().data.items[1].gateway.displayName, '小蜗');
+
+  const publicGateways = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/gateways',
+  });
+  assert.equal(publicGateways.statusCode, 200);
+  assert.equal(publicGateways.json().data.items.some((gateway: { displayName: string }) => gateway.displayName === '小蜗'), false);
+
+  const forbidden = await app.inject({
+    method: 'POST',
+    url: '/api/v1/community-cast/run',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal(forbidden.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
 test('local host can inspect social pulse dry-run while gateway tokens cannot', async () => {
   const app = buildApp();
   const owner = await bootstrapLocalHost(app);

@@ -1540,6 +1540,90 @@ test('hosted owner session can patch and read community cast policy while gatewa
   await app.close();
 });
 
+test('hosted owner session can run community cast publishing while gateway tokens stay excluded', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-community-cast-run-owner');
+  await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
+
+  const participantRegister = await app.inject({
+    method: 'POST',
+    url: '/api/v1/gateways/register',
+    payload: {
+      displayName: 'Hosted Community Cast Alpha',
+      handle: 'hosted-community-cast-alpha',
+      visibility: 'public',
+    },
+  });
+  assert.equal(participantRegister.statusCode, 201);
+  const participantToken = participantRegister.json().data.credential.token as string;
+
+  const policy = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/community-cast/policy',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      activeWindowStart: null,
+      activeWindowEnd: null,
+      npcs: {
+        xiaowo: {
+          minIntervalMinutes: 60,
+          activeWindowStart: null,
+          activeWindowEnd: null,
+        },
+      },
+    },
+  });
+  assert.equal(policy.statusCode, 200);
+
+  const root = await app.inject({
+    method: 'POST',
+    url: '/api/v1/public-expressions',
+    headers: {
+      authorization: `Bearer ${participantToken}`,
+    },
+    payload: {
+      body: 'The hosted reef keeps echoing the same bright little rumor.',
+    },
+  });
+  assert.equal(root.statusCode, 201);
+  const rootExpressionId = root.json().data.expression.id as string;
+
+  const run = await app.inject({
+    method: 'POST',
+    url: '/api/v1/community-cast/run',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+  });
+  assert.equal(run.statusCode, 200);
+  assert.equal(run.json().data.generation.action, 'created');
+  assert.equal(run.json().data.publish.action, 'published');
+  assert.equal(run.json().data.publish.expression.gateway.displayName, '小蜗');
+  assert.equal(run.json().data.publish.expression.parentExpressionId, rootExpressionId);
+
+  const publicGateways = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/gateways',
+  });
+  assert.equal(publicGateways.statusCode, 200);
+  assert.equal(publicGateways.json().data.items.some((gateway: { displayName: string }) => gateway.displayName === '小蜗'), false);
+
+  const forbidden = await app.inject({
+    method: 'POST',
+    url: '/api/v1/community-cast/run',
+    headers: {
+      authorization: `Bearer ${participantToken}`,
+    },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal(forbidden.json().error.code, 'forbidden');
+
+  await app.close();
+});
+
 test('hosted participant can read community memory notes while owner sessions stay ashore', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 

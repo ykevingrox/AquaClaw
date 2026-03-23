@@ -7,6 +7,9 @@ import { SeaLiveHub, type SeaLiveHubOptions } from './live-hub.js';
 import { createInMemoryRateLimiter, type RateLimitPolicy } from './rate-limiter.js';
 import {
   type AquaProfileRecord,
+  type CommunityBulletinCandidate,
+  type CommunityBulletinGenerationResult,
+  type CommunityBulletinPublishResult,
   type CommunityMemoryNote,
   type CurrentRecord,
   createGatewayStore,
@@ -270,6 +273,12 @@ interface CreatePublicExpressionBody {
   replyToExpressionId?: string | null;
   tone?: string;
   metadata?: Record<string, unknown>;
+}
+
+interface RunCommunityCastBody {
+  candidateId?: string;
+  body?: string;
+  createdAt?: string;
 }
 
 interface UpdateConversationReadStateBody {
@@ -841,6 +850,56 @@ function toCommunityCastPolicySummary(policy: CommunityCastPolicyRecord) {
     },
     updatedAt: policy.updatedAt,
     updatedByHostId: policy.updatedByHostId,
+  };
+}
+
+function toCommunityBulletinCandidateSummary(candidate: CommunityBulletinCandidate) {
+  return {
+    id: candidate.id,
+    npcId: candidate.npcId,
+    type: candidate.type,
+    anchorKind: candidate.anchorKind,
+    anchorId: candidate.anchorId,
+    topicDomain: candidate.topicDomain,
+    speechGoal: candidate.speechGoal,
+    riskLevel: candidate.riskLevel,
+    headline: candidate.headline,
+    promptSummary: candidate.promptSummary,
+    bodyDraft: candidate.bodyDraft,
+    publishingWindowStartAt: candidate.publishingWindowStartAt,
+    publishingWindowEndAt: candidate.publishingWindowEndAt,
+    createdAt: candidate.createdAt,
+    publishedAt: candidate.publishedAt,
+  };
+}
+
+function toCommunityBulletinGenerationSummary(result: CommunityBulletinGenerationResult) {
+  return {
+    generatedAt: result.generatedAt,
+    action: result.action,
+    candidate: result.candidate ? toCommunityBulletinCandidateSummary(result.candidate) : null,
+    reasons: [...result.reasons],
+    policy: toCommunityCastPolicySummary(result.policy),
+    state: {
+      globalWindowActive: result.state.globalWindowActive,
+      npcWindowActive: result.state.npcWindowActive,
+      recentPublicExpressionCount: result.state.recentPublicExpressionCount,
+      recentObserverEventCount: result.state.recentObserverEventCount,
+      recentBulletinCount: result.state.recentBulletinCount,
+      lastCandidateAt: result.state.lastCandidateAt,
+      remainingDailyCap: result.state.remainingDailyCap,
+    },
+  };
+}
+
+function toCommunityBulletinPublishSummary(store: GatewayStore, result: CommunityBulletinPublishResult) {
+  return {
+    attemptedAt: result.attemptedAt,
+    action: result.action,
+    candidate: result.candidate ? toCommunityBulletinCandidateSummary(result.candidate) : null,
+    expression: result.expression ? toPublicExpressionSummary(store, result.expression) : null,
+    reasons: [...result.reasons],
+    policy: toCommunityCastPolicySummary(result.policy),
   };
 }
 
@@ -3891,6 +3950,125 @@ export function buildApp(options: BuildAppOptions = {}) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'failed to update community cast policy';
       const statusCode = message === 'host not found' ? 404 : 400;
+      return reply.code(statusCode).send({
+        ok: false,
+        error: {
+          code: statusCode === 404 ? 'not_found' : 'validation_failed',
+          message,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: RunCommunityCastBody }>('/api/v1/community-cast/run', async (request, reply) => {
+    let actorHostId: string;
+
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorHostId = hostedOwner.session.host.id;
+    } else {
+      const localOwner = getLocalOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!localOwner.ok) {
+        const endpointError = localOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorHostId = localOwner.session.host.id;
+    }
+
+    if (request.body?.candidateId !== undefined && typeof request.body.candidateId !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'candidateId must be a string when provided',
+        },
+      });
+    }
+    if (request.body?.body !== undefined && typeof request.body.body !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'body must be a string when provided',
+        },
+      });
+    }
+    if (request.body?.createdAt !== undefined && typeof request.body.createdAt !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'createdAt must be a string when provided',
+        },
+      });
+    }
+
+    const candidateId = request.body?.candidateId?.trim() || undefined;
+    const body = request.body?.body?.trim() || undefined;
+    const createdAt = request.body?.createdAt?.trim() || undefined;
+
+    try {
+      if (!store.findHostById(actorHostId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: {
+            code: 'not_found',
+            message: 'host not found',
+          },
+        });
+      }
+
+      if (candidateId) {
+        const publish = store.publishCommunityBulletinCandidate({
+          candidateId,
+          body,
+          createdAt,
+        });
+        return {
+          ok: true,
+          data: {
+            generation: null,
+            publish: toCommunityBulletinPublishSummary(store, publish),
+          },
+        };
+      }
+
+      const generation = store.generateCommunityBulletinCandidate({ createdAt });
+      const publish =
+        generation.candidate && generation.action !== 'suppressed'
+          ? store.publishCommunityBulletinCandidate({
+              candidateId: generation.candidate.id,
+              body,
+              createdAt,
+            })
+          : null;
+
+      return {
+        ok: true,
+        data: {
+          generation: toCommunityBulletinGenerationSummary(generation),
+          publish: publish ? toCommunityBulletinPublishSummary(store, publish) : null,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'failed to run community cast';
+      const statusCode = message === 'community bulletin candidate not found' || message === 'host not found' ? 404 : 400;
       return reply.code(statusCode).send({
         ok: false,
         error: {

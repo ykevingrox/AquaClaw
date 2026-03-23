@@ -52,6 +52,13 @@ export interface HostRecord {
   updatedAt: string;
 }
 
+export interface ManagedCommunityActorRecord {
+  npcId: CommunityNpcId;
+  gatewayId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GatewayPresenceRecord {
   gatewayId: string;
   status: PresenceStatus;
@@ -354,6 +361,15 @@ export interface CommunityBulletinGenerationResult {
   reasons: string[];
   policy: CommunityCastPolicyRecord;
   state: CommunityBulletinGenerationState;
+}
+
+export interface CommunityBulletinPublishResult {
+  attemptedAt: string;
+  action: 'published' | 'suppressed';
+  candidate: CommunityBulletinCandidate | null;
+  expression: PublicExpressionRecord | null;
+  reasons: string[];
+  policy: CommunityCastPolicyRecord;
 }
 
 export type SocialPulseAction =
@@ -734,6 +750,7 @@ export interface GatewayStoreSnapshot {
   communityMemoryNotes?: CommunityMemoryNote[];
   communityMemoryNoteOrder?: GatewayCommunityMemoryOrderSnapshotRecord[];
   communityBulletins?: CommunityBulletinCandidate[];
+  managedCommunityActors?: ManagedCommunityActorRecord[];
 }
 
 export type StoreBackend = 'memory' | 'sqlite' | 'postgres';
@@ -813,6 +830,7 @@ export interface GatewayStore {
   listCommunityMemoryNotes(input: ListCommunityMemoryNotesInput): CommunityMemoryNotePage;
   listCommunityBulletins(input?: ListCommunityBulletinsInput): CommunityBulletinPage;
   generateCommunityBulletinCandidate(input?: GenerateCommunityBulletinCandidateInput): CommunityBulletinGenerationResult;
+  publishCommunityBulletinCandidate(input?: PublishCommunityBulletinCandidateInput): CommunityBulletinPublishResult;
   acceptFriendRequest(requestId: string, actingGatewayId: string): {
     request: FriendRequestRecord;
     friendship: FriendshipRecord;
@@ -1222,6 +1240,12 @@ export interface ListCommunityBulletinsInput {
 }
 
 export interface GenerateCommunityBulletinCandidateInput {
+  createdAt?: string;
+}
+
+export interface PublishCommunityBulletinCandidateInput {
+  candidateId?: string;
+  body?: string;
   createdAt?: string;
 }
 
@@ -1758,6 +1782,23 @@ function cloneCommunityBulletinCandidateRecord(candidate: CommunityBulletinCandi
   return normalizeCommunityBulletinCandidate(candidate);
 }
 
+function cloneManagedCommunityActorRecord(actor: ManagedCommunityActorRecord): ManagedCommunityActorRecord {
+  return {
+    npcId: actor.npcId,
+    gatewayId: actor.gatewayId,
+    createdAt: actor.createdAt,
+    updatedAt: actor.updatedAt,
+  };
+}
+
+function getManagedCommunityCastProfile(npcId: CommunityNpcId): CommunityNpcProfile {
+  const profile = listManagedCommunityCastProfiles().find((candidate) => candidate.id === npcId) ?? null;
+  if (!profile) {
+    throw new Error('managed community actor profile not found');
+  }
+  return profile;
+}
+
 function evaluateSocialPulseQuietHours(
   quietHours: SocialPulsePolicyQuietHours | null,
   nowMs: number,
@@ -1957,6 +1998,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly communityMemoryNotesById = new Map<string, CommunityMemoryNote>();
   private readonly communityMemoryNoteIdsByGatewayId = new Map<string, string[]>();
   private readonly communityBulletinsById = new Map<string, CommunityBulletinCandidate>();
+  private readonly managedCommunityActorsByNpcId = new Map<CommunityNpcId, ManagedCommunityActorRecord>();
+  private readonly managedCommunityNpcIdByGatewayId = new Map<string, CommunityNpcId>();
   private aquaProfile: AquaProfileRecord | null = null;
   private socialPulsePolicy: SocialPulsePolicyRecord | null = null;
   private communityCastPolicy: CommunityCastPolicyRecord | null = null;
@@ -3264,6 +3307,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
 
     return Array.from(this.gatewaysById.values())
+      .filter((gateway) => !this.isManagedCommunityGatewayId(gateway.id))
       .filter((gateway) => this.canViewGatewayProfile(input.viewerGatewayId, gateway.id))
       .filter((gateway) => gateway.id === input.viewerGatewayId || !this.isBlockedEitherWay(input.viewerGatewayId, gateway.id))
       .filter((gateway) => {
@@ -3277,6 +3321,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   listPublicGateways(input: ListPublicGatewaysInput = {}): GatewayPage {
     const visible = Array.from(this.gatewaysById.values())
       .filter((gateway) => !this.isOwnerGatewayId(gateway.id))
+      .filter((gateway) => !this.isManagedCommunityGatewayId(gateway.id))
       .sort((a, b) => {
         const updatedAtComparison = b.updatedAt.localeCompare(a.updatedAt);
         if (updatedAtComparison !== 0) {
@@ -3597,6 +3642,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
     if (!bypassGuardrails && (this.isOwnerGatewayId(fromGateway.id) || this.isOwnerGatewayId(toGateway.id))) {
       throw new Error('owner gateway cannot participate in friend requests');
+    }
+    if (!bypassGuardrails && (this.isManagedCommunityGatewayId(fromGateway.id) || this.isManagedCommunityGatewayId(toGateway.id))) {
+      throw new Error('managed community actor cannot participate in friend requests');
     }
     if (!bypassGuardrails && this.normalizeFriendRequestPolicy(toGateway.friendRequestPolicy) === 'disabled') {
       throw new Error('target gateway is not accepting friend requests');
@@ -4490,6 +4538,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     );
     const recentPublicExpressions = Array.from(this.publicExpressionsById.values())
       .filter((expression) => !this.isOwnerGatewayId(expression.gatewayId))
+      .filter((expression) => !this.isManagedCommunityGatewayId(expression.gatewayId))
       .filter((expression) => {
         const createdAtMs = parseIsoMs(expression.createdAt);
         return createdAtMs !== null && createdAtMs <= nowMs && nowMs - createdAtMs <= 12 * 60 * 60_000;
@@ -4504,6 +4553,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
           event.type !== 'current.changed' &&
           event.type !== 'environment.changed',
       )
+      .filter((event) => !this.isManagedCommunityGatewayId(this.seaEventPrimaryGatewayId(event)))
       .filter((event) => {
         const createdAtMs = parseIsoMs(event.createdAt);
         return createdAtMs !== null && createdAtMs <= nowMs && nowMs - createdAtMs <= 12 * 60 * 60_000;
@@ -4652,6 +4702,139 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         lastCandidateAt: candidate.createdAt,
         remainingDailyCap: state.remainingDailyCap === null ? null : Math.max(0, state.remainingDailyCap - 1),
       },
+    };
+  }
+
+  publishCommunityBulletinCandidate(input: PublishCommunityBulletinCandidateInput = {}): CommunityBulletinPublishResult {
+    const attemptedAt = input.createdAt ?? new Date().toISOString();
+    const attemptedAtMs = parseIsoMs(attemptedAt);
+    if (attemptedAtMs === null) {
+      throw new Error('community bulletin createdAt is invalid');
+    }
+
+    const normalizedCandidateId = input.candidateId?.trim() || null;
+    if (input.candidateId !== undefined && normalizedCandidateId === null) {
+      throw new Error('community bulletin candidateId is required when provided');
+    }
+
+    const policy = this.getCommunityCastPolicy();
+    const reasons: string[] = [];
+    const globalWindowActive = this.isPolicyClockWindowActive(policy.activeWindowStart, policy.activeWindowEnd, attemptedAtMs);
+    const npcWindowActive = this.isPolicyClockWindowActive(
+      policy.npcs.xiaowo.activeWindowStart,
+      policy.npcs.xiaowo.activeWindowEnd,
+      attemptedAtMs,
+    );
+
+    if (!policy.enabled) {
+      reasons.push('community cast is globally disabled');
+      return { attemptedAt, action: 'suppressed', candidate: null, expression: null, reasons, policy };
+    }
+    if (!policy.npcs.xiaowo.enabled) {
+      reasons.push('xiaowo is disabled');
+      return { attemptedAt, action: 'suppressed', candidate: null, expression: null, reasons, policy };
+    }
+    if (!globalWindowActive) {
+      reasons.push('community cast global window is closed');
+      return { attemptedAt, action: 'suppressed', candidate: null, expression: null, reasons, policy };
+    }
+    if (!npcWindowActive) {
+      reasons.push('xiaowo active window is closed');
+      return { attemptedAt, action: 'suppressed', candidate: null, expression: null, reasons, policy };
+    }
+
+    const candidate =
+      normalizedCandidateId === null
+        ? Array.from(this.communityBulletinsById.values())
+            .filter((item) => item.npcId === 'xiaowo' && item.publishedAt === null)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0] ?? null
+        : this.communityBulletinsById.get(normalizedCandidateId) ?? null;
+    if (!candidate) {
+      throw new Error('community bulletin candidate not found');
+    }
+    if (candidate.npcId !== 'xiaowo') {
+      throw new Error('community bulletin npcId is unsupported');
+    }
+    if (candidate.publishedAt !== null) {
+      reasons.push('community bulletin candidate is already published');
+      return {
+        attemptedAt,
+        action: 'suppressed',
+        candidate: cloneCommunityBulletinCandidateRecord(candidate),
+        expression: null,
+        reasons,
+        policy,
+      };
+    }
+
+    const body = input.body?.trim() || candidate.bodyDraft?.trim() || '';
+    if (!body) {
+      reasons.push('community bulletin candidate has no body to publish');
+      return {
+        attemptedAt,
+        action: 'suppressed',
+        candidate: cloneCommunityBulletinCandidateRecord(candidate),
+        expression: null,
+        reasons,
+        policy,
+      };
+    }
+
+    const npcGateway = this.ensureManagedCommunityActor('xiaowo', attemptedAt);
+    const lastNpcExpression = Array.from(this.publicExpressionsById.values())
+      .filter((expression) => expression.gatewayId === npcGateway.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0] ?? null;
+    if (lastNpcExpression) {
+      const lastNpcExpressionMs = parseIsoMs(lastNpcExpression.createdAt);
+      if (
+        lastNpcExpressionMs !== null &&
+        attemptedAtMs - lastNpcExpressionMs < policy.npcs.xiaowo.minIntervalMinutes * 60_000
+      ) {
+        reasons.push('xiaowo publish cooldown has not elapsed yet');
+        return {
+          attemptedAt,
+          action: 'suppressed',
+          candidate: cloneCommunityBulletinCandidateRecord(candidate),
+          expression: null,
+          reasons,
+          policy,
+        };
+      }
+    }
+
+    const expression = this.createPublicExpression({
+      gatewayId: npcGateway.id,
+      body,
+      replyToExpressionId: candidate.anchorKind === 'public_thread' ? candidate.anchorId : undefined,
+      tone: candidate.type === 'question' ? 'reflective' : 'playful',
+      createdAt: attemptedAt,
+      metadata: {
+        communityCast: {
+          actorType: 'managed_npc',
+          npcId: candidate.npcId,
+          candidateId: candidate.id,
+          bulletinType: candidate.type,
+          anchorKind: candidate.anchorKind,
+          anchorId: candidate.anchorId,
+          topicDomain: candidate.topicDomain,
+          speechGoal: candidate.speechGoal,
+        },
+      },
+    });
+    const publishedCandidate = normalizeCommunityBulletinCandidate({
+      ...candidate,
+      bodyDraft: body,
+      publishedAt: expression.createdAt,
+    });
+    this.communityBulletinsById.set(publishedCandidate.id, publishedCandidate);
+
+    return {
+      attemptedAt,
+      action: 'published',
+      candidate: cloneCommunityBulletinCandidateRecord(publishedCandidate),
+      expression,
+      reasons,
+      policy,
     };
   }
 
@@ -5576,6 +5759,73 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       return false;
     }
     return !this.isOwnerGatewayId(gatewayId) && this.normalizeFriendRequestPolicy(gateway.friendRequestPolicy) !== 'disabled';
+  }
+
+  private isManagedCommunityGatewayId(gatewayId: string | null | undefined) {
+    return Boolean(gatewayId) && this.managedCommunityNpcIdByGatewayId.has(gatewayId!);
+  }
+
+  private buildManagedCommunityGatewayBio(profile: CommunityNpcProfile) {
+    if (profile.id === 'xiaowo') {
+      return 'Managed community cast broadcaster for AquaClaw. Hidden from the participant roster.';
+    }
+    return `Managed community cast ${profile.role.replace(/_/gu, ' ')} for AquaClaw.`;
+  }
+
+  private ensureManagedCommunityActor(npcId: CommunityNpcId, createdAt: string) {
+    const existingActor = this.managedCommunityActorsByNpcId.get(npcId) ?? null;
+    const existingGateway = existingActor ? this.gatewaysById.get(existingActor.gatewayId) ?? null : null;
+    const profile = getManagedCommunityCastProfile(npcId);
+
+    if (existingActor && existingGateway) {
+      const nextGateway: GatewayRecord = {
+        ...existingGateway,
+        displayName: profile.displayName,
+        bio: this.buildManagedCommunityGatewayBio(profile),
+        visibility: 'public',
+        friendRequestPolicy: 'disabled',
+        updatedAt: createdAt,
+      };
+      this.gatewaysById.set(nextGateway.id, nextGateway);
+      this.gatewaysByHandle.set(nextGateway.handle, nextGateway);
+      this.managedCommunityActorsByNpcId.set(npcId, {
+        ...existingActor,
+        updatedAt: createdAt,
+      });
+      return nextGateway;
+    }
+
+    const baseHandle = `cast-${profile.id}`;
+    let handle = baseHandle;
+    let suffix = 2;
+    while (this.gatewaysByHandle.has(handle)) {
+      handle = `${baseHandle}-${suffix}`;
+      suffix += 1;
+    }
+
+    const gatewayId = existingActor?.gatewayId ?? `community-cast-${profile.id}`;
+    const gateway: GatewayRecord = {
+      id: gatewayId,
+      handle,
+      displayName: profile.displayName,
+      bio: this.buildManagedCommunityGatewayBio(profile),
+      visibility: 'public',
+      friendRequestPolicy: 'disabled',
+      createdAt: existingActor?.createdAt ?? createdAt,
+      updatedAt: createdAt,
+    };
+    const actor: ManagedCommunityActorRecord = {
+      npcId,
+      gatewayId: gateway.id,
+      createdAt: gateway.createdAt,
+      updatedAt: createdAt,
+    };
+
+    this.gatewaysById.set(gateway.id, gateway);
+    this.gatewaysByHandle.set(gateway.handle, gateway);
+    this.managedCommunityActorsByNpcId.set(actor.npcId, actor);
+    this.managedCommunityNpcIdByGatewayId.set(gateway.id, npcId);
+    return gateway;
   }
 
   private normalizeGatewayRecord(gateway: GatewayRecord): GatewayRecord {
@@ -8356,6 +8606,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       communityBulletins: [...this.communityBulletinsById.values()].map((candidate) =>
         cloneCommunityBulletinCandidateRecord(candidate),
       ),
+      managedCommunityActors: [...this.managedCommunityActorsByNpcId.values()].map((actor) => cloneManagedCommunityActorRecord(actor)),
     };
   }
 
@@ -8609,6 +8860,14 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       const normalized = normalizeCommunityBulletinCandidate(candidate);
       this.communityBulletinsById.set(normalized.id, normalized);
     }
+    for (const actor of snapshot.managedCommunityActors ?? []) {
+      if (!this.gatewaysById.has(actor.gatewayId)) {
+        continue;
+      }
+      const normalized = cloneManagedCommunityActorRecord(actor);
+      this.managedCommunityActorsByNpcId.set(normalized.npcId, normalized);
+      this.managedCommunityNpcIdByGatewayId.set(normalized.gatewayId, normalized.npcId);
+    }
   }
 
   reset() {
@@ -8646,6 +8905,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.communityMemoryNotesById.clear();
     this.communityMemoryNoteIdsByGatewayId.clear();
     this.communityBulletinsById.clear();
+    this.managedCommunityActorsByNpcId.clear();
+    this.managedCommunityNpcIdByGatewayId.clear();
     this.hostsById.clear();
     this.hostsByHandle.clear();
     this.legacyOwnerGatewayIds.clear();

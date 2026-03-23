@@ -247,6 +247,170 @@ test('GatewayStore suppresses duplicate fallback xiaowo bulletins when current a
   assert.match(second.reasons.join(' | '), /similar xiaowo bulletin candidate already exists/i);
 });
 
+test('GatewayStore can publish a xiaowo bulletin as a managed public reply without entering the public roster', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = registerGateway(store, { displayName: 'Publish Alpha', handle: 'publish-alpha-store' });
+
+  store.updateCommunityCastPolicy({
+    hostId: host.id,
+    activeWindowStart: null,
+    activeWindowEnd: null,
+    npcs: {
+      xiaowo: {
+        minIntervalMinutes: 60,
+        maxIntervalMinutes: 240,
+        activeWindowStart: null,
+        activeWindowEnd: null,
+      },
+    },
+  });
+
+  const root = store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'The lantern line keeps catching the same glint every night.',
+    createdAt: '2026-03-23T10:00:00.000Z',
+  });
+  const generated = store.generateCommunityBulletinCandidate({
+    createdAt: '2026-03-23T11:00:00.000Z',
+  });
+  assert.equal(generated.action, 'created');
+
+  const published = store.publishCommunityBulletinCandidate({
+    candidateId: generated.candidate?.id,
+    createdAt: '2026-03-23T11:05:00.000Z',
+  });
+  assert.equal(published.action, 'published');
+  assert.equal(published.candidate?.publishedAt, '2026-03-23T11:05:00.000Z');
+  assert.equal(published.expression?.rootExpressionId, root.rootExpressionId);
+  assert.equal(published.expression?.parentExpressionId, root.id);
+
+  const xiaowo = published.expression ? store.findById(published.expression.gatewayId) : null;
+  assert.equal(xiaowo?.displayName, '小蜗');
+  assert.equal(store.listPublicGateways().items.some((gateway) => gateway.id === published.expression?.gatewayId), false);
+  assert.equal(store.searchGateways({ viewerGatewayId: alpha.id, q: 'xiaowo' }).length, 0);
+
+  const feed = store.listPublicSeaFeed();
+  assert.equal(feed.items[0]?.type, 'public_expression.replied');
+  assert.equal(feed.items[0]?.actorGatewayId, published.expression?.gatewayId ?? null);
+  assert.equal(feed.items[0]?.metadata.replyToGatewayId, alpha.id);
+});
+
+test('GatewayStore can publish a fallback xiaowo bulletin as a new public thread root', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+
+  store.updateCommunityCastPolicy({
+    hostId: host.id,
+    activeWindowStart: null,
+    activeWindowEnd: null,
+    npcs: {
+      xiaowo: {
+        minIntervalMinutes: 60,
+        maxIntervalMinutes: 60,
+        activeWindowStart: null,
+        activeWindowEnd: null,
+      },
+    },
+  });
+
+  store.setCurrent({
+    key: 'quiet-loop',
+    label: 'Quiet Loop',
+    summary: 'A soft loop keeps nudging half-finished thoughts back toward the surface.',
+    tone: 'reflective',
+    startsAt: '2026-03-23T00:00:00.000Z',
+    endsAt: '2026-03-24T00:00:00.000Z',
+  });
+  store.setEnvironment({
+    waterTemperatureC: 21,
+    clarity: 'clear',
+    tideDirection: 'incoming',
+    surfaceState: 'glassy',
+    phenomenon: 'warm_bloom',
+    summary: 'Warm bloom makes every quiet corner feel a little more expectant.',
+    expiresAt: '2026-03-24T00:00:00.000Z',
+  });
+
+  const generated = store.generateCommunityBulletinCandidate({
+    createdAt: '2026-03-23T10:00:00.000Z',
+  });
+  assert.equal(generated.action, 'created');
+  assert.equal(generated.candidate?.anchorKind, 'environment');
+
+  const published = store.publishCommunityBulletinCandidate({
+    candidateId: generated.candidate?.id,
+    createdAt: '2026-03-23T10:05:00.000Z',
+  });
+  assert.equal(published.action, 'published');
+  assert.equal(published.expression?.parentExpressionId, null);
+  assert.equal(published.expression?.rootExpressionId, published.expression?.id);
+});
+
+test('GatewayStore suppresses publishing a second xiaowo bulletin inside the publish cooldown', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+  const alpha = registerGateway(store, { displayName: 'Cooldown Alpha', handle: 'cooldown-alpha-store' });
+  const beta = registerGateway(store, { displayName: 'Cooldown Beta', handle: 'cooldown-beta-store' });
+
+  store.updateCommunityCastPolicy({
+    hostId: host.id,
+    activeWindowStart: null,
+    activeWindowEnd: null,
+    npcs: {
+      xiaowo: {
+        minIntervalMinutes: 1,
+        maxIntervalMinutes: 240,
+        activeWindowStart: null,
+        activeWindowEnd: null,
+      },
+    },
+  });
+
+  store.createPublicExpression({
+    gatewayId: alpha.id,
+    body: 'The first reef bell keeps carrying farther than it should.',
+    createdAt: '2026-03-23T09:00:00.000Z',
+  });
+  const firstCandidate = store.generateCommunityBulletinCandidate({
+    createdAt: '2026-03-23T10:00:00.000Z',
+  });
+  assert.equal(firstCandidate.action, 'created');
+
+  store.createPublicExpression({
+    gatewayId: beta.id,
+    body: 'Someone finally answered it from the darker side of the reef.',
+    createdAt: '2026-03-23T11:00:00.000Z',
+  });
+  const secondCandidate = store.generateCommunityBulletinCandidate({
+    createdAt: '2026-03-23T11:10:00.000Z',
+  });
+  assert.equal(secondCandidate.action, 'created');
+
+  store.updateCommunityCastPolicy({
+    hostId: host.id,
+    npcs: {
+      xiaowo: {
+        minIntervalMinutes: 180,
+      },
+    },
+  });
+
+  const firstPublish = store.publishCommunityBulletinCandidate({
+    candidateId: firstCandidate.candidate?.id,
+    createdAt: '2026-03-23T11:30:00.000Z',
+  });
+  assert.equal(firstPublish.action, 'published');
+
+  const secondPublish = store.publishCommunityBulletinCandidate({
+    candidateId: secondCandidate.candidate?.id,
+    createdAt: '2026-03-23T11:45:00.000Z',
+  });
+  assert.equal(secondPublish.action, 'suppressed');
+  assert.equal(secondPublish.expression, null);
+  assert.match(secondPublish.reasons.join(' | '), /publish cooldown/i);
+});
+
 test('GatewayStore community memory notes stay gateway-private and support filters, pagination, and source dedupe', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Memory Alpha', handle: 'memory-alpha-store' });
