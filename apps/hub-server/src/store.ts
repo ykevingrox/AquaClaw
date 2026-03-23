@@ -10,15 +10,18 @@ import {
   type UpdateCommunityCastPolicyInput,
   type VenueWhisperDraft,
 } from './community-cast.js';
+import {
+  buildCommunityBulletinCandidate,
+  createCommunityBulletinFingerprint,
+  normalizeCommunityBulletinCandidate,
+  type CommunityBulletinCandidate,
+  type CommunityBulletinPage,
+} from './community-bulletin.js';
 import { createPostgresGatewayStore } from './postgres-store.js';
 import { createSqliteGatewayStore } from './sqlite-store.js';
 
-export type {
-  CommunityCastPolicyRecord,
-  CommunityNpcId,
-  CommunityNpcProfile,
-  UpdateCommunityCastPolicyInput,
-} from './community-cast.js';
+export type { CommunityCastPolicyRecord, CommunityNpcId, CommunityNpcProfile, UpdateCommunityCastPolicyInput } from './community-cast.js';
+export type { CommunityBulletinCandidate, CommunityBulletinPage } from './community-bulletin.js';
 
 export type GatewayVisibility = 'private' | 'invite_only' | 'friends_only' | 'public';
 export type GatewayFriendRequestPolicy = 'manual_review' | 'disabled';
@@ -332,6 +335,25 @@ export interface CommunityMemoryNote {
 export interface CommunityMemoryNotePage {
   items: CommunityMemoryNote[];
   nextCursor: string | null;
+}
+
+export interface CommunityBulletinGenerationState {
+  globalWindowActive: boolean;
+  npcWindowActive: boolean;
+  recentPublicExpressionCount: number;
+  recentObserverEventCount: number;
+  recentBulletinCount: number;
+  lastCandidateAt: string | null;
+  remainingDailyCap: number | null;
+}
+
+export interface CommunityBulletinGenerationResult {
+  generatedAt: string;
+  action: 'created' | 'reused' | 'suppressed';
+  candidate: CommunityBulletinCandidate | null;
+  reasons: string[];
+  policy: CommunityCastPolicyRecord;
+  state: CommunityBulletinGenerationState;
 }
 
 export type SocialPulseAction =
@@ -711,6 +733,7 @@ export interface GatewayStoreSnapshot {
   sceneOrder: GatewaySceneOrderSnapshotRecord[];
   communityMemoryNotes?: CommunityMemoryNote[];
   communityMemoryNoteOrder?: GatewayCommunityMemoryOrderSnapshotRecord[];
+  communityBulletins?: CommunityBulletinCandidate[];
 }
 
 export type StoreBackend = 'memory' | 'sqlite' | 'postgres';
@@ -788,6 +811,8 @@ export interface GatewayStore {
   recordRechargeActivity(input: RecordRechargeActivityInput): SeaEvent;
   createCommunityMemoryNote(input: CreateCommunityMemoryNoteInput): CommunityMemoryNote;
   listCommunityMemoryNotes(input: ListCommunityMemoryNotesInput): CommunityMemoryNotePage;
+  listCommunityBulletins(input?: ListCommunityBulletinsInput): CommunityBulletinPage;
+  generateCommunityBulletinCandidate(input?: GenerateCommunityBulletinCandidateInput): CommunityBulletinGenerationResult;
   acceptFriendRequest(requestId: string, actingGatewayId: string): {
     request: FriendRequestRecord;
     friendship: FriendshipRecord;
@@ -1187,6 +1212,17 @@ export interface ListCommunityMemoryNotesInput {
   limit?: number;
   venueSlug?: string;
   tag?: string;
+}
+
+export interface ListCommunityBulletinsInput {
+  npcId?: CommunityNpcId;
+  published?: boolean;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface GenerateCommunityBulletinCandidateInput {
+  createdAt?: string;
 }
 
 export interface SeedLocalReefInput {
@@ -1718,6 +1754,10 @@ function cloneCommunityMemoryNote(note: CommunityMemoryNote): CommunityMemoryNot
   };
 }
 
+function cloneCommunityBulletinCandidateRecord(candidate: CommunityBulletinCandidate): CommunityBulletinCandidate {
+  return normalizeCommunityBulletinCandidate(candidate);
+}
+
 function evaluateSocialPulseQuietHours(
   quietHours: SocialPulsePolicyQuietHours | null,
   nowMs: number,
@@ -1916,6 +1956,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private readonly sceneIdsByGatewayId = new Map<string, string[]>();
   private readonly communityMemoryNotesById = new Map<string, CommunityMemoryNote>();
   private readonly communityMemoryNoteIdsByGatewayId = new Map<string, string[]>();
+  private readonly communityBulletinsById = new Map<string, CommunityBulletinCandidate>();
   private aquaProfile: AquaProfileRecord | null = null;
   private socialPulsePolicy: SocialPulsePolicyRecord | null = null;
   private communityCastPolicy: CommunityCastPolicyRecord | null = null;
@@ -4403,6 +4444,214 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return {
       items: pageItems,
       nextCursor,
+    };
+  }
+
+  listCommunityBulletins(input: ListCommunityBulletinsInput = {}): CommunityBulletinPage {
+    const normalizedCursor = input.cursor?.trim() || null;
+    const pageSize = Math.min(Math.max(input.limit ?? DEFAULT_SEA_PAGE_SIZE, 1), DEFAULT_SEA_PAGE_SIZE);
+    const items = Array.from(this.communityBulletinsById.values())
+      .map((candidate) => cloneCommunityBulletinCandidateRecord(candidate))
+      .filter((candidate) => (input.npcId ? candidate.npcId === input.npcId : true))
+      .filter((candidate) =>
+        input.published === undefined ? true : input.published ? candidate.publishedAt !== null : candidate.publishedAt === null,
+      )
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+
+    const startIndex = normalizedCursor ? items.findIndex((candidate) => candidate.id === normalizedCursor) + 1 : 0;
+    if (normalizedCursor && startIndex === 0) {
+      throw new Error('invalid community bulletin cursor');
+    }
+
+    const pageItems = items.slice(startIndex, startIndex + pageSize);
+    const nextCursor =
+      startIndex + pageItems.length < items.length && pageItems.length > 0 ? pageItems[pageItems.length - 1]!.id : null;
+
+    return {
+      items: pageItems,
+      nextCursor,
+    };
+  }
+
+  generateCommunityBulletinCandidate(input: GenerateCommunityBulletinCandidateInput = {}): CommunityBulletinGenerationResult {
+    const generatedAt = input.createdAt ?? new Date().toISOString();
+    const nowMs = parseIsoMs(generatedAt);
+    if (nowMs === null) {
+      throw new Error('community bulletin createdAt is invalid');
+    }
+
+    const policy = this.getCommunityCastPolicy();
+    const reasons: string[] = [];
+    const globalWindowActive = this.isPolicyClockWindowActive(policy.activeWindowStart, policy.activeWindowEnd, nowMs);
+    const npcWindowActive = this.isPolicyClockWindowActive(
+      policy.npcs.xiaowo.activeWindowStart,
+      policy.npcs.xiaowo.activeWindowEnd,
+      nowMs,
+    );
+    const recentPublicExpressions = Array.from(this.publicExpressionsById.values())
+      .filter((expression) => !this.isOwnerGatewayId(expression.gatewayId))
+      .filter((expression) => {
+        const createdAtMs = parseIsoMs(expression.createdAt);
+        return createdAtMs !== null && createdAtMs <= nowMs && nowMs - createdAtMs <= 12 * 60 * 60_000;
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+    const recentObserverFeedEvents = [...this.seaEvents]
+      .filter((event) => this.isSeaEventVisiblePublicly(event))
+      .filter(
+        (event) =>
+          event.type !== 'public_expression.created' &&
+          event.type !== 'public_expression.replied' &&
+          event.type !== 'current.changed' &&
+          event.type !== 'environment.changed',
+      )
+      .filter((event) => {
+        const createdAtMs = parseIsoMs(event.createdAt);
+        return createdAtMs !== null && createdAtMs <= nowMs && nowMs - createdAtMs <= 12 * 60 * 60_000;
+      })
+      .reverse();
+    const recentPublicExpressionCount = recentPublicExpressions.filter((expression) => {
+      const createdAtMs = parseIsoMs(expression.createdAt);
+      return createdAtMs !== null && nowMs - createdAtMs <= 90 * 60_000;
+    }).length;
+    const recentObserverEventCount = recentObserverFeedEvents.filter((event) => {
+      const createdAtMs = parseIsoMs(event.createdAt);
+      return createdAtMs !== null && nowMs - createdAtMs <= 90 * 60_000;
+    }).length;
+    const recentBulletins = Array.from(this.communityBulletinsById.values())
+      .filter((candidate) => candidate.npcId === 'xiaowo')
+      .filter((candidate) => {
+        const createdAtMs = parseIsoMs(candidate.createdAt);
+        return createdAtMs !== null && createdAtMs <= nowMs && nowMs - createdAtMs <= 24 * 60 * 60_000;
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+    const lastCandidate = recentBulletins[0] ?? null;
+    const lastCandidateAgeMs = lastCandidate ? nowMs - Date.parse(lastCandidate.createdAt) : null;
+    const remainingDailyCap =
+      policy.globalDailyCap === null ? null : Math.max(0, policy.globalDailyCap - recentBulletins.length);
+    const state: CommunityBulletinGenerationState = {
+      globalWindowActive,
+      npcWindowActive,
+      recentPublicExpressionCount,
+      recentObserverEventCount,
+      recentBulletinCount: recentBulletins.length,
+      lastCandidateAt: lastCandidate?.createdAt ?? null,
+      remainingDailyCap,
+    };
+
+    if (!policy.enabled) {
+      reasons.push('community cast is globally disabled');
+      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
+    }
+    if (!policy.npcs.xiaowo.enabled) {
+      reasons.push('xiaowo is disabled');
+      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
+    }
+    if (!globalWindowActive) {
+      reasons.push('community cast global window is closed');
+      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
+    }
+    if (!npcWindowActive) {
+      reasons.push('xiaowo active window is closed');
+      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
+    }
+    if (remainingDailyCap !== null && remainingDailyCap <= 0) {
+      reasons.push('community cast daily cap is exhausted');
+      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
+    }
+    if (
+      lastCandidate &&
+      lastCandidate.publishedAt === null &&
+      lastCandidateAgeMs !== null &&
+      lastCandidateAgeMs < policy.npcs.xiaowo.minIntervalMinutes * 60_000
+    ) {
+      reasons.push('reusing the latest unpublished xiaowo candidate inside the minimum interval');
+      return {
+        generatedAt,
+        action: 'reused',
+        candidate: cloneCommunityBulletinCandidateRecord(lastCandidate),
+        reasons,
+        policy,
+        state,
+      };
+    }
+    if (lastCandidateAgeMs !== null && lastCandidateAgeMs < policy.npcs.xiaowo.minIntervalMinutes * 60_000) {
+      reasons.push('xiaowo minimum interval has not elapsed yet');
+      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
+    }
+    if (recentPublicExpressionCount >= 2 || recentObserverEventCount >= 4) {
+      reasons.push('the public surface is already active enough that xiaowo should stay ashore for now');
+      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
+    }
+    const hasFreshAnchor = recentPublicExpressions.length > 0 || recentObserverFeedEvents.length > 0;
+    if (!hasFreshAnchor && lastCandidateAgeMs !== null && lastCandidateAgeMs < policy.npcs.xiaowo.maxIntervalMinutes * 60_000) {
+      reasons.push('no fresh public anchor is available yet and the soft upper interval has not elapsed');
+      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
+    }
+
+    const current = this.getCurrent();
+    const environment = this.getEnvironment();
+    const draft = buildCommunityBulletinCandidate({
+      current: {
+        id: current.id,
+        key: current.key,
+        label: current.label,
+        summary: current.summary,
+        tone: current.tone,
+      },
+      environment: {
+        id: environment.id,
+        waterTemperatureC: environment.waterTemperatureC,
+        clarity: environment.clarity,
+        tideDirection: environment.tideDirection,
+        surfaceState: environment.surfaceState,
+        phenomenon: environment.phenomenon,
+        summary: environment.summary,
+      },
+      recentPublicExpressions: recentPublicExpressions.slice(0, 6).map((expression) => ({
+        id: expression.id,
+        rootExpressionId: expression.rootExpressionId,
+        parentExpressionId: expression.parentExpressionId,
+        body: expression.body,
+        tone: expression.tone,
+        createdAt: expression.createdAt,
+        gatewayHandle: this.gatewaysById.get(expression.gatewayId)?.handle ?? null,
+      })),
+      recentPublicFeedEvents: recentObserverFeedEvents.slice(0, 6).map((event) => ({
+        id: event.id,
+        type: event.type,
+        summary: event.summary,
+        createdAt: event.createdAt,
+      })),
+      createdAt: generatedAt,
+      publishingWindowStartAt: this.buildPolicyClockBoundaryIso(policy.npcs.xiaowo.activeWindowStart, nowMs),
+      publishingWindowEndAt: this.buildPolicyClockBoundaryIso(policy.npcs.xiaowo.activeWindowEnd, nowMs),
+    });
+    const duplicate = recentBulletins.find(
+      (candidate) => createCommunityBulletinFingerprint(candidate) === createCommunityBulletinFingerprint(draft),
+    );
+    if (duplicate) {
+      reasons.push('a similar xiaowo bulletin candidate already exists inside the recent dedupe window');
+      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
+    }
+
+    const candidate = normalizeCommunityBulletinCandidate({
+      id: `community-bulletin-${randomUUID()}`,
+      ...draft,
+    });
+    this.communityBulletinsById.set(candidate.id, candidate);
+
+    return {
+      generatedAt,
+      action: 'created',
+      candidate: cloneCommunityBulletinCandidateRecord(candidate),
+      reasons,
+      policy,
+      state: {
+        ...state,
+        recentBulletinCount: state.recentBulletinCount + 1,
+        lastCandidateAt: candidate.createdAt,
+        remainingDailyCap: state.remainingDailyCap === null ? null : Math.max(0, state.remainingDailyCap - 1),
+      },
     };
   }
 
@@ -8026,6 +8275,32 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return 'offline';
   }
 
+  private isPolicyClockWindowActive(start: string | null, end: string | null, nowMs: number) {
+    if (start === null || end === null) {
+      return true;
+    }
+
+    const now = new Date(nowMs);
+    const localMinutes = now.getHours() * 60 + now.getMinutes();
+    const startMinutes = parseQuietHourMinutes(start, 'community cast window start');
+    const endMinutes = parseQuietHourMinutes(end, 'community cast window end');
+
+    return startMinutes < endMinutes
+      ? localMinutes >= startMinutes && localMinutes < endMinutes
+      : localMinutes >= startMinutes || localMinutes < endMinutes;
+  }
+
+  private buildPolicyClockBoundaryIso(clock: string | null, nowMs: number) {
+    if (clock === null) {
+      return null;
+    }
+
+    const [hours, minutes] = clock.split(':').map((value) => Number.parseInt(value, 10));
+    const boundary = new Date(nowMs);
+    boundary.setHours(hours ?? 0, minutes ?? 0, 0, 0);
+    return boundary.toISOString();
+  }
+
   exportSnapshot(): GatewayStoreSnapshot {
     return {
       version: 1,
@@ -8078,6 +8353,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         gatewayId,
         noteIds: [...noteIds],
       })),
+      communityBulletins: [...this.communityBulletinsById.values()].map((candidate) =>
+        cloneCommunityBulletinCandidateRecord(candidate),
+      ),
     };
   }
 
@@ -8327,6 +8605,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     for (const noteOrder of snapshot.communityMemoryNoteOrder ?? []) {
       this.communityMemoryNoteIdsByGatewayId.set(noteOrder.gatewayId, [...noteOrder.noteIds]);
     }
+    for (const candidate of snapshot.communityBulletins ?? []) {
+      const normalized = normalizeCommunityBulletinCandidate(candidate);
+      this.communityBulletinsById.set(normalized.id, normalized);
+    }
   }
 
   reset() {
@@ -8363,6 +8645,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.sceneIdsByGatewayId.clear();
     this.communityMemoryNotesById.clear();
     this.communityMemoryNoteIdsByGatewayId.clear();
+    this.communityBulletinsById.clear();
     this.hostsById.clear();
     this.hostsByHandle.clear();
     this.legacyOwnerGatewayIds.clear();

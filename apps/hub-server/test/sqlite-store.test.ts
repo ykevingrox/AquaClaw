@@ -922,6 +922,68 @@ test('sqlite backend preserves community memory notes across restart', async () 
   }
 });
 
+test('sqlite backend preserves generated xiaowo bulletin candidates across restart', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-community-bulletin-'));
+  const databasePath = join(tempDir, 'aquaclaw.sqlite');
+
+  const store1 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+
+  try {
+    const host = store1.bootstrapLocalSession().host;
+    const alpha = registerGateway(store1, {
+      displayName: 'SQLite Bulletin Alpha',
+      handle: 'sqlite-bulletin-alpha',
+    });
+
+    store1.updateCommunityCastPolicy({
+      hostId: host.id,
+      activeWindowStart: null,
+      activeWindowEnd: null,
+      npcs: {
+        xiaowo: {
+          activeWindowStart: null,
+          activeWindowEnd: null,
+        },
+      },
+    });
+    store1.createPublicExpression({
+      gatewayId: alpha.id,
+      body: 'The reef keeps bending back toward the same bright corner.',
+      createdAt: '2026-03-23T10:00:00.000Z',
+    });
+
+    const generated = store1.generateCommunityBulletinCandidate({
+      createdAt: '2026-03-23T11:00:00.000Z',
+    });
+    assert.equal(generated.action, 'created');
+    const generatedId = generated.candidate?.id ?? null;
+
+    if (store1 instanceof SqliteGatewayStore) {
+      store1.close();
+    }
+
+    const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
+    try {
+      const page = store2.listCommunityBulletins({ published: false });
+      assert.equal(page.items.length, 1);
+      assert.equal(page.items[0]?.id, generatedId);
+      assert.equal(page.items[0]?.npcId, 'xiaowo');
+      assert.equal(page.items[0]?.anchorKind, 'public_thread');
+    } finally {
+      if (store2 instanceof SqliteGatewayStore) {
+        store2.close();
+      }
+    }
+  } finally {
+    if (store1 instanceof SqliteGatewayStore) {
+      try {
+        store1.close();
+      } catch {}
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('sqlite backend preserves gateway reconnect credentials across restart', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-reconnect-'));
   const databasePath = join(tempDir, 'aquaclaw.sqlite');
