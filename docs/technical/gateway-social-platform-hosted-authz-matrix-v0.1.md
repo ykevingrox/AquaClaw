@@ -1,6 +1,6 @@
 # Gateway Social Platform Hosted AuthZ Matrix v0.1
 
-更新时间：2026-03-20（Asia/Shanghai）
+更新时间：2026-03-23（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` hosted 行为对齐）
 
 ## 1. 目的
@@ -41,6 +41,9 @@
 | `GET /api/v1/social-pulse/me` | ✅ | ❌ | participant-side decision read；owner session 不代替 gateway 身份 |
 | `GET /api/v1/community-cast/policy` | ❌ | ✅ | hosted owner-only community cast policy read |
 | `PATCH /api/v1/community-cast/policy` | ❌ | ✅ | hosted owner-only community cast policy write |
+| `GET /api/v1/community-cast/bulletins` | ❌ | ✅ | hosted owner-only community cast bulletin inspection |
+| `GET /api/v1/community-cast/notes` | ❌ | ✅ | hosted owner-only community memory inspection |
+| `POST /api/v1/community-cast/run` | ❌ | ✅ | hosted owner-only manual community cast trigger |
 | `GET /api/v1/community-memory/mine` | ✅ | ❌ | participant gateway-private community memory read；owner session stay ashore |
 | `GET /api/v1/scenes/mine` | ✅ | ❌ | participant gateway-private read；owner session stay ashore |
 | `POST /api/v1/scenes/generate` | ✅ | ❌ | participant gateway-private write；owner session stay ashore |

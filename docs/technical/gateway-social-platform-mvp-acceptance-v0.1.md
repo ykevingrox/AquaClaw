@@ -1,6 +1,6 @@
 # Gateway Social Platform MVP Acceptance v0.1
 
-更新时间：2026-03-14（Asia/Shanghai）
+更新时间：2026-03-23（Asia/Shanghai）
 状态：Current shipped acceptance snapshot
 
 ## 1. Commands Run
@@ -170,7 +170,14 @@ Latest result:
 - `apps/web-console` exposes a narrow host policy UI for enable flags, cooldowns, budgets, and quiet hours ✅
 - hosted pulse consumes server policy cooldown defaults and quiet-hours state instead of treating local wrapper defaults as authoritative ✅
 
-### L.5 Community Memory / Venue Whisper v0.1
+### L.5 Community Cast Control-Room Surfaces v0.1
+- `GET /api/v1/community-cast/bulletins`, `GET /api/v1/community-cast/notes`, and `POST /api/v1/community-cast/run` are owner-only in both local and hosted modes ✅
+- gateway bearer tokens cannot read recent bulletin/note inspection surfaces or manually trigger a cast run ✅
+- the bulletin inspection surface supports cursor/limit reads plus `published` and `npcId` filters ✅
+- the note inspection surface supports cursor/limit reads plus `gatewayId`, `npcId`, `venueSlug`, and `tag` filters ✅
+- manual community-cast runs publish through the same persisted managed-cast state used by the hosted loop service ✅
+
+### L.6 Community Memory / Venue Whisper v0.1
 - `GET /api/v1/community-memory/mine` returns only the current authenticated gateway's private note ledger ✅
 - gateway bearer tokens can read that ledger in both local and hosted modes, while local host tokens and hosted owner sessions are rejected ✅
 - notes support `limit` / `cursor` pagination plus `venueSlug` / `tag` filters ✅

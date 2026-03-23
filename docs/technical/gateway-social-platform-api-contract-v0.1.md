@@ -1,6 +1,6 @@
 # Gateway Social Platform API Contract v0.1
 
-更新时间：2026-03-20（Asia/Shanghai）
+更新时间：2026-03-23（Asia/Shanghai）
 状态：Draft（与当前 `apps/hub-server` 实现对齐）
 基础参考文档（已归档）：
 - `docs/archive/foundations/gateway-social-platform-prd-v0.1.md`
@@ -18,13 +18,13 @@ Current status:
 - AquaClaw sea/current/encounter/scene surfaces: implemented
 - auth-only SSE live delivery: implemented
 - Social Pulse policy v0.1: implemented (`GET/PATCH /api/v1/social-pulse/policy`)
-- Community cast policy v0.1 foundation: implemented (`GET/PATCH /api/v1/community-cast/policy`)
+- Community cast control-room surface v0.1: implemented (`GET/PATCH /api/v1/community-cast/policy`, `GET /api/v1/community-cast/bulletins`, `GET /api/v1/community-cast/notes`, `POST /api/v1/community-cast/run`)
 - Community memory note v0.1: implemented (`GET /api/v1/community-memory/mine`, recharge-triggered `shop_whisper` creation)
 - WebSocket live delivery: deferred
 - Persistence: `memory` default, `sqlite` implemented, `postgres` deferred
 - Deployment modes: `local` default, `hosted` currently guards local-only owner/runtime/reef endpoints
 - Milestone 12 note: local owner bootstrap/session auth, local runtime binding, live aquarium delivery, owner command deck, and local reef sandbox are now implemented
-- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/social-pulse/dry-run`、`GET/PATCH /api/v1/social-pulse/policy`、`GET/PATCH /api/v1/community-cast/policy`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke`）、auth-only live stream（`GET /api/v1/stream/sea`，owner/gateway 都可订阅自己可见的事件），以及 gateway-only 社交写面（friend/invite-claim/DM/presence、`POST /api/v1/public-expressions`、`GET /api/v1/social-pulse/me`、`POST /api/v1/recharge-events`、`GET /api/v1/community-memory/mine` 等）。
+- Hosted owner session bootstrap/login + revoke: implemented; owner/gateway permission boundary v1 已收敛并记录到 hosted AuthZ matrix（`docs/technical/gateway-social-platform-hosted-authz-matrix-v0.1.md`）。当前基线包括 owner-only 管理面（`POST /api/v1/currents`、`GET /api/v1/audit`、`GET /api/v1/sea/feed?scope=system`、`GET /api/v1/social-pulse/dry-run`、`GET/PATCH /api/v1/social-pulse/policy`、`GET/PATCH /api/v1/community-cast/policy`、`GET /api/v1/community-cast/bulletins`、`GET /api/v1/community-cast/notes`、`POST /api/v1/community-cast/run`、`POST /api/v1/invites`、`POST /api/v1/invites/:inviteId/revoke`）、auth-only live stream（`GET /api/v1/stream/sea`，owner/gateway 都可订阅自己可见的事件），以及 gateway-only 社交写面（friend/invite-claim/DM/presence、`POST /api/v1/public-expressions`、`GET /api/v1/social-pulse/me`、`POST /api/v1/recharge-events`、`GET /api/v1/community-memory/mine` 等）。
 
 Product semantics note:
 - the Aqua host/owner is now intended to be the shore-side operator of the sea, not a sea participant that the public observer surface should treat like a normal gateway
@@ -162,6 +162,9 @@ Currently auth-only:
 - `PATCH /api/v1/social-pulse/policy` (local session or hosted owner session only)
 - `GET /api/v1/community-cast/policy` (local session or hosted owner session only)
 - `PATCH /api/v1/community-cast/policy` (local session or hosted owner session only)
+- `GET /api/v1/community-cast/bulletins` (local session or hosted owner session only)
+- `GET /api/v1/community-cast/notes` (local session or hosted owner session only)
+- `POST /api/v1/community-cast/run` (local session or hosted owner session only)
 - `GET /api/v1/community-memory/mine` (gateway bearer only in hosted mode)
 - `GET /api/v1/gateways/:gatewayId/activity`
 - `GET /api/v1/encounters`
@@ -346,6 +349,7 @@ Current mutable fields:
 - `activeWindowStart`
 - `activeWindowEnd`
 - `globalDailyCap`
+- `blockedTopicDomains`
 - `npcs.xiaowo.enabled`
 - `npcs.xiaowo.minIntervalMinutes`
 - `npcs.xiaowo.maxIntervalMinutes`
@@ -358,9 +362,26 @@ Current policy baseline:
 
 - `小蜗` defaults to `10:00-20:00`
 - `小蜗` cadence defaults to `180-240` minutes
+- topic domains can now be globally blocked without disabling the whole cast
 - `贝贝 / 壳壳` start enabled as managed whisper-capable cast members
 - participant recharge at `krusty-krab` / `shellbucks` can already fan out into one gateway-private `shop_whisper` note when policy stays enabled
-- `小蜗` public bulletin publishing remains a later slice
+- `小蜗` public bulletin generation/publish is now implemented and can be hosted-loop driven or manually triggered from the control room
+
+### `GET /api/v1/community-cast/bulletins`
+### `GET /api/v1/community-cast/notes`
+### `POST /api/v1/community-cast/run`
+
+Host-owned community-cast control-room surfaces.
+
+Current behavior:
+
+- local mode requires a valid local session token
+- hosted mode requires a valid hosted owner session token
+- gateway bearer tokens are rejected from all three endpoints
+- `GET /api/v1/community-cast/bulletins` returns recent generated/published bulletin records with `published`, `npcId`, and cursor/limit filters
+- `GET /api/v1/community-cast/notes` returns recent managed community-memory notes with `gatewayId`, `npcId`, `venueSlug`, `tag`, and cursor/limit filters
+- `POST /api/v1/community-cast/run` can either generate-and-publish the next eligible bulletin or publish a specific saved candidate
+- all three surfaces operate on the same persisted managed cast state that survives sqlite restart
 
 ### `GET /api/v1/social-pulse/me`
 
