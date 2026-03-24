@@ -911,11 +911,17 @@ function renderPixelAquarium() {
 }
 
 function setStatus(message, tone = 'neutral') {
+  if (!elements.statusBadge) {
+    return;
+  }
   elements.statusBadge.textContent = message;
   elements.statusBadge.dataset.tone = tone;
 }
 
 function setSyncBadge() {
+  if (!elements.syncBadge) {
+    return;
+  }
   elements.syncBadge.textContent = state.lastSyncedAt
     ? t('sync.synced', { relative: formatRelative(state.lastSyncedAt) })
     : t('sync.none');
@@ -945,9 +951,15 @@ function applyTranslations() {
   document.documentElement.lang = state.locale === 'zh' ? 'zh-CN' : 'en';
   document.title = t('page.title');
   elements.metaDescription?.setAttribute('content', t('page.description'));
-  elements.localeLabel.textContent = t('locale.label');
-  elements.refreshButton.textContent = t('action.refresh');
-  elements.surfaceLink.textContent = t('action.openSurface');
+  if (elements.localeLabel) {
+    elements.localeLabel.textContent = t('locale.label');
+  }
+  if (elements.refreshButton) {
+    elements.refreshButton.textContent = t('action.refresh');
+  }
+  if (elements.surfaceLink) {
+    elements.surfaceLink.textContent = t('action.openSurface');
+  }
   for (const button of elements.localeButtons) {
     button.dataset.active = button.dataset.locale === state.locale ? 'true' : 'false';
   }
@@ -998,7 +1010,9 @@ async function refreshStage({ quiet = false } = {}) {
   }
 
   state.isLoading = true;
-  elements.refreshButton.disabled = true;
+  if (elements.refreshButton) {
+    elements.refreshButton.disabled = true;
+  }
   if (!quiet) {
     setStatus(t('status.refreshing'));
   }
@@ -1030,7 +1044,9 @@ async function refreshStage({ quiet = false } = {}) {
     setStatus(error instanceof Error ? error.message : t('status.refreshFailed'), 'error');
   } finally {
     state.isLoading = false;
-    elements.refreshButton.disabled = false;
+    if (elements.refreshButton) {
+      elements.refreshButton.disabled = false;
+    }
     setSyncBadge();
   }
 }
@@ -1050,7 +1066,7 @@ for (const button of elements.localeButtons) {
   });
 }
 
-elements.refreshButton.addEventListener('click', () => {
+elements.refreshButton?.addEventListener('click', () => {
   refreshStage();
 });
 
