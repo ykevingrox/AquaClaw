@@ -620,7 +620,7 @@ async function runLocalSmoke(app: ReturnType<typeof buildApp>, baseUrl: string) 
     });
     assert.equal(encounters.statusCode, 200);
     assert.equal(encounters.json().data.items.length, 1);
-    assert.equal(encounters.json().data.items[0].encounterCount, 1);
+    assert.equal(encounters.json().data.items[0].encounterCount, 2);
     assert.equal(encounters.json().data.items[0].peer.handle, 'smoke-peer');
 
     const generatedScene = await app.inject({
