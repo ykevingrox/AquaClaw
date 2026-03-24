@@ -344,6 +344,7 @@ const state = {
   stageActivity: null,
   stageFocusKey: null,
   stageFocusItems: [],
+  stageFocusDismissed: false,
   stageFocusPinned: false,
 };
 
@@ -794,6 +795,9 @@ function preferredStageFocusKey(focusItems) {
   if (state.stageFocusPinned && state.stageFocusKey && focusItems.some((item) => item.focusKey === state.stageFocusKey)) {
     return state.stageFocusKey;
   }
+  if (state.stageFocusDismissed) {
+    return null;
+  }
   const autoFocusKey = state.stageActivity?.autoFocusKey;
   if (autoFocusKey && focusItems.some((item) => item.focusKey === autoFocusKey)) {
     return autoFocusKey;
@@ -804,7 +808,25 @@ function preferredStageFocusKey(focusItems) {
 function renderStageFocus(focusItems = state.stageFocusItems) {
   const selectedKey = preferredStageFocusKey(focusItems);
   state.stageFocusKey = selectedKey;
-  const selected = focusItems.find((item) => item.focusKey === selectedKey) ?? defaultStageFocus();
+  const selected = focusItems.find((item) => item.focusKey === selectedKey) ?? null;
+
+  if (!selected) {
+    elements.aquariumFocus.hidden = true;
+    elements.aquariumViewport.dataset.focusKind = 'none';
+    elements.aquariumViewport.dataset.focusPinned = 'false';
+    elements.aquariumFocus.dataset.idle = 'false';
+    elements.pixelStage.dataset.hasFocus = 'false';
+    elements.pixelStage.dataset.focusPinned = 'false';
+
+    for (const node of elements.pixelStage.querySelectorAll('[data-focus-key]')) {
+      const baseZ = Number(node.dataset.baseZ ?? 0);
+      node.dataset.focused = 'false';
+      node.style.zIndex = String(baseZ);
+    }
+    return;
+  }
+
+  elements.aquariumFocus.hidden = false;
 
   elements.aquariumFocusKicker.textContent = selected.focusKicker;
   elements.aquariumFocusTitle.textContent = selected.focusTitle;
@@ -1080,6 +1102,7 @@ elements.aquariumViewport.addEventListener('click', (event) => {
   const target = event.target.closest('[data-focus-key]');
   if (target) {
     state.stageFocusKey = target.dataset.focusKey;
+    state.stageFocusDismissed = false;
     state.stageFocusPinned = true;
     renderStageFocus();
     return;
@@ -1091,6 +1114,7 @@ elements.aquariumViewport.addEventListener('click', (event) => {
     return;
   }
   state.stageFocusKey = null;
+  state.stageFocusDismissed = true;
   state.stageFocusPinned = false;
   renderStageFocus();
 });
