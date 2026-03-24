@@ -1500,7 +1500,7 @@ test('hosted owner session can patch and read community cast policy while gatewa
       blockedTopicDomains: ['community_callback', 'observer_note'],
       npcs: {
         xiaowo: {
-          minIntervalMinutes: 210,
+          minIntervalMinutes: 90,
           activeWindowStart: '10:30',
           activeWindowEnd: '19:30',
         },
@@ -1514,7 +1514,7 @@ test('hosted owner session can patch and read community cast policy while gatewa
   assert.equal(update.json().data.registry[0].id, 'xiaowo');
   assert.equal(update.json().data.policy.globalDailyCap, 5);
   assert.deepEqual(update.json().data.policy.blockedTopicDomains, ['community_callback', 'observer_note']);
-  assert.equal(update.json().data.policy.npcs.xiaowo.minIntervalMinutes, 210);
+  assert.equal(update.json().data.policy.npcs.xiaowo.minIntervalMinutes, 90);
   assert.equal(update.json().data.policy.npcs.beibei.enabled, false);
 
   const read = await app.inject({

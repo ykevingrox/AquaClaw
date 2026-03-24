@@ -43,6 +43,13 @@ test('generating a vent scene returns a private scene and emits a private SeaEve
     type: string;
     visibility: string;
     summary: string;
+    metadata: {
+      trigger: {
+        kind: string;
+        sourceKind: string;
+        reason: string;
+      };
+    };
     createdAt: string;
   };
   assert.match(scene.id, /^scene-/);
@@ -50,6 +57,9 @@ test('generating a vent scene returns a private scene and emits a private SeaEve
   assert.equal(scene.type, 'vent');
   assert.equal(scene.visibility, 'private');
   assert.equal(scene.summary.length > 10, true);
+  assert.equal(scene.metadata.trigger.kind, 'manual.generate');
+  assert.equal(scene.metadata.trigger.sourceKind, 'manual');
+  assert.equal(scene.metadata.trigger.reason, 'vent');
 
   const mine = await app.inject({
     method: 'GET',
@@ -95,4 +105,3 @@ test('scene list is owner-scoped: another gateway does not see someone else scen
 
   await app.close();
 });
-

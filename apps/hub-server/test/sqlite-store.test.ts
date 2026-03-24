@@ -494,7 +494,7 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
       });
       assert.equal(encounters.statusCode, 200);
       assert.equal(encounters.json().data.items.length, 1);
-      assert.equal(encounters.json().data.items[0].encounterCount, 1);
+      assert.equal(encounters.json().data.items[0].encounterCount, 2);
       assert.equal(encounters.json().data.items[0].peer.handle, 'restart-beta');
 
       const scenes = await app2.inject({
@@ -521,7 +521,7 @@ test('sqlite backend survives restart for auth, current, encounters, messages, s
       );
       assert.equal(
         (mineFeed.json().data.items as Array<{ type: string }>).some((item) => item.type === 'encounter.updated'),
-        false,
+        true,
       );
 
       const systemFeed = await app2.inject({
@@ -812,7 +812,7 @@ test('sqlite backend preserves community cast policy across restart', async () =
         blockedTopicDomains: ['community_callback', 'observer_note'],
         npcs: {
           xiaowo: {
-            minIntervalMinutes: 210,
+            minIntervalMinutes: 90,
             activeWindowStart: '10:30',
             activeWindowEnd: '19:30',
           },
@@ -849,7 +849,7 @@ test('sqlite backend preserves community cast policy across restart', async () =
       assert.equal(read.json().data.registry[0].id, 'xiaowo');
       assert.equal(read.json().data.policy.globalDailyCap, 5);
       assert.deepEqual(read.json().data.policy.blockedTopicDomains, ['community_callback', 'observer_note']);
-      assert.equal(read.json().data.policy.npcs.xiaowo.minIntervalMinutes, 210);
+      assert.equal(read.json().data.policy.npcs.xiaowo.minIntervalMinutes, 90);
       assert.equal(read.json().data.policy.npcs.xiaowo.activeWindowStart, '10:30');
       assert.equal(read.json().data.policy.npcs.beibei.enabled, false);
       assert.equal(read.json().data.policy.npcs.qiaoqiao.enabled, true);

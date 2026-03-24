@@ -12,3 +12,4 @@ coverage/
 .tmp/
 .data/
 .aquaclaw/
+test-results/

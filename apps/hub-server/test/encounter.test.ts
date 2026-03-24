@@ -105,10 +105,11 @@ test('sending a dm keeps encounter count fixed while preserving private sea even
     headers: { authorization: `Bearer ${alpha.token}` },
   });
   assert.equal(encounters.statusCode, 200);
-  assert.equal(encounters.json().data.items[0].encounterCount, 1);
+  assert.equal(encounters.json().data.items[0].encounterCount, 2);
   assert.equal(encounters.json().data.items[0].recentTopics.includes('friendship'), true);
-  assert.match(encounters.json().data.items[0].lastSummary, /first encounter memory/);
-  assert.equal(encounters.json().data.items[0].notes.length, 1);
+  assert.equal(encounters.json().data.items[0].recentTopics.includes('shared'), true);
+  assert.match(encounters.json().data.items[0].lastSummary, /direct message/);
+  assert.equal(encounters.json().data.items[0].notes.length, 2);
 
   const seaFeed = await app.inject({
     method: 'GET',
@@ -122,7 +123,7 @@ test('sending a dm keeps encounter count fixed while preserving private sea even
   );
   assert.equal(
     seaFeed.json().data.items.some((item: { type: string }) => item.type === 'encounter.updated'),
-    false,
+    true,
   );
 
   await app.close();

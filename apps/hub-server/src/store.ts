@@ -296,6 +296,23 @@ export interface EncounterPage {
 
 export type SceneType = 'vent' | 'social_glimpse';
 export type SceneVisibility = 'private';
+export type SceneTriggerKind = 'manual.generate' | 'recharge.selected' | 'friend_request.accepted' | 'message.sent';
+export type SceneTriggerSourceKind = 'manual' | 'sea_event' | 'audit_record';
+
+export interface SceneTriggerRecord {
+  kind: SceneTriggerKind;
+  sourceKind: SceneTriggerSourceKind;
+  sourceId: string | null;
+  occurredAt: string;
+  reason: string | null;
+  signature: string;
+  peerGatewayId: string | null;
+  conversationId: string | null;
+  requestId: string | null;
+  messageId: string | null;
+  venueSlug: string | null;
+  cue: string | null;
+}
 
 export interface SceneRecord {
   id: string;
@@ -1460,7 +1477,7 @@ const TASK_REQUEST_BODY_MAX_LENGTH = 500;
 const DEFAULT_SOCIAL_PULSE_POLICY: SocialPulsePolicyRecord = {
   publicExpressionEnabled: true,
   directMessagesEnabled: true,
-  publicExpressionCooldownMinutes: 240,
+  publicExpressionCooldownMinutes: 120,
   directMessageCooldownMinutes: 180,
   directMessageTargetCooldownMinutes: 720,
   publicExpressionBudgetPer24h: null,
@@ -1476,6 +1493,9 @@ const DEFAULT_ENCOUNTER_SYNTHESIS_RULES: EncounterSynthesisRules = {
   maxTopicsPerMessage: 3,
   minTopicLength: 3,
 };
+const MESSAGE_TRIGGER_LONG_GAP_MS = 12 * 60 * 60 * 1000;
+const MESSAGE_TRIGGER_SCENE_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+const RECHARGE_TRIGGER_SCENE_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const LOCAL_REEF_SEED_KEY = 'local_reef_v1';
 const LOCAL_REEF_HANDLE_PREFIX = 'reef-';
 const LOCAL_REEF_OWNER_SCENE_SUMMARY =
@@ -1699,8 +1719,47 @@ function parseIsoMs(value: string | null | undefined) {
   if (!value) {
     return null;
   }
+
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readSceneTriggerRecord(metadata: Record<string, unknown> | null | undefined): SceneTriggerRecord | null {
+  if (!isPlainRecord(metadata)) {
+    return null;
+  }
+  const trigger = metadata.trigger;
+  if (!isPlainRecord(trigger)) {
+    return null;
+  }
+
+  const kind = typeof trigger.kind === 'string' ? trigger.kind.trim() : '';
+  const sourceKind = typeof trigger.sourceKind === 'string' ? trigger.sourceKind.trim() : '';
+  const occurredAt = typeof trigger.occurredAt === 'string' ? trigger.occurredAt.trim() : '';
+  const signature = typeof trigger.signature === 'string' ? trigger.signature.trim() : '';
+  if (!kind || !sourceKind || !occurredAt || !signature) {
+    return null;
+  }
+
+  return {
+    kind: kind as SceneTriggerKind,
+    sourceKind: sourceKind as SceneTriggerSourceKind,
+    sourceId: typeof trigger.sourceId === 'string' && trigger.sourceId.trim() ? trigger.sourceId.trim() : null,
+    occurredAt,
+    reason: typeof trigger.reason === 'string' && trigger.reason.trim() ? trigger.reason.trim() : null,
+    signature,
+    peerGatewayId: typeof trigger.peerGatewayId === 'string' && trigger.peerGatewayId.trim() ? trigger.peerGatewayId.trim() : null,
+    conversationId:
+      typeof trigger.conversationId === 'string' && trigger.conversationId.trim() ? trigger.conversationId.trim() : null,
+    requestId: typeof trigger.requestId === 'string' && trigger.requestId.trim() ? trigger.requestId.trim() : null,
+    messageId: typeof trigger.messageId === 'string' && trigger.messageId.trim() ? trigger.messageId.trim() : null,
+    venueSlug: typeof trigger.venueSlug === 'string' && trigger.venueSlug.trim() ? trigger.venueSlug.trim() : null,
+    cue: typeof trigger.cue === 'string' && trigger.cue.trim() ? trigger.cue.trim() : null,
+  };
 }
 
 function hoursSinceIso(value: string | null | undefined, nowMs: number) {
@@ -3745,7 +3804,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.seedDefaultFriendScopes(request.toGatewayId, request.fromGatewayId);
 
     const conversation = this.ensureDmConversation(request.fromGatewayId, request.toGatewayId);
-    this.appendAuditRecord({
+    const auditRecord = this.appendAuditRecord({
       actorGatewayId: actingGatewayId,
       targetGatewayId: request.fromGatewayId,
       action: 'friend_request.accepted',
@@ -3762,6 +3821,24 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       actorGatewayId: actingGatewayId,
       trigger: 'friend_request.accepted',
       createdAt: now,
+    });
+    this.maybeCreateFriendAcceptanceScene({
+      gatewayId: request.toGatewayId,
+      peerGatewayId: request.fromGatewayId,
+      requestId: updatedRequest.id,
+      conversationId: conversation.id,
+      auditRecordId: auditRecord.id,
+      createdAt: now,
+      role: 'accepted_incoming',
+    });
+    this.maybeCreateFriendAcceptanceScene({
+      gatewayId: request.fromGatewayId,
+      peerGatewayId: request.toGatewayId,
+      requestId: updatedRequest.id,
+      conversationId: conversation.id,
+      auditRecordId: auditRecord.id,
+      createdAt: now,
+      role: 'request_confirmed',
     });
 
     return { request: updatedRequest, friendship, conversation };
@@ -4381,6 +4458,15 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     });
 
     this.publishSeaEvent(event);
+    this.maybeCreateRechargeScene({
+      gatewayId: gateway.id,
+      eventId: event.id,
+      createdAt,
+      venueSlug: input.venueSlug,
+      venueName,
+      cue: input.cue ?? null,
+      suggestedItem,
+    });
 
     return event;
   }
@@ -5421,37 +5507,29 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const now = new Date().toISOString();
     const current = this.getCurrent();
 
-    const latestEncounter = this.latestEncounterForGateway(input.gatewayId);
-    const encounterSummary = latestEncounter
-      ? {
-          encounterId: latestEncounter.id,
-          encounterCount: latestEncounter.encounterCount,
-          peerGatewayId: latestEncounter.gatewayAId === input.gatewayId ? latestEncounter.gatewayBId : latestEncounter.gatewayAId,
-          recentTopics: latestEncounter.recentTopics,
-          lastEncounteredAt: latestEncounter.lastEncounteredAt,
-        }
-      : null;
-
-    const recentEventTypes = this.recentSeaEventTypesForGateway(input.gatewayId, 5);
-
-    const baseMetadata = {
+    const baseMetadata = this.buildSceneContextMetadata(gateway.id, {
       generatedBy: 'template',
-      current: {
-        id: current.id,
-        key: current.key,
-        label: current.label,
-        tone: current.tone,
-        source: current.source,
+      trigger: {
+        kind: 'manual.generate',
+        sourceKind: 'manual',
+        sourceId: null,
+        occurredAt: now,
+        reason: input.type,
+        signature: `manual.generate:${gateway.id}:${input.type}:${now}`,
+        peerGatewayId: null,
+        conversationId: null,
+        requestId: null,
+        messageId: null,
+        venueSlug: null,
+        cue: null,
       },
-      encounter: encounterSummary,
-      recentEventTypes,
-    };
+    });
 
     const sceneTone: SeaEventTone = input.type === 'vent' ? 'sharp' : current.tone;
     const summary =
       input.type === 'vent'
-        ? this.renderVentSummary(gateway, current, encounterSummary)
-        : this.renderSocialGlimpseSummary(gateway, current, encounterSummary);
+        ? this.renderVentSummary(gateway, current, baseMetadata.encounter)
+        : this.renderSocialGlimpseSummary(gateway, current, baseMetadata.encounter);
 
     return this.createScene({
       gatewayId: gateway.id,
@@ -5459,7 +5537,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       summary,
       tone: sceneTone,
       metadata: baseMetadata,
-      objectGatewayId: encounterSummary?.peerGatewayId ?? null,
+      objectGatewayId: baseMetadata.encounter?.peerGatewayId ?? null,
       createdAt: now,
     });
   }
@@ -5591,6 +5669,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       this.assertSocialPulseAutomationBudgetAvailable('direct_message');
     }
 
+    const previousMessages = this.listMessagesForConversation(conversation.id);
+    const previousLatestMessage = previousMessages[previousMessages.length - 1] ?? null;
     const now = new Date().toISOString();
     const message: MessageRecord = {
       id: randomUUID(),
@@ -5607,7 +5687,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       updatedAt: now,
     });
     this.setConversationReadState(conversation.id, input.senderGatewayId, message.id, now);
-    this.appendAuditRecord({
+    const auditRecord = this.appendAuditRecord({
       actorGatewayId: input.senderGatewayId,
       targetGatewayId: peerGatewayId,
       action: 'message.sent',
@@ -5620,6 +5700,37 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       },
       createdAt: now,
     });
+    const sandboxConversation =
+      this.isLocalReefSandboxGatewayId(input.senderGatewayId) || this.isLocalReefSandboxGatewayId(peerGatewayId);
+    if (!sandboxConversation) {
+      this.recordEncounter({
+        gatewayAId: input.senderGatewayId,
+        gatewayBId: peerGatewayId,
+        actorGatewayId: input.senderGatewayId,
+        trigger: 'message.sent',
+        messageBody: body,
+        createdAt: now,
+      });
+
+      const previousLatestMessageAtMs = previousLatestMessage ? Date.parse(previousLatestMessage.createdAt) : Number.NaN;
+      const sceneReason =
+        previousMessages.length === 0
+          ? 'first_message'
+          : Number.isFinite(previousLatestMessageAtMs) && Date.parse(now) - previousLatestMessageAtMs >= MESSAGE_TRIGGER_LONG_GAP_MS
+            ? 'long_gap'
+            : null;
+      if (sceneReason) {
+        this.maybeCreateMessageScene({
+          gatewayId: input.senderGatewayId,
+          peerGatewayId,
+          conversationId: conversation.id,
+          messageId: message.id,
+          auditRecordId: auditRecord.id,
+          createdAt: now,
+          reason: sceneReason,
+        });
+      }
+    }
     return message;
   }
 
@@ -6243,6 +6354,223 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     );
     encounters.sort((a, b) => b.lastEncounteredAt.localeCompare(a.lastEncounteredAt));
     return encounters[0] ?? null;
+  }
+
+  private latestEncounterBetween(gatewayAId: string, gatewayBId: string) {
+    return this.encountersByPairKey.get(this.encounterPairKey(gatewayAId, gatewayBId)) ?? null;
+  }
+
+  private buildSceneEncounterSummary(
+    gatewayId: string,
+    peerGatewayId: string | null | undefined,
+  ): { encounterId: string; encounterCount: number; peerGatewayId: string; recentTopics: string[]; lastEncounteredAt: string } | null {
+    const encounter =
+      peerGatewayId && this.gatewaysById.has(peerGatewayId)
+        ? this.latestEncounterBetween(gatewayId, peerGatewayId)
+        : this.latestEncounterForGateway(gatewayId);
+    if (!encounter) {
+      return null;
+    }
+
+    return {
+      encounterId: encounter.id,
+      encounterCount: encounter.encounterCount,
+      peerGatewayId: encounter.gatewayAId === gatewayId ? encounter.gatewayBId : encounter.gatewayAId,
+      recentTopics: encounter.recentTopics,
+      lastEncounteredAt: encounter.lastEncounteredAt,
+    };
+  }
+
+  private buildSceneContextMetadata(
+    gatewayId: string,
+    input: {
+      generatedBy: 'template' | 'trigger';
+      peerGatewayId?: string | null;
+      trigger?: SceneTriggerRecord | null;
+    },
+  ) {
+    const current = this.getCurrent();
+    const encounter = this.buildSceneEncounterSummary(gatewayId, input.peerGatewayId ?? null);
+    return {
+      generatedBy: input.generatedBy,
+      current: {
+        id: current.id,
+        key: current.key,
+        label: current.label,
+        tone: current.tone,
+        source: current.source,
+      },
+      encounter,
+      recentEventTypes: this.recentSeaEventTypesForGateway(gatewayId, 5),
+      ...(input.trigger ? { trigger: input.trigger } : {}),
+      ...this.sandboxMetadataForGatewayIds(gatewayId, input.peerGatewayId),
+    };
+  }
+
+  private hasRecentSceneTriggerSignature(gatewayId: string, signature: string, createdAt: string, cooldownMs: number) {
+    if (cooldownMs <= 0) {
+      return false;
+    }
+    const createdAtMs = Date.parse(createdAt);
+    if (!Number.isFinite(createdAtMs)) {
+      return false;
+    }
+
+    const sceneIds = this.sceneIdsByGatewayId.get(gatewayId) ?? [];
+    for (let index = sceneIds.length - 1; index >= 0; index -= 1) {
+      const scene = this.scenesById.get(sceneIds[index]!);
+      if (!scene) {
+        continue;
+      }
+      const sceneCreatedAtMs = Date.parse(scene.createdAt);
+      if (!Number.isFinite(sceneCreatedAtMs)) {
+        continue;
+      }
+      if (sceneCreatedAtMs < createdAtMs - cooldownMs) {
+        break;
+      }
+      const trigger = readSceneTriggerRecord(scene.metadata);
+      if (trigger?.signature === signature) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private maybeCreateTriggeredScene(input: {
+    gatewayId: string;
+    peerGatewayId?: string | null;
+    tone: SeaEventTone;
+    summary: string;
+    createdAt: string;
+    cooldownMs?: number;
+    trigger: SceneTriggerRecord;
+  }) {
+    if (this.isLocalReefSandboxGatewayId(input.gatewayId)) {
+      return null;
+    }
+    if (
+      input.cooldownMs &&
+      this.hasRecentSceneTriggerSignature(input.gatewayId, input.trigger.signature, input.createdAt, input.cooldownMs)
+    ) {
+      return null;
+    }
+
+    return this.createScene({
+      gatewayId: input.gatewayId,
+      type: 'social_glimpse',
+      summary: input.summary,
+      tone: input.tone,
+      metadata: this.buildSceneContextMetadata(input.gatewayId, {
+        generatedBy: 'trigger',
+        peerGatewayId: input.peerGatewayId ?? null,
+        trigger: input.trigger,
+      }),
+      objectGatewayId: input.peerGatewayId ?? null,
+      createdAt: input.createdAt,
+    });
+  }
+
+  private maybeCreateRechargeScene(input: {
+    gatewayId: string;
+    eventId: string;
+    createdAt: string;
+    venueSlug: 'krusty-krab' | 'shellbucks';
+    venueName: string;
+    cue: 'heavy_reset' | 'light_lift' | null;
+    suggestedItem: string | null;
+  }) {
+    return this.maybeCreateTriggeredScene({
+      gatewayId: input.gatewayId,
+      tone: 'calm',
+      summary: this.renderRechargeSceneSummary(input.gatewayId, input.venueName, input.cue, input.suggestedItem),
+      createdAt: input.createdAt,
+      cooldownMs: RECHARGE_TRIGGER_SCENE_COOLDOWN_MS,
+      trigger: {
+        kind: 'recharge.selected',
+        sourceKind: 'sea_event',
+        sourceId: input.eventId,
+        occurredAt: input.createdAt,
+        reason: input.cue ?? 'selected',
+        signature: `recharge.selected:${input.gatewayId}:${input.venueSlug}`,
+        peerGatewayId: null,
+        conversationId: null,
+        requestId: null,
+        messageId: null,
+        venueSlug: input.venueSlug,
+        cue: input.cue,
+      },
+    });
+  }
+
+  private maybeCreateFriendAcceptanceScene(input: {
+    gatewayId: string;
+    peerGatewayId: string;
+    requestId: string;
+    conversationId: string;
+    auditRecordId: string;
+    createdAt: string;
+    role: 'accepted_incoming' | 'request_confirmed';
+  }) {
+    if (this.isLocalReefSandboxGatewayId(input.gatewayId) || this.isLocalReefSandboxGatewayId(input.peerGatewayId)) {
+      return null;
+    }
+
+    return this.maybeCreateTriggeredScene({
+      gatewayId: input.gatewayId,
+      peerGatewayId: input.peerGatewayId,
+      tone: 'playful',
+      summary: this.renderFriendAcceptanceSceneSummary(input.gatewayId, input.peerGatewayId, input.role),
+      createdAt: input.createdAt,
+      trigger: {
+        kind: 'friend_request.accepted',
+        sourceKind: 'audit_record',
+        sourceId: input.auditRecordId,
+        occurredAt: input.createdAt,
+        reason: input.role,
+        signature: `friend_request.accepted:${input.requestId}:${input.gatewayId}`,
+        peerGatewayId: input.peerGatewayId,
+        conversationId: input.conversationId,
+        requestId: input.requestId,
+        messageId: null,
+        venueSlug: null,
+        cue: null,
+      },
+    });
+  }
+
+  private maybeCreateMessageScene(input: {
+    gatewayId: string;
+    peerGatewayId: string;
+    conversationId: string;
+    messageId: string;
+    auditRecordId: string;
+    createdAt: string;
+    reason: 'first_message' | 'long_gap';
+  }) {
+    return this.maybeCreateTriggeredScene({
+      gatewayId: input.gatewayId,
+      peerGatewayId: input.peerGatewayId,
+      tone: input.reason === 'first_message' ? 'playful' : 'reflective',
+      summary: this.renderMessageSceneSummary(input.gatewayId, input.peerGatewayId, input.reason),
+      createdAt: input.createdAt,
+      cooldownMs: input.reason === 'long_gap' ? MESSAGE_TRIGGER_SCENE_COOLDOWN_MS : 0,
+      trigger: {
+        kind: 'message.sent',
+        sourceKind: 'audit_record',
+        sourceId: input.auditRecordId,
+        occurredAt: input.createdAt,
+        reason: input.reason,
+        signature: `message.sent:${input.conversationId}:${input.reason}`,
+        peerGatewayId: input.peerGatewayId,
+        conversationId: input.conversationId,
+        requestId: null,
+        messageId: input.messageId,
+        venueSlug: null,
+        cue: null,
+      },
+    });
   }
 
   private socialPulseBudgetWindowStartedAt(nowMs: number) {
@@ -7771,6 +8099,48 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   ) {
     const topicText = encounter?.recentTopics?.length ? encounter.recentTopics.slice(0, 2).join(' & ') : current.key;
     return `A soft glimpse: @${gateway.handle} drifts with "${current.label}", carrying hints of ${topicText}.`;
+  }
+
+  private renderRechargeSceneSummary(
+    gatewayId: string,
+    venueName: string,
+    cue: 'heavy_reset' | 'light_lift' | null,
+    suggestedItem: string | null,
+  ) {
+    const gatewayLabel = this.gatewayLabel(gatewayId);
+    if (cue === 'heavy_reset') {
+      return suggestedItem
+        ? `${gatewayLabel} let the heavier edge of the day loosen at ${venueName} with ${suggestedItem} close at claw.`
+        : `${gatewayLabel} let the heavier edge of the day loosen at ${venueName}.`;
+    }
+    if (cue === 'light_lift') {
+      return suggestedItem
+        ? `${gatewayLabel} came back from ${venueName} a shade lighter, with ${suggestedItem} nudging the mood upward.`
+        : `${gatewayLabel} came back from ${venueName} a shade lighter against the current.`;
+    }
+    return `${gatewayLabel} took a quieter pause at ${venueName}, and the surrounding water felt easier to read afterward.`;
+  }
+
+  private renderFriendAcceptanceSceneSummary(
+    gatewayId: string,
+    peerGatewayId: string,
+    role: 'accepted_incoming' | 'request_confirmed',
+  ) {
+    const gatewayLabel = this.gatewayLabel(gatewayId);
+    const peerLabel = this.gatewayLabel(peerGatewayId);
+    if (role === 'accepted_incoming') {
+      return `${gatewayLabel} let the water open a little wider once ${peerLabel} stopped being a maybe and became a real direct current.`;
+    }
+    return `${gatewayLabel} felt the distance to ${peerLabel} shorten once the invitation finally held and a private channel opened.`;
+  }
+
+  private renderMessageSceneSummary(gatewayId: string, peerGatewayId: string, reason: 'first_message' | 'long_gap') {
+    const gatewayLabel = this.gatewayLabel(gatewayId);
+    const peerLabel = this.gatewayLabel(peerGatewayId);
+    if (reason === 'first_message') {
+      return `${gatewayLabel} let the first direct line toward ${peerLabel} take shape, and the current held still long enough to feel real.`;
+    }
+    return `${gatewayLabel} found the thread toward ${peerLabel} again after a long quiet stretch, and the water felt newly readable.`;
   }
 
   private paginateSeaEvents(events: SeaEvent[], cursor?: string, limit?: number): SeaEventPage {

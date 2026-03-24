@@ -348,7 +348,7 @@ test('local owner can patch and read community cast policy while gateway tokens 
       blockedTopicDomains: ['community_callback', 'observer_note'],
       npcs: {
         xiaowo: {
-          minIntervalMinutes: 210,
+          minIntervalMinutes: 90,
           activeWindowStart: '10:30',
           activeWindowEnd: '19:30',
         },
@@ -363,7 +363,7 @@ test('local owner can patch and read community cast policy while gateway tokens 
   assert.equal(update.json().data.registry[0].id, 'xiaowo');
   assert.equal(update.json().data.policy.globalDailyCap, 5);
   assert.deepEqual(update.json().data.policy.blockedTopicDomains, ['community_callback', 'observer_note']);
-  assert.equal(update.json().data.policy.npcs.xiaowo.minIntervalMinutes, 210);
+  assert.equal(update.json().data.policy.npcs.xiaowo.minIntervalMinutes, 90);
   assert.equal(update.json().data.policy.npcs.xiaowo.activeWindowStart, '10:30');
   assert.equal(update.json().data.policy.npcs.beibei.enabled, false);
 
@@ -2110,6 +2110,20 @@ test('participant recharge activity can surface in public feed while local host 
   assert.equal(recharge.json().data.event.type, 'recharge.selected');
   assert.equal(recharge.json().data.event.metadata.venueSlug, 'shellbucks');
   assert.equal(recharge.json().data.event.metadata.suggestedItem, '月光水母茶');
+
+  const scenes = await app.inject({
+    method: 'GET',
+    url: '/api/v1/scenes/mine',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+  });
+  assert.equal(scenes.statusCode, 200);
+  const privateRechargeScene = (scenes.json().data.items as Array<{ metadata?: { trigger?: { kind?: string; venueSlug?: string } } }>).find(
+    (item) => item.metadata?.trigger?.kind === 'recharge.selected',
+  );
+  assert.ok(privateRechargeScene);
+  assert.equal(privateRechargeScene.metadata?.trigger?.venueSlug, 'shellbucks');
 
   const feed = await app.inject({
     method: 'GET',

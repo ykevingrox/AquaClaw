@@ -129,13 +129,13 @@ const DEFAULT_COMMUNITY_CAST_POLICY: CommunityCastPolicyRecord = {
   enabled: true,
   activeWindowStart: null,
   activeWindowEnd: null,
-  globalDailyCap: 4,
+  globalDailyCap: 8,
   blockedTopicDomains: [],
   npcs: {
     xiaowo: {
       enabled: true,
-      minIntervalMinutes: 180,
-      maxIntervalMinutes: 240,
+      minIntervalMinutes: 60,
+      maxIntervalMinutes: 120,
       activeWindowStart: '10:00',
       activeWindowEnd: '20:00',
     },

@@ -70,10 +70,10 @@ test('GatewayStore exposes managed community cast registry and default policy', 
 
   const policy = store.getCommunityCastPolicy();
   assert.equal(policy.enabled, true);
-  assert.equal(policy.globalDailyCap, 4);
+  assert.equal(policy.globalDailyCap, 8);
   assert.deepEqual(policy.blockedTopicDomains, []);
-  assert.equal(policy.npcs.xiaowo.minIntervalMinutes, 180);
-  assert.equal(policy.npcs.xiaowo.maxIntervalMinutes, 240);
+  assert.equal(policy.npcs.xiaowo.minIntervalMinutes, 60);
+  assert.equal(policy.npcs.xiaowo.maxIntervalMinutes, 120);
   assert.equal(policy.npcs.xiaowo.activeWindowStart, '10:00');
   assert.equal(policy.npcs.xiaowo.activeWindowEnd, '20:00');
   assert.equal(policy.npcs.beibei.enabled, true);
@@ -92,7 +92,7 @@ test('GatewayStore can patch community cast policy with nested NPC settings', ()
     blockedTopicDomains: [' community_callback ', 'observer_note', 'community_callback'],
     npcs: {
       xiaowo: {
-        minIntervalMinutes: 210,
+        minIntervalMinutes: 90,
         activeWindowStart: '10:30',
         activeWindowEnd: '19:30',
       },
@@ -107,8 +107,8 @@ test('GatewayStore can patch community cast policy with nested NPC settings', ()
   assert.equal(updated.activeWindowStart, '09:00');
   assert.equal(updated.activeWindowEnd, '21:00');
   assert.equal(updated.npcs.xiaowo.enabled, true);
-  assert.equal(updated.npcs.xiaowo.minIntervalMinutes, 210);
-  assert.equal(updated.npcs.xiaowo.maxIntervalMinutes, 240);
+  assert.equal(updated.npcs.xiaowo.minIntervalMinutes, 90);
+  assert.equal(updated.npcs.xiaowo.maxIntervalMinutes, 120);
   assert.equal(updated.npcs.xiaowo.activeWindowStart, '10:30');
   assert.equal(updated.npcs.xiaowo.activeWindowEnd, '19:30');
   assert.equal(updated.npcs.beibei.enabled, false);
@@ -119,7 +119,7 @@ test('GatewayStore can patch community cast policy with nested NPC settings', ()
   assert.equal(readBack.globalDailyCap, 5);
   assert.deepEqual(readBack.blockedTopicDomains, ['community_callback', 'observer_note']);
   assert.equal(readBack.npcs.beibei.enabled, false);
-  assert.equal(readBack.npcs.xiaowo.minIntervalMinutes, 210);
+  assert.equal(readBack.npcs.xiaowo.minIntervalMinutes, 90);
 });
 
 test('GatewayStore can generate and reuse a xiaowo bulletin candidate from a recent public thread', () => {
@@ -247,53 +247,55 @@ test('GatewayStore suppresses xiaowo bulletin generation when the public surface
 });
 
 test('GatewayStore suppresses duplicate fallback xiaowo bulletins when current and environment have not meaningfully changed', () => {
-  const store: GatewayStore = createGatewayStore();
-  const host = store.bootstrapLocalSession().host;
+  withFrozenTime('2026-03-23T10:00:00.000Z', () => {
+    const store: GatewayStore = createGatewayStore();
+    const host = store.bootstrapLocalSession().host;
 
-  store.updateCommunityCastPolicy({
-    hostId: host.id,
-    activeWindowStart: null,
-    activeWindowEnd: null,
-    npcs: {
-      xiaowo: {
-        minIntervalMinutes: 60,
-        maxIntervalMinutes: 60,
-        activeWindowStart: null,
-        activeWindowEnd: null,
+    store.updateCommunityCastPolicy({
+      hostId: host.id,
+      activeWindowStart: null,
+      activeWindowEnd: null,
+      npcs: {
+        xiaowo: {
+          minIntervalMinutes: 60,
+          maxIntervalMinutes: 60,
+          activeWindowStart: null,
+          activeWindowEnd: null,
+        },
       },
-    },
-  });
+    });
 
-  store.setCurrent({
-    key: 'ember-run',
-    label: 'Ember Run',
-    summary: 'A warm looping current that keeps pulling old routes forward.',
-    tone: 'playful',
-    startsAt: '2026-03-23T00:00:00.000Z',
-    endsAt: '2026-03-24T00:00:00.000Z',
-  });
-  store.setEnvironment({
-    waterTemperatureC: 22,
-    clarity: 'clear',
-    tideDirection: 'crosswind',
-    surfaceState: 'glassy',
-    phenomenon: 'warm_bloom',
-    summary: 'Warm bloom keeps the water bright and a little too ready to echo.',
-    expiresAt: '2026-03-24T00:00:00.000Z',
-  });
+    store.setCurrent({
+      key: 'ember-run',
+      label: 'Ember Run',
+      summary: 'A warm looping current that keeps pulling old routes forward.',
+      tone: 'playful',
+      startsAt: '2026-03-23T00:00:00.000Z',
+      endsAt: '2026-03-24T00:00:00.000Z',
+    });
+    store.setEnvironment({
+      waterTemperatureC: 22,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'glassy',
+      phenomenon: 'warm_bloom',
+      summary: 'Warm bloom keeps the water bright and a little too ready to echo.',
+      expiresAt: '2026-03-24T00:00:00.000Z',
+    });
 
-  const first = store.generateCommunityBulletinCandidate({
-    createdAt: '2026-03-23T10:00:00.000Z',
-  });
-  assert.equal(first.action, 'created');
-  assert.equal(first.candidate?.anchorKind, 'environment');
+    const first = store.generateCommunityBulletinCandidate({
+      createdAt: '2026-03-23T10:00:00.000Z',
+    });
+    assert.equal(first.action, 'created');
+    assert.equal(first.candidate?.anchorKind, 'environment');
 
-  const second = store.generateCommunityBulletinCandidate({
-    createdAt: '2026-03-23T12:30:00.000Z',
+    const second = store.generateCommunityBulletinCandidate({
+      createdAt: '2026-03-23T12:30:00.000Z',
+    });
+    assert.equal(second.action, 'suppressed');
+    assert.equal(second.candidate, null);
+    assert.match(second.reasons.join(' | '), /similar xiaowo bulletin candidate already exists/i);
   });
-  assert.equal(second.action, 'suppressed');
-  assert.equal(second.candidate, null);
-  assert.match(second.reasons.join(' | '), /similar xiaowo bulletin candidate already exists/i);
 });
 
 test('GatewayStore can publish a xiaowo bulletin as a managed public reply without entering the public roster', () => {
@@ -346,54 +348,56 @@ test('GatewayStore can publish a xiaowo bulletin as a managed public reply witho
 });
 
 test('GatewayStore can publish a fallback xiaowo bulletin as a new public thread root', () => {
-  const store: GatewayStore = createGatewayStore();
-  const host = store.bootstrapLocalSession().host;
+  withFrozenTime('2026-03-23T10:00:00.000Z', () => {
+    const store: GatewayStore = createGatewayStore();
+    const host = store.bootstrapLocalSession().host;
 
-  store.updateCommunityCastPolicy({
-    hostId: host.id,
-    activeWindowStart: null,
-    activeWindowEnd: null,
-    npcs: {
-      xiaowo: {
-        minIntervalMinutes: 60,
-        maxIntervalMinutes: 60,
-        activeWindowStart: null,
-        activeWindowEnd: null,
+    store.updateCommunityCastPolicy({
+      hostId: host.id,
+      activeWindowStart: null,
+      activeWindowEnd: null,
+      npcs: {
+        xiaowo: {
+          minIntervalMinutes: 60,
+          maxIntervalMinutes: 60,
+          activeWindowStart: null,
+          activeWindowEnd: null,
+        },
       },
-    },
-  });
+    });
 
-  store.setCurrent({
-    key: 'quiet-loop',
-    label: 'Quiet Loop',
-    summary: 'A soft loop keeps nudging half-finished thoughts back toward the surface.',
-    tone: 'reflective',
-    startsAt: '2026-03-23T00:00:00.000Z',
-    endsAt: '2026-03-24T00:00:00.000Z',
-  });
-  store.setEnvironment({
-    waterTemperatureC: 21,
-    clarity: 'clear',
-    tideDirection: 'incoming',
-    surfaceState: 'glassy',
-    phenomenon: 'warm_bloom',
-    summary: 'Warm bloom makes every quiet corner feel a little more expectant.',
-    expiresAt: '2026-03-24T00:00:00.000Z',
-  });
+    store.setCurrent({
+      key: 'quiet-loop',
+      label: 'Quiet Loop',
+      summary: 'A soft loop keeps nudging half-finished thoughts back toward the surface.',
+      tone: 'reflective',
+      startsAt: '2026-03-23T00:00:00.000Z',
+      endsAt: '2026-03-24T00:00:00.000Z',
+    });
+    store.setEnvironment({
+      waterTemperatureC: 21,
+      clarity: 'clear',
+      tideDirection: 'incoming',
+      surfaceState: 'glassy',
+      phenomenon: 'warm_bloom',
+      summary: 'Warm bloom makes every quiet corner feel a little more expectant.',
+      expiresAt: '2026-03-24T00:00:00.000Z',
+    });
 
-  const generated = store.generateCommunityBulletinCandidate({
-    createdAt: '2026-03-23T10:00:00.000Z',
-  });
-  assert.equal(generated.action, 'created');
-  assert.equal(generated.candidate?.anchorKind, 'environment');
+    const generated = store.generateCommunityBulletinCandidate({
+      createdAt: '2026-03-23T10:00:00.000Z',
+    });
+    assert.equal(generated.action, 'created');
+    assert.equal(generated.candidate?.anchorKind, 'environment');
 
-  const published = store.publishCommunityBulletinCandidate({
-    candidateId: generated.candidate?.id,
-    createdAt: '2026-03-23T10:05:00.000Z',
+    const published = store.publishCommunityBulletinCandidate({
+      candidateId: generated.candidate?.id,
+      createdAt: '2026-03-23T10:05:00.000Z',
+    });
+    assert.equal(published.action, 'published');
+    assert.equal(published.expression?.parentExpressionId, null);
+    assert.equal(published.expression?.rootExpressionId, published.expression?.id);
   });
-  assert.equal(published.action, 'published');
-  assert.equal(published.expression?.parentExpressionId, null);
-  assert.equal(published.expression?.rootExpressionId, published.expression?.id);
 });
 
 test('GatewayStore suppresses publishing a second xiaowo bulletin inside the publish cooldown', () => {
@@ -1657,6 +1661,69 @@ test('GatewayStore recharge activity creates an observer-safe feed event for par
   assert.ok(rechargeEvent);
   assert.equal(rechargeEvent.metadata.venueName, 'Krusty Krab');
   assert.equal(rechargeEvent.metadata.suggestedKind, '奶昔');
+
+  const scenes = store.listScenes({ gatewayId: alpha.id });
+  assert.equal(scenes.items.length, 1);
+  assert.equal(scenes.items[0]?.type, 'social_glimpse');
+  assert.equal((scenes.items[0]?.metadata.trigger as { kind: string }).kind, 'recharge.selected');
+  assert.equal((scenes.items[0]?.metadata.trigger as { venueSlug: string }).venueSlug, 'krusty-krab');
+  assert.equal((scenes.items[0]?.metadata.trigger as { reason: string }).reason, 'heavy_reset');
+});
+
+test('GatewayStore friend-request acceptance writes trigger-backed private scenes for both participants', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Friend Alpha', handle: 'friend-alpha-scenes' });
+  const beta = registerGateway(store, { displayName: 'Friend Beta', handle: 'friend-beta-scenes' });
+
+  const request = store.createFriendRequest({
+    fromGatewayId: alpha.id,
+    toGatewayId: beta.id,
+    message: 'Drifting closer.',
+  });
+  const accepted = store.acceptFriendRequest(request.id, beta.id);
+
+  const alphaScenes = store.listScenes({ gatewayId: alpha.id }).items;
+  const betaScenes = store.listScenes({ gatewayId: beta.id }).items;
+  assert.equal(alphaScenes.length, 1);
+  assert.equal(betaScenes.length, 1);
+  assert.equal((alphaScenes[0]?.metadata.trigger as { kind: string }).kind, 'friend_request.accepted');
+  assert.equal((alphaScenes[0]?.metadata.trigger as { reason: string }).reason, 'request_confirmed');
+  assert.equal((alphaScenes[0]?.metadata.trigger as { conversationId: string }).conversationId, accepted.conversation.id);
+  assert.equal((betaScenes[0]?.metadata.trigger as { reason: string }).reason, 'accepted_incoming');
+});
+
+test('GatewayStore first direct message updates encounter continuity and writes a trigger-backed scene', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'DM Alpha', handle: 'dm-alpha-scenes' });
+  const beta = registerGateway(store, { displayName: 'DM Beta', handle: 'dm-beta-scenes' });
+
+  const request = store.createFriendRequest({
+    fromGatewayId: alpha.id,
+    toGatewayId: beta.id,
+    message: 'Open a current?',
+  });
+  const accepted = store.acceptFriendRequest(request.id, beta.id);
+  const scenesBeforeMessage = store.listScenes({ gatewayId: alpha.id }).items.length;
+
+  withFrozenTime('2026-03-24T09:05:00.000Z', () => {
+    store.createMessage({
+      conversationId: accepted.conversation.id,
+      senderGatewayId: alpha.id,
+      body: 'The direct line is finally open.',
+    });
+  });
+
+  const alphaScenes = store.listScenes({ gatewayId: alpha.id }).items;
+  assert.equal(alphaScenes.length, scenesBeforeMessage + 1);
+  assert.equal((alphaScenes[0]?.metadata.trigger as { kind: string }).kind, 'message.sent');
+  assert.equal((alphaScenes[0]?.metadata.trigger as { reason: string }).reason, 'first_message');
+  assert.equal((alphaScenes[0]?.metadata.trigger as { conversationId: string }).conversationId, accepted.conversation.id);
+
+  const encounters = store.listEncounters({
+    viewerGatewayId: alpha.id,
+    gatewayId: alpha.id,
+  });
+  assert.equal(encounters.items[0]?.encounterCount, 2);
 });
 
 test('GatewayStore participant social pulse can plan a public reply for a recent public thread', () => {
@@ -1753,6 +1820,20 @@ test('GatewayStore scene seam writes gateway-private scenes directly', () => {
   assert.ok(sceneEvent);
   assert.equal(sceneEvent.metadata.sceneId, scene.id);
   assert.equal(sceneEvent.metadata.source, 'store-test');
+});
+
+test('GatewayStore generateScene writes explicit manual trigger metadata', () => {
+  const store: GatewayStore = createGatewayStore();
+  const alpha = registerGateway(store, { displayName: 'Manual Trigger Alpha', handle: 'manual-trigger-alpha' });
+
+  const scene = store.generateScene({
+    gatewayId: alpha.id,
+    type: 'vent',
+  });
+
+  assert.equal((scene.metadata.trigger as { kind: string }).kind, 'manual.generate');
+  assert.equal((scene.metadata.trigger as { sourceKind: string }).sourceKind, 'manual');
+  assert.equal((scene.metadata.trigger as { reason: string }).reason, 'vent');
 });
 
 test('GatewayStore invite seam lets owner revoke and blocks future claims', () => {
