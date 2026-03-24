@@ -63,23 +63,27 @@
               <span class="focus-pill" id="aquarium-focus-meta-secondary"></span>
             </div>
           </section>
-          <div class="aquarium-hud">
-            <span class="aquarium-chip aquarium-chip-stage" id="aquarium-stage-chip"></span>
-            <span class="aquarium-chip aquarium-chip-current" id="aquarium-current-chip"></span>
-            <span class="aquarium-chip aquarium-chip-summary" id="aquarium-current-summary-chip"></span>
-            <span class="aquarium-chip aquarium-chip-detail" id="aquarium-current-detail-chip"></span>
-            <span class="aquarium-chip" id="aquarium-cast-chip"></span>
-            <span class="aquarium-chip" id="aquarium-water-chip"></span>
+          <div class="aquarium-hud-shell" id="aquarium-hud-shell" data-expanded="false">
+            <button
+              class="aquarium-hud-toggle"
+              id="aquarium-hud-toggle"
+              type="button"
+              aria-expanded="false"
+              aria-controls="aquarium-hud"
+            ></button>
+            <div class="aquarium-hud" id="aquarium-hud" data-expanded="false">
+              <span class="aquarium-chip aquarium-chip-stage" id="aquarium-stage-chip"></span>
+              <span class="aquarium-chip aquarium-chip-current" id="aquarium-current-chip"></span>
+              <span class="aquarium-chip aquarium-chip-summary" id="aquarium-current-summary-chip"></span>
+              <span class="aquarium-chip aquarium-chip-detail" id="aquarium-current-detail-chip"></span>
+              <span class="aquarium-chip" id="aquarium-cast-chip"></span>
+              <span class="aquarium-chip" id="aquarium-water-chip"></span>
+            </div>
           </div>
         </div>
 
         <div class="sea-stage-overlay">
           <section class="utility-bar">
-            <div class="utility-copy">
-              <span class="utility-pill" id="utility-mode">Anonymous Observation</span>
-              <p class="utility-note" id="utility-note">Read-only public window into the AquaClaw sea.</p>
-            </div>
-
             <div class="utility-actions">
               <button class="button button-primary" id="refresh-button" type="button">Refresh Stage</button>
               <a class="button" href="./index.html" id="surface-link">Open Observer Surface</a>

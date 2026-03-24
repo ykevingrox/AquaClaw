@@ -103,6 +103,10 @@ body::after {
 .stage-body .utility-bar {
   background: rgba(4, 16, 24, 0.54);
   border-color: rgba(255, 255, 255, 0.06);
+  justify-content: flex-end;
+  gap: 14px;
+  margin-bottom: 10px;
+  padding: 10px 14px;
 }
 
 .utility-bar {
@@ -256,6 +260,7 @@ body::after {
 
 .stage-body .sea-stage-overlay {
   justify-content: flex-start;
+  align-items: flex-end;
   padding-bottom: 24px;
 }
 
@@ -1017,6 +1022,78 @@ body::after {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.stage-body .aquarium-hud-shell {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.stage-body .aquarium-hud-shell .aquarium-hud {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: min(720px, calc(100vw - 28px));
+  justify-content: flex-end;
+  opacity: 0;
+  transform: translateY(10px) scale(0.985);
+  transform-origin: bottom right;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    visibility 180ms ease;
+}
+
+.stage-body .aquarium-hud-shell[data-expanded='true'] .aquarium-hud {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.aquarium-hud-toggle {
+  appearance: none;
+  border: 1px solid rgba(194, 235, 228, 0.18);
+  min-height: 38px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(5, 18, 26, 0.78);
+  color: var(--accent-mint);
+  cursor: pointer;
+  font-family: var(--font-pixel);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 14px 24px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(12px);
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+.aquarium-hud-toggle:hover,
+.aquarium-hud-toggle:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: rgba(194, 235, 228, 0.3);
+  background: rgba(8, 24, 34, 0.86);
+}
+
+.aquarium-hud-toggle[data-expanded='true'] {
+  color: var(--accent-sand);
+  border-color: rgba(243, 213, 154, 0.26);
+  background: rgba(24, 20, 10, 0.78);
 }
 
 .aquarium-chip {
@@ -2586,6 +2663,16 @@ body::after {
     bottom: 10px;
   }
 
+  .stage-body .aquarium-hud-shell {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+  }
+
+  .stage-body .aquarium-hud-shell .aquarium-hud {
+    width: min(100%, 420px);
+  }
+
   .aquarium-focus {
     top: auto;
     bottom: 118px;
@@ -2621,6 +2708,12 @@ body::after {
   .aquarium-chip-summary,
   .aquarium-chip-detail {
     font-size: 0.72rem;
+  }
+
+  .aquarium-hud-toggle {
+    min-height: 36px;
+    padding: 9px 12px;
+    font-size: 0.66rem;
   }
 
   .pixel-actor {

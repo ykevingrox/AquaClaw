@@ -13,6 +13,7 @@ const FEED_LIMIT = 24;
 const GATEWAY_LIMIT = 18;
 const MAX_STAGE_GATEWAYS = 10;
 const STORAGE_KEY_LOCALE = 'aquaclaw.public.locale';
+const STORAGE_KEY_STAGE_HUD_EXPANDED = 'aquaclaw.public.stageHudExpanded';
 const VALID_LOCALES = new Set(['en', 'zh']);
 
 const COPY = {
@@ -20,10 +21,6 @@ const COPY = {
     page: {
       title: 'AquaClaw Pixel Stage',
       description: 'Full-screen public pixel aquarium for AquaClaw.',
-    },
-    utility: {
-      mode: 'Anonymous Observation',
-      note: 'Read-only public window into the AquaClaw sea.',
     },
     locale: {
       label: 'Language',
@@ -58,6 +55,10 @@ const COPY = {
       waking: 'Pixel reef is waking up...',
       districtKrusty: 'Krusty Krab Reef',
       districtShellbucks: 'ShellBucKs Point',
+    },
+    hud: {
+      show: 'Sea conditions',
+      hide: 'Hide sea conditions',
     },
     focus: {
       idleKicker: 'Stage focus',
@@ -161,10 +162,6 @@ const COPY = {
       title: 'AquaClaw 像素舞台',
       description: 'AquaClaw 的全屏公开像素水族舞台。',
     },
-    utility: {
-      mode: '匿名观察',
-      note: '一个只读的 AquaClaw 海域公开视窗。',
-    },
     locale: {
       label: '语言',
     },
@@ -198,6 +195,10 @@ const COPY = {
       waking: '像素小海床正在苏醒...',
       districtKrusty: '蟹堡王礁区',
       districtShellbucks: '蟹巴克角',
+    },
+    hud: {
+      show: '展开海况',
+      hide: '收起海况',
     },
     focus: {
       idleKicker: '舞台聚焦',
@@ -309,6 +310,9 @@ const elements = {
   aquariumFocusMetaSecondary: document.querySelector('#aquarium-focus-meta-secondary'),
   aquariumFocusSummary: document.querySelector('#aquarium-focus-summary'),
   aquariumFocusTitle: document.querySelector('#aquarium-focus-title'),
+  aquariumHud: document.querySelector('#aquarium-hud'),
+  aquariumHudShell: document.querySelector('#aquarium-hud-shell'),
+  aquariumHudToggle: document.querySelector('#aquarium-hud-toggle'),
   aquariumStageChip: document.querySelector('#aquarium-stage-chip'),
   aquariumViewport: document.querySelector('#aquarium-viewport'),
   aquariumWaterChip: document.querySelector('#aquarium-water-chip'),
@@ -323,8 +327,6 @@ const elements = {
   statusBadge: document.querySelector('#status-badge'),
   surfaceLink: document.querySelector('#surface-link'),
   syncBadge: document.querySelector('#sync-badge'),
-  utilityMode: document.querySelector('#utility-mode'),
-  utilityNote: document.querySelector('#utility-note'),
 };
 
 const state = {
@@ -338,6 +340,7 @@ const state = {
   lastSyncedAt: null,
   lastSuccessfulSyncAt: 0,
   locale: loadInitialLocale(),
+  hudExpanded: loadInitialHudExpanded(),
   stageActivity: null,
   stageFocusKey: null,
   stageFocusItems: [],
@@ -362,6 +365,10 @@ function activeLocaleCode() {
   return state.locale === 'zh' ? 'zh-CN' : 'en-US';
 }
 
+function loadInitialHudExpanded() {
+  return localStorage.getItem(STORAGE_KEY_STAGE_HUD_EXPANDED) === 'true';
+}
+
 function resolveCopy(locale, key) {
   const source = COPY[locale] ?? COPY.en;
   return key.split('.').reduce((value, segment) => (value && typeof value === 'object' ? value[segment] : undefined), source);
@@ -374,6 +381,10 @@ function t(key, params = {}) {
 
 function persistLocale() {
   localStorage.setItem(STORAGE_KEY_LOCALE, state.locale);
+}
+
+function persistHudExpanded() {
+  localStorage.setItem(STORAGE_KEY_STAGE_HUD_EXPANDED, state.hudExpanded ? 'true' : 'false');
 }
 
 function escapeHtml(value) {
@@ -934,15 +945,28 @@ function applyTranslations() {
   document.documentElement.lang = state.locale === 'zh' ? 'zh-CN' : 'en';
   document.title = t('page.title');
   elements.metaDescription?.setAttribute('content', t('page.description'));
-  elements.utilityMode.textContent = t('utility.mode');
-  elements.utilityNote.textContent = t('utility.note');
   elements.localeLabel.textContent = t('locale.label');
   elements.refreshButton.textContent = t('action.refresh');
   elements.surfaceLink.textContent = t('action.openSurface');
   for (const button of elements.localeButtons) {
     button.dataset.active = button.dataset.locale === state.locale ? 'true' : 'false';
   }
+  renderHudToggle();
   setSyncBadge();
+}
+
+function renderHudToggle() {
+  if (!elements.aquariumHud || !elements.aquariumHudShell || !elements.aquariumHudToggle) {
+    return;
+  }
+  const label = state.hudExpanded ? t('hud.hide') : t('hud.show');
+  elements.aquariumHud.dataset.expanded = state.hudExpanded ? 'true' : 'false';
+  elements.aquariumHudShell.dataset.expanded = state.hudExpanded ? 'true' : 'false';
+  elements.aquariumHudToggle.dataset.expanded = state.hudExpanded ? 'true' : 'false';
+  elements.aquariumHudToggle.setAttribute('aria-expanded', state.hudExpanded ? 'true' : 'false');
+  elements.aquariumHudToggle.setAttribute('aria-label', label);
+  elements.aquariumHudToggle.title = label;
+  elements.aquariumHudToggle.textContent = label;
 }
 
 function setLocale(locale) {
@@ -1030,6 +1054,12 @@ elements.refreshButton.addEventListener('click', () => {
   refreshStage();
 });
 
+elements.aquariumHudToggle?.addEventListener('click', () => {
+  state.hudExpanded = !state.hudExpanded;
+  persistHudExpanded();
+  renderHudToggle();
+});
+
 elements.aquariumViewport.addEventListener('click', (event) => {
   const target = event.target.closest('[data-focus-key]');
   if (target) {
@@ -1039,6 +1069,9 @@ elements.aquariumViewport.addEventListener('click', (event) => {
     return;
   }
   if (event.target.closest('#aquarium-focus')) {
+    return;
+  }
+  if (event.target.closest('#aquarium-hud-shell')) {
     return;
   }
   state.stageFocusKey = null;

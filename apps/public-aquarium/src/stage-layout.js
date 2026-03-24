@@ -1,12 +1,42 @@
 const STAGE_LAYOUTS = {
   observer: {
     gatewayLanes: [
-      { y: 30, start: 28, span: 44, baseScale: 3.9, generatedScale: 1, externalScale: 0.58, assetYOffset: 0, depth: 'far' },
-      { y: 50, start: 22, span: 54, baseScale: 4.6, generatedScale: 1, externalScale: 0.56, assetYOffset: 0, depth: 'mid' },
-      { y: 70, start: 24, span: 52, baseScale: 5.2, generatedScale: 1, externalScale: 0.54, assetYOffset: 0, depth: 'front' },
+      {
+        y: 30,
+        start: 14,
+        span: 60,
+        singleX: 24,
+        baseScale: 3.9,
+        generatedScale: 1,
+        externalScale: 0.58,
+        assetYOffset: 0,
+        depth: 'far',
+      },
+      {
+        y: 50,
+        start: 18,
+        span: 62,
+        singleX: 72,
+        baseScale: 4.6,
+        generatedScale: 1,
+        externalScale: 0.56,
+        assetYOffset: 0,
+        depth: 'mid',
+      },
+      {
+        y: 70,
+        start: 20,
+        span: 56,
+        singleX: 38,
+        baseScale: 5.2,
+        generatedScale: 1,
+        externalScale: 0.54,
+        assetYOffset: 0,
+        depth: 'front',
+      },
     ],
     cast: {
-      xiaowo: { x: 74, y: 18, baseScale: 4.2, generatedScale: 1, externalScale: 0.56, assetYOffset: -1, depth: 'far', labelMode: 'always' },
+      xiaowo: { x: 78, y: 18, baseScale: 4.2, generatedScale: 1, externalScale: 0.56, assetYOffset: -1, depth: 'far', labelMode: 'always' },
       beibei: { x: 22, y: 69, baseScale: 4.8, generatedScale: 1, externalScale: 0.56, assetYOffset: 0, depth: 'front', labelMode: 'always' },
       qiaoqiao: { x: 80, y: 66, baseScale: 5, generatedScale: 1, externalScale: 0.56, assetYOffset: 0, depth: 'front', labelMode: 'always' },
     },
@@ -17,13 +47,53 @@ const STAGE_LAYOUTS = {
   },
   stage: {
     gatewayLanes: [
-      { y: 28, start: 30, span: 36, baseScale: 3.4, generatedScale: 1, externalScale: 0.56, assetYOffset: -1, depth: 'far' },
-      { y: 42, start: 22, span: 54, baseScale: 4, generatedScale: 1, externalScale: 0.54, assetYOffset: 0, depth: 'mid' },
-      { y: 57, start: 18, span: 60, baseScale: 4.7, generatedScale: 1, externalScale: 0.52, assetYOffset: 0, depth: 'mid' },
-      { y: 71, start: 26, span: 44, baseScale: 5.2, generatedScale: 1, externalScale: 0.5, assetYOffset: 1, depth: 'front' },
+      {
+        y: 26,
+        start: 12,
+        span: 68,
+        singleX: 20,
+        baseScale: 3.4,
+        generatedScale: 1,
+        externalScale: 0.56,
+        assetYOffset: -1,
+        depth: 'far',
+      },
+      {
+        y: 41,
+        start: 14,
+        span: 70,
+        singleX: 74,
+        baseScale: 4,
+        generatedScale: 1,
+        externalScale: 0.54,
+        assetYOffset: 0,
+        depth: 'mid',
+      },
+      {
+        y: 56,
+        start: 16,
+        span: 66,
+        singleX: 34,
+        baseScale: 4.7,
+        generatedScale: 1,
+        externalScale: 0.52,
+        assetYOffset: 0,
+        depth: 'mid',
+      },
+      {
+        y: 70,
+        start: 24,
+        span: 56,
+        singleX: 64,
+        baseScale: 5.2,
+        generatedScale: 1,
+        externalScale: 0.5,
+        assetYOffset: 1,
+        depth: 'front',
+      },
     ],
     cast: {
-      xiaowo: { x: 52, y: 20, baseScale: 4.4, generatedScale: 1, externalScale: 0.56, assetYOffset: -2, depth: 'far', labelMode: 'always' },
+      xiaowo: { x: 78, y: 20, baseScale: 4.4, generatedScale: 1, externalScale: 0.56, assetYOffset: -2, depth: 'far', labelMode: 'always' },
       beibei: { x: 16, y: 63, baseScale: 5, generatedScale: 1, externalScale: 0.54, assetYOffset: 0, depth: 'front', labelMode: 'always' },
       qiaoqiao: { x: 84, y: 60, baseScale: 5.1, generatedScale: 1, externalScale: 0.54, assetYOffset: 0, depth: 'front', labelMode: 'always' },
     },
@@ -60,9 +130,14 @@ export function buildGatewaySlots(layoutKey, gateways, hashFn) {
     for (let index = 0; index < lane.length; index += 1) {
       const gateway = lane[index];
       const seed = hashFn(gateway.id || gateway.handle || gateway.displayName || `gateway:${index}`);
+      const laneCount = lane.length;
+      const baseX =
+        laneCount === 1 && Number.isFinite(config.singleX)
+          ? config.singleX
+          : config.start + ((index + 1) * config.span) / (laneCount + 1);
       slots.push({
         gateway,
-        x: config.start + ((index + 1) * config.span) / (lane.length + 1) + ((seed % 7) - 3),
+        x: baseX + ((seed % 7) - 3),
         y: config.y + (((seed >> 4) % 7) - 3),
         bobDuration: 6.8 + ((seed >> 12) % 5) * 0.7,
         bobDelay: -(((seed >> 15) % 12) / 2),
