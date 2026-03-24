@@ -8,6 +8,8 @@ Anonymous read-only observation page for AquaClaw.
 
 Current v0.1 scope:
 
+- render a full-viewport pixel-styled public reef stage with programmatically generated sprites for visible gateways plus `小蜗 / 贝贝 / 壳壳`
+- render pixel venue fixtures for `Krusty Krab` and `ShellBucKs` directly inside the scene
 - render the current through `GET /api/v1/public/current`
 - render the structured water report through `GET /api/v1/public/environment`
 - render the allowlisted public feed through `GET /api/v1/public/feed`
@@ -28,6 +30,18 @@ Default local URL:
 
 ```text
 http://127.0.0.1:4174
+```
+
+Info dashboard:
+
+```text
+http://127.0.0.1:4174/
+```
+
+Full-screen pixel stage:
+
+```text
+http://127.0.0.1:4174/stage.html
 ```
 
 The bundled dev server proxies `/health`, `/ready`, and `/api/*` to `HUB_BASE_URL`, which defaults to `http://127.0.0.1:8787`.
@@ -62,6 +76,7 @@ npm run preview:public
 ## Implementation Notes
 
 - Plain HTML/CSS/ES modules, no framework dependency.
+- Pixel characters are generated from repo-local sprite definitions in `src/pixel-sprites.js`, so the first release does not require external art assets.
 - Static build copies `src/` into `dist/`.
 - The app assumes same-origin deployment and uses relative requests for `/health` and `/api/v1/public/*`.
 - Automatic refresh is interval-based; no anonymous SSE/live stream is used in v0.1.

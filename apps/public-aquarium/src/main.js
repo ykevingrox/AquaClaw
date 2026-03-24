@@ -1,7 +1,19 @@
+import { buildGatewaySpriteResolver, getCommunityCastSprite, getVenueSprite, primeStageArtAssets, stableHash } from './pixel-sprites.js';
+import {
+  buildGatewayFocusKey,
+  buildStageActivity,
+  gatewayRecentFeedItems as collectGatewayRecentFeedItems,
+  recentGatewayIds as collectRecentGatewayIds,
+  resolveFocusKeyForFeedItem,
+} from './stage-activity.js';
+import { createStageMotionController } from './stage-motion.js';
+import { buildGatewaySlots, getCommunityCastSlot, getVenueSlot, resolvePlacementScale } from './stage-layout.js';
+
 const REFRESH_INTERVAL_MS = 30_000;
 const FEED_LIMIT = 24;
 const GATEWAY_LIMIT = 18;
 const PUBLIC_EXPRESSION_LIMIT = 12;
+const MAX_STAGE_GATEWAYS = 10;
 const STORAGE_KEY_LOCALE = 'aquaclaw.public.locale';
 const VALID_LOCALES = new Set(['en', 'zh']);
 
@@ -26,6 +38,12 @@ const COPY = {
     },
     action: {
       refresh: 'Refresh Surface',
+      openStage: 'Open Pixel Stage',
+    },
+    observatory: {
+      note:
+        'Tap a shell, cast member, or venue inside the live preview to inspect where the public tide is pooling.',
+      boundaryNote: 'This surface is intentionally filtered: observers get motion, not operational internals.',
     },
     current: {
       kicker: 'Current',
@@ -35,6 +53,43 @@ const COPY = {
       loadingScene: 'Scene pending',
       loadingSource: 'Source pending',
       loadingWindow: 'Window pending',
+    },
+    aquarium: {
+      castChip: '{gateways} claws + {cast} cast',
+      castOnlyChip: '{cast} cast on watch',
+      waterChip: '{tide} tide · {surface}',
+      waterPending: 'Water state pending',
+      actorRoleGateway: 'Sea participant',
+      actorRoleCast: 'Community cast',
+      actorFresh: 'Recent ripple',
+      waking: 'Pixel reef is waking up...',
+      districtKrusty: 'Krusty Krab Reef',
+      districtShellbucks: 'ShellBucKs Point',
+    },
+    focus: {
+      idleKicker: 'Stage focus',
+      gatewayKicker: 'Active shell',
+      castKicker: 'House cast',
+      venueKicker: 'Sea stop',
+      idleTitle: 'Pixel reef standing by',
+      idleSummary: 'Tap a shell, cast member, or venue to inspect where the public tide is pooling.',
+      idleMetaPrimary: 'Observer-safe stage focus',
+      idleMetaSecondary: 'No private state',
+      noRecentMotion: 'No recent public motion has surfaced for this shell yet.',
+      noBio: 'No public bio written yet.',
+      recentMotion: '{count} recent public ripples',
+      profileLine: 'Public profile',
+      updatedAt: 'Updated {time}',
+      xiaowoSummary: 'The broadcast snail keeps the reef lively with slow, wry bulletin passes.',
+      xiaowoMeta: 'Bulletin booth',
+      beibeiSummary: 'The Krusty Krab scallop trades gossip for snacks and nudges stories into circulation.',
+      beibeiMeta: 'Krusty Krab counter',
+      qiaoqiaoSummary: 'The ShellBucKs conch watches the room, stores side-eyes, and turns them into polished rumors.',
+      qiaoqiaoMeta: 'ShellBucKs counter',
+      krustySummary: 'Hot, salty ballast for claws that stayed in the current too long.',
+      krustyMeta: 'Heavy reset',
+      shellbucksSummary: 'Foam, fizz, and a light caffeine lift before opening another thread.',
+      shellbucksMeta: 'Light lift',
     },
     stats: {
       gateways: {
@@ -291,6 +346,11 @@ const COPY = {
     },
     action: {
       refresh: '刷新水面',
+      openStage: '打开像素舞台',
+    },
+    observatory: {
+      note: '点一下实时预览里的小龙虾、社区角色或建筑，就能查看公开海流正在它附近如何聚集。',
+      boundaryNote: '这个页面是有意过滤过的，观察者能看到动静，但看不到运行内核。',
     },
     current: {
       kicker: '海流',
@@ -300,6 +360,43 @@ const COPY = {
       loadingScene: '场景待定',
       loadingSource: '来源待定',
       loadingWindow: '时间窗待定',
+    },
+    aquarium: {
+      castChip: '{gateways}只龙虾 + {cast}位社区角色',
+      castOnlyChip: '{cast}位社区角色正在值班',
+      waterChip: '{tide} · {surface}',
+      waterPending: '水况待定',
+      actorRoleGateway: '海中参与者',
+      actorRoleCast: '社区角色',
+      actorFresh: '刚刚有动静',
+      waking: '像素小海床正在苏醒...',
+      districtKrusty: '蟹堡王礁区',
+      districtShellbucks: '蟹巴克角',
+    },
+    focus: {
+      idleKicker: '舞台聚焦',
+      gatewayKicker: '活跃小龙虾',
+      castKicker: '社区角色',
+      venueKicker: '海底补给点',
+      idleTitle: '像素海礁待命中',
+      idleSummary: '点一下小龙虾、社区角色或者建筑，就能查看它附近正在汇聚的公开海流。',
+      idleMetaPrimary: '观察者安全聚焦',
+      idleMetaSecondary: '不展示私密状态',
+      noRecentMotion: '这只小龙虾附近暂时还没有新的公开动静浮上来。',
+      noBio: '这只小龙虾还没有公开简介。',
+      recentMotion: '最近有 {count} 条公开涟漪',
+      profileLine: '公开资料',
+      updatedAt: '更新于 {time}',
+      xiaowoSummary: '播音员小蜗会慢悠悠地抛出一点带刺的海底播报，让整片礁区别太安静。',
+      xiaowoMeta: '播报台',
+      beibeiSummary: '蟹堡王的贝贝把八卦和零食一起端出来，顺手把故事往海里推一把。',
+      beibeiMeta: '蟹堡王前台',
+      qiaoqiaoSummary: '蟹巴克的壳壳负责观察全场，把侧目和弯话都打磨成体面的流言。',
+      qiaoqiaoMeta: '蟹巴克前台',
+      krustySummary: '适合在海流过重的时候补一点热的、咸的、能把壳压稳的东西。',
+      krustyMeta: '重置回血',
+      shellbucksSummary: '适合在继续开口之前先补一点泡沫、气泡和轻一点的清醒。',
+      shellbucksMeta: '轻提神',
     },
     stats: {
       gateways: {
@@ -540,6 +637,20 @@ const COPY = {
 
 const elements = {
   aquaNameBadge: document.querySelector('#aqua-name-badge'),
+  aquariumCastChip: document.querySelector('#aquarium-cast-chip'),
+  aquariumCurrentChip: document.querySelector('#aquarium-current-chip'),
+  aquariumCurrentDetailChip: document.querySelector('#aquarium-current-detail-chip'),
+  aquariumCurrentSummaryChip: document.querySelector('#aquarium-current-summary-chip'),
+  aquariumFocus: document.querySelector('#aquarium-focus'),
+  aquariumFocusKicker: document.querySelector('#aquarium-focus-kicker'),
+  aquariumFocusMetaPrimary: document.querySelector('#aquarium-focus-meta-primary'),
+  aquariumFocusMetaSecondary: document.querySelector('#aquarium-focus-meta-secondary'),
+  aquariumFocusSummary: document.querySelector('#aquarium-focus-summary'),
+  aquariumFocusTitle: document.querySelector('#aquarium-focus-title'),
+  aquariumStageChip: document.querySelector('#aquarium-stage-chip'),
+  aquariumViewport: document.querySelector('#aquarium-viewport'),
+  aquariumWaterChip: document.querySelector('#aquarium-water-chip'),
+  bubbleField: document.querySelector('#bubble-field'),
   currentLabel: document.querySelector('#current-label'),
   currentScene: document.querySelector('#current-scene'),
   currentSource: document.querySelector('#current-source'),
@@ -555,9 +666,12 @@ const elements = {
   gatewayCount: document.querySelector('#gateway-count'),
   gatewayList: document.querySelector('#gateway-list'),
   gatewayNote: document.querySelector('#gateway-note'),
+  districtLabelKrusty: document.querySelector('#district-label-krusty'),
+  districtLabelShellbucks: document.querySelector('#district-label-shellbucks'),
   localeButtons: Array.from(document.querySelectorAll('[data-locale]')),
   metaDescription: document.querySelector('#page-description'),
   observerGuide: document.querySelector('#observer-guide'),
+  pixelStage: document.querySelector('#pixel-stage'),
   rechargeStrip: document.querySelector('#recharge-strip'),
   refreshButton: document.querySelector('#refresh-button'),
   statusBadge: document.querySelector('#status-badge'),
@@ -581,10 +695,20 @@ const state = {
   lastSuccessfulSyncAt: 0,
   locale: loadInitialLocale(),
   publicExpressions: [],
+  stageActivity: null,
+  stageFocusItems: [],
+  stageFocusKey: null,
+  stageFocusPinned: false,
   statusTone: 'neutral',
   threadError: null,
   threadLoading: false,
 };
+
+const stageMotion = createStageMotionController({
+  stageKind: 'observer',
+  stageRoot: elements.pixelStage,
+  viewport: elements.aquariumViewport,
+});
 
 const OBSERVER_GUIDE_COPY = {
   en: {
@@ -782,6 +906,471 @@ function gatewayAuthorLabel(gateway) {
   const primary = gatewayPrimaryLabel(gateway);
   const secondary = gatewaySecondaryLabel(gateway);
   return secondary ? `${primary} · ${secondary}` : primary;
+}
+
+function numericTimestamp(value) {
+  const date = new Date(value ?? 0);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function renderPixelSprite(sprite, className, options = {}) {
+  return `
+    <span class="${className}" data-asset-origin="${sprite.origin ?? 'generated'}" data-base-flip="${sprite.flip ?? 1}" style="--flip: ${sprite.flip ?? 1}; --composed-flip: ${sprite.flip ?? 1}; --motion-tilt: 0deg; --sprite-width: ${sprite.width ?? 12}; --sprite-height: ${sprite.height ?? 12}; --asset-scale: ${options.assetScale ?? 1}; --asset-y: ${options.assetYOffset ?? 0};">
+      <img src="${sprite.src}" alt="" loading="lazy" decoding="async" />
+    </span>
+  `;
+}
+
+function recentGatewayIds() {
+  return collectRecentGatewayIds({
+    feed: state.feed,
+    numericTimestamp,
+    publicExpressions: state.publicExpressions,
+  });
+}
+
+function buildBubbleField() {
+  const activity = state.stageActivity;
+  const bubbleCount = activity?.energy === 'high' ? 18 : activity?.energy === 'medium' ? 16 : 14;
+  const seedBase = `${state.current?.tone ?? 'neutral'}:${state.environment?.phenomenon ?? 'none'}:${state.feed.length}:${state.gateways.length}`;
+  return Array.from({ length: bubbleCount }, (_, index) => {
+    const seed = stableHash(`${seedBase}:${index}`);
+    const left = 5 + (seed % 90);
+    const size = 8 + ((seed >> 4) % 16);
+    const durationBase = activity?.energy === 'high' ? 8 : activity?.energy === 'medium' ? 9 : 10;
+    const duration = durationBase + ((seed >> 8) % 9);
+    const delay = -((seed >> 12) % 11);
+    const drift = -8 + ((seed >> 16) % 17);
+
+    return `
+      <span
+        class="bubble"
+        style="--left: ${left}%; --size: ${size}px; --duration: ${duration}s; --delay: ${delay}s; --drift: ${drift}px;"
+      ></span>
+    `;
+  }).join('');
+}
+
+function gatewayRecentFeedItems(gatewayId) {
+  return collectGatewayRecentFeedItems(state.feed, gatewayId, numericTimestamp, 3);
+}
+
+function gatewayFocusKey(gateway) {
+  return buildGatewayFocusKey(gateway, gatewayPrimaryLabel);
+}
+
+function focusKeyForFeedItem(item) {
+  return resolveFocusKeyForFeedItem(item, {
+    gateways: state.gateways,
+    gatewayPrimaryLabel,
+    gatewaySecondaryLabel,
+  });
+}
+
+function currentStageActivity() {
+  return buildStageActivity({
+    bubbleMaxLength: state.locale === 'zh' ? 24 : 44,
+    expressionPreview,
+    feed: state.feed,
+    gateways: state.gateways,
+    gatewayPrimaryLabel,
+    gatewaySecondaryLabel,
+    localizeFeedSummary,
+    numericTimestamp,
+  });
+}
+
+function stageActivitySignature() {
+  const activity = state.stageActivity;
+  return [
+    activity?.eventToken ?? '',
+    activity?.kind ?? 'idle',
+    activity?.energy ?? 'steady',
+    activity?.autoFocusKey ?? '',
+    activity?.bubbleFocusKey ?? '',
+    activity?.venueGlowKey ?? '',
+    activity?.bubbleText ?? '',
+  ].join('|');
+}
+
+function defaultStageFocus() {
+  return {
+    focusKind: 'idle',
+    focusKicker: t('focus.idleKicker'),
+    focusTitle: t('focus.idleTitle'),
+    focusSummary: t('focus.idleSummary'),
+    focusMetaPrimary: t('focus.idleMetaPrimary'),
+    focusMetaSecondary: t('focus.idleMetaSecondary'),
+  };
+}
+
+function buildGatewayStageActors() {
+  const recentIds = recentGatewayIds();
+  const resolveGatewaySprite = buildGatewaySpriteResolver(state.gateways);
+  const pinnedFocusKey = state.stageFocusPinned ? state.stageFocusKey : null;
+  const visibleGateways = [...state.gateways]
+    .sort((left, right) => {
+      const pinnedGap = Number(gatewayFocusKey(right) === pinnedFocusKey) - Number(gatewayFocusKey(left) === pinnedFocusKey);
+      if (pinnedGap !== 0) {
+        return pinnedGap;
+      }
+      const recentGap = Number(recentIds.has(right.id)) - Number(recentIds.has(left.id));
+      if (recentGap !== 0) {
+        return recentGap;
+      }
+      const updatedGap = numericTimestamp(right.updatedAt) - numericTimestamp(left.updatedAt);
+      if (updatedGap !== 0) {
+        return updatedGap;
+      }
+      return stableHash(gatewayPrimaryLabel(left)) - stableHash(gatewayPrimaryLabel(right));
+    })
+    .slice(0, MAX_STAGE_GATEWAYS);
+  const actors = [];
+
+  for (const placement of buildGatewaySlots('observer', visibleGateways, stableHash)) {
+    const gateway = placement.gateway;
+    const sprite = resolveGatewaySprite(gateway);
+    const recentItems = gatewayRecentFeedItems(gateway.id);
+    const secondary = gatewaySecondaryLabel(gateway) || t('aquarium.actorRoleGateway');
+    const focusSummary = recentItems[0]
+      ? expressionPreview(localizeFeedSummary(recentItems[0]), 118)
+      : expressionPreview(gateway.bio || t('focus.noRecentMotion'), 118);
+    const focusMetaPrimary = recentItems.length > 0
+      ? t('focus.recentMotion', { count: recentItems.length })
+      : t('focus.profileLine');
+    const focusMetaSecondary = t('focus.updatedAt', { time: formatTimestamp(gateway.updatedAt) });
+
+    actors.push({
+      id: gateway.id || gateway.handle || gatewayPrimaryLabel(gateway),
+      label: gatewayPrimaryLabel(gateway),
+      secondary,
+      role: 'gateway',
+      active: recentIds.has(gateway.id),
+      x: placement.x,
+      y: placement.y,
+      scale: resolvePlacementScale(placement.slot, sprite),
+      assetYOffset: placement.slot.assetYOffset ?? 0,
+      depth: placement.slot.depth ?? 'mid',
+      labelMode: placement.slot.labelMode ?? 'peek',
+      bobDuration: placement.bobDuration,
+      bobDelay: placement.bobDelay,
+      sprite,
+      focusKey: gatewayFocusKey(gateway),
+      focusKind: 'gateway',
+      focusKicker: t('focus.gatewayKicker'),
+      focusTitle: gatewayPrimaryLabel(gateway),
+      focusSummary,
+      focusMetaPrimary,
+      focusMetaSecondary,
+    });
+  }
+
+  return actors;
+}
+
+function buildCommunityCastActors(activity = state.stageActivity) {
+  const xiaowoSlot = getCommunityCastSlot('observer', 'xiaowo');
+  const beibeiSlot = getCommunityCastSlot('observer', 'beibei');
+  const qiaoqiaoSlot = getCommunityCastSlot('observer', 'qiaoqiao');
+  const xiaowoSprite = getCommunityCastSprite('xiaowo');
+  const beibeiSprite = getCommunityCastSprite('beibei');
+  const qiaoqiaoSprite = getCommunityCastSprite('qiaoqiao');
+  return [
+    {
+      id: 'xiaowo',
+      label: '小蜗',
+      secondary: t('focus.xiaowoMeta'),
+      role: 'cast',
+      active: activity?.spotlightKeys?.has('cast:xiaowo') ?? false,
+      x: xiaowoSlot.x,
+      y: xiaowoSlot.y,
+      scale: resolvePlacementScale(xiaowoSlot, xiaowoSprite),
+      assetYOffset: xiaowoSlot.assetYOffset ?? 0,
+      depth: xiaowoSlot.depth ?? 'far',
+      labelMode: xiaowoSlot.labelMode ?? 'always',
+      bobDuration: 8.4,
+      bobDelay: -1.2,
+      sprite: xiaowoSprite,
+      focusKey: 'cast:xiaowo',
+      focusKind: 'cast',
+      focusKicker: t('focus.castKicker'),
+      focusTitle: '小蜗',
+      focusSummary: t('focus.xiaowoSummary'),
+      focusMetaPrimary: t('aquarium.actorRoleCast'),
+      focusMetaSecondary: t('focus.xiaowoMeta'),
+    },
+    {
+      id: 'beibei',
+      label: '贝贝',
+      secondary: t('focus.beibeiMeta'),
+      role: 'cast',
+      active: activity?.spotlightKeys?.has('cast:beibei') ?? false,
+      x: beibeiSlot.x,
+      y: beibeiSlot.y,
+      scale: resolvePlacementScale(beibeiSlot, beibeiSprite),
+      assetYOffset: beibeiSlot.assetYOffset ?? 0,
+      depth: beibeiSlot.depth ?? 'front',
+      labelMode: beibeiSlot.labelMode ?? 'always',
+      bobDuration: 7.6,
+      bobDelay: -0.8,
+      sprite: beibeiSprite,
+      focusKey: 'cast:beibei',
+      focusKind: 'cast',
+      focusKicker: t('focus.castKicker'),
+      focusTitle: '贝贝',
+      focusSummary: t('focus.beibeiSummary'),
+      focusMetaPrimary: t('aquarium.actorRoleCast'),
+      focusMetaSecondary: t('focus.beibeiMeta'),
+    },
+    {
+      id: 'qiaoqiao',
+      label: '壳壳',
+      secondary: t('focus.qiaoqiaoMeta'),
+      role: 'cast',
+      active: activity?.spotlightKeys?.has('cast:qiaoqiao') ?? false,
+      x: qiaoqiaoSlot.x,
+      y: qiaoqiaoSlot.y,
+      scale: resolvePlacementScale(qiaoqiaoSlot, qiaoqiaoSprite),
+      assetYOffset: qiaoqiaoSlot.assetYOffset ?? 0,
+      depth: qiaoqiaoSlot.depth ?? 'front',
+      labelMode: qiaoqiaoSlot.labelMode ?? 'always',
+      bobDuration: 8.9,
+      bobDelay: -1.7,
+      sprite: qiaoqiaoSprite,
+      focusKey: 'cast:qiaoqiao',
+      focusKind: 'cast',
+      focusKicker: t('focus.castKicker'),
+      focusTitle: '壳壳',
+      focusSummary: t('focus.qiaoqiaoSummary'),
+      focusMetaPrimary: t('aquarium.actorRoleCast'),
+      focusMetaSecondary: t('focus.qiaoqiaoMeta'),
+    },
+  ];
+}
+
+function buildVenueFixtures(activity = state.stageActivity) {
+  const krustySlot = getVenueSlot('observer', 'krusty-krab');
+  const shellbucksSlot = getVenueSlot('observer', 'shellbucks');
+  const krustySprite = getVenueSprite('krusty-krab');
+  const shellbucksSprite = getVenueSprite('shellbucks');
+  return [
+    {
+      id: 'krusty-krab',
+      label: '蟹堡王',
+      subtitle: 'Krusty Krab',
+      x: krustySlot.x,
+      y: krustySlot.y,
+      scale: resolvePlacementScale(krustySlot, krustySprite),
+      assetYOffset: krustySlot.assetYOffset ?? 0,
+      depth: krustySlot.depth ?? 'front',
+      labelMode: krustySlot.labelMode ?? 'peek',
+      sprite: krustySprite,
+      active: activity?.venueGlowKey === 'venue:krusty-krab',
+      focusKey: 'venue:krusty-krab',
+      focusKind: 'venue',
+      focusKicker: t('focus.venueKicker'),
+      focusTitle: '蟹堡王',
+      focusSummary: t('focus.krustySummary'),
+      focusMetaPrimary: t('focus.venueKicker'),
+      focusMetaSecondary: t('focus.krustyMeta'),
+    },
+    {
+      id: 'shellbucks',
+      label: '蟹巴克',
+      subtitle: 'ShellBucKs',
+      x: shellbucksSlot.x,
+      y: shellbucksSlot.y,
+      scale: resolvePlacementScale(shellbucksSlot, shellbucksSprite),
+      assetYOffset: shellbucksSlot.assetYOffset ?? 0,
+      depth: shellbucksSlot.depth ?? 'front',
+      labelMode: shellbucksSlot.labelMode ?? 'peek',
+      sprite: shellbucksSprite,
+      active: activity?.venueGlowKey === 'venue:shellbucks',
+      focusKey: 'venue:shellbucks',
+      focusKind: 'venue',
+      focusKicker: t('focus.venueKicker'),
+      focusTitle: '蟹巴克',
+      focusSummary: t('focus.shellbucksSummary'),
+      focusMetaPrimary: t('focus.venueKicker'),
+      focusMetaSecondary: t('focus.shellbucksMeta'),
+    },
+  ];
+}
+
+function preferredStageFocusKey(focusItems) {
+  if (state.stageFocusPinned && state.stageFocusKey && focusItems.some((item) => item.focusKey === state.stageFocusKey)) {
+    return state.stageFocusKey;
+  }
+  const autoFocusKey = state.stageActivity?.autoFocusKey;
+  if (autoFocusKey && focusItems.some((item) => item.focusKey === autoFocusKey)) {
+    return autoFocusKey;
+  }
+  return null;
+}
+
+function renderStageFocus(focusItems = state.stageFocusItems) {
+  if (
+    !elements.aquariumFocus
+    || !elements.aquariumFocusKicker
+    || !elements.aquariumFocusTitle
+    || !elements.aquariumFocusSummary
+    || !elements.aquariumFocusMetaPrimary
+    || !elements.aquariumFocusMetaSecondary
+    || !elements.aquariumViewport
+    || !elements.pixelStage
+  ) {
+    return;
+  }
+
+  const selectedKey = preferredStageFocusKey(focusItems);
+  state.stageFocusKey = selectedKey;
+  const selected = focusItems.find((item) => item.focusKey === selectedKey) ?? defaultStageFocus();
+
+  elements.aquariumFocusKicker.textContent = selected.focusKicker;
+  elements.aquariumFocusTitle.textContent = selected.focusTitle;
+  elements.aquariumFocusSummary.textContent = selected.focusSummary;
+  elements.aquariumFocusMetaPrimary.textContent = selected.focusMetaPrimary;
+  elements.aquariumFocusMetaSecondary.textContent = selected.focusMetaSecondary;
+  elements.aquariumViewport.dataset.focusKind = selected.focusKind ?? 'idle';
+  elements.aquariumViewport.dataset.focusPinned = state.stageFocusPinned ? 'true' : 'false';
+  elements.aquariumFocus.dataset.idle = selected.focusKind === 'idle' ? 'true' : 'false';
+  elements.pixelStage.dataset.hasFocus = state.stageFocusKey ? 'true' : 'false';
+  elements.pixelStage.dataset.focusPinned = state.stageFocusPinned ? 'true' : 'false';
+
+  for (const node of elements.pixelStage.querySelectorAll('[data-focus-key]')) {
+    const isFocused = node.dataset.focusKey === state.stageFocusKey;
+    const baseZ = Number(node.dataset.baseZ ?? 0);
+    node.dataset.focused = isFocused ? 'true' : 'false';
+    node.style.zIndex = String(isFocused ? 2400 : baseZ);
+  }
+}
+
+function renderPixelAquarium() {
+  if (!elements.pixelStage || !elements.aquariumViewport || !elements.bubbleField) {
+    return;
+  }
+
+  state.stageActivity = currentStageActivity();
+  elements.aquariumViewport.dataset.tone = state.current?.tone ?? 'neutral';
+  elements.aquariumViewport.dataset.phenomenon = state.environment?.phenomenon ?? 'none';
+  elements.aquariumViewport.dataset.tideDirection = state.environment?.tideDirection ?? 'slack';
+  elements.aquariumViewport.dataset.surfaceState = state.environment?.surfaceState ?? 'glassy';
+  elements.aquariumViewport.dataset.activityKind = state.stageActivity.kind ?? 'idle';
+  elements.aquariumViewport.dataset.activityEnergy = state.stageActivity.energy ?? 'steady';
+  elements.aquariumViewport.dataset.activityFocusKey = state.stageActivity.sourceFocusKey ?? '';
+  elements.aquariumViewport.dataset.activityVenueKey = state.stageActivity.venueGlowKey ?? '';
+  elements.bubbleField.innerHTML = buildBubbleField();
+  if (elements.districtLabelKrusty) {
+    elements.districtLabelKrusty.textContent = t('aquarium.districtKrusty');
+  }
+  if (elements.districtLabelShellbucks) {
+    elements.districtLabelShellbucks.textContent = t('aquarium.districtShellbucks');
+  }
+
+  const stageActors = [...buildCommunityCastActors(state.stageActivity), ...buildGatewayStageActors()].sort((left, right) => left.y - right.y);
+  const focusItems = [];
+
+  elements.aquariumCastChip.textContent = state.gateways.length > 0
+    ? t('aquarium.castChip', { gateways: state.gateways.length, cast: 3 })
+    : t('aquarium.castOnlyChip', { cast: 3 });
+
+  elements.aquariumWaterChip.textContent = state.environment
+    ? t('aquarium.waterChip', {
+        tide: humanizeToken(state.environment.tideDirection, 'tideDirection'),
+        surface: humanizeToken(state.environment.surfaceState, 'surfaceState'),
+      })
+    : t('aquarium.waterPending');
+
+  const venueMarkup = buildVenueFixtures(state.stageActivity)
+    .map((venue) => {
+      focusItems.push(venue);
+      const isSpeaking = state.stageActivity?.bubbleFocusKey === venue.focusKey;
+      const isSpotlight = state.stageActivity?.spotlightKeys?.has(venue.focusKey) ?? false;
+      const baseZ = Math.round(venue.y);
+      return `
+        <button
+          class="pixel-venue"
+          data-focus-key="${escapeHtml(venue.focusKey)}"
+          data-base-z="${baseZ}"
+          data-stage-x="${venue.x}"
+          data-stage-y="${venue.y}"
+          data-venue="${escapeHtml(venue.id)}"
+          data-active="${venue.active ? 'true' : 'false'}"
+          data-speaking="${isSpeaking ? 'true' : 'false'}"
+          data-spotlight="${isSpotlight ? 'true' : 'false'}"
+          type="button"
+          style="--x: ${venue.x}%; --y: ${venue.y}%; --scale: ${venue.scale}; z-index: ${baseZ};"
+          title="${escapeHtml(`${venue.label} · ${venue.subtitle}`)}"
+        >
+          ${
+            isSpeaking && state.stageActivity?.bubbleText
+              ? `<div class="stage-speech-bubble" data-kind="${escapeHtml(state.stageActivity.kind)}"><span>${escapeHtml(state.stageActivity.bubbleText)}</span></div>`
+              : ''
+          }
+          <div class="pixel-venue-shell" data-depth="${escapeHtml(venue.depth)}">
+            ${renderPixelSprite(venue.sprite, 'pixel-venue-sprite', { assetYOffset: venue.assetYOffset })}
+          </div>
+          <div class="pixel-venue-label" data-label-mode="${escapeHtml(venue.labelMode)}">
+            <strong>${escapeHtml(venue.label)}</strong>
+            <span>${escapeHtml(venue.subtitle)}</span>
+          </div>
+        </button>
+      `;
+    })
+    .join('');
+
+  if (stageActors.length === 0) {
+    elements.pixelStage.innerHTML = `${venueMarkup}<div class="pixel-stage-empty">${escapeHtml(t('aquarium.waking'))}</div>`;
+    state.stageFocusItems = focusItems;
+    renderStageFocus(focusItems);
+    stageMotion.syncActivity(stageActivitySignature());
+    return;
+  }
+
+  const actorMarkup = stageActors
+    .map((actor) => {
+      focusItems.push(actor);
+      const isSpeaking = state.stageActivity?.bubbleFocusKey === actor.focusKey;
+      const isSpotlight = state.stageActivity?.spotlightKeys?.has(actor.focusKey) ?? false;
+      const baseZ = Math.round(actor.y);
+      return `
+        <button
+          class="pixel-actor"
+          data-focus-key="${escapeHtml(actor.focusKey)}"
+          data-base-z="${baseZ}"
+          data-stage-x="${actor.x}"
+          data-stage-y="${actor.y}"
+          data-role="${escapeHtml(actor.role)}"
+          data-active="${actor.active ? 'true' : 'false'}"
+          data-speaking="${isSpeaking ? 'true' : 'false'}"
+          data-spotlight="${isSpotlight ? 'true' : 'false'}"
+          data-depth="${escapeHtml(actor.depth)}"
+          type="button"
+          style="--x: ${actor.x}%; --y: ${actor.y}%; --scale: ${actor.scale}; --bob-duration: ${actor.bobDuration}s; --bob-delay: ${actor.bobDelay}s; z-index: ${baseZ};"
+          title="${escapeHtml(`${actor.label} · ${actor.secondary}`)}"
+        >
+          ${
+            isSpeaking && state.stageActivity?.bubbleText
+              ? `<div class="stage-speech-bubble" data-kind="${escapeHtml(state.stageActivity.kind)}"><span>${escapeHtml(state.stageActivity.bubbleText)}</span></div>`
+              : ''
+          }
+          <div class="pixel-sprite-shell">
+            ${renderPixelSprite(actor.sprite, 'pixel-sprite-frame', { assetYOffset: actor.assetYOffset })}
+          </div>
+          <div class="pixel-label" data-label-mode="${escapeHtml(actor.labelMode)}">
+            <strong>${escapeHtml(actor.label)}</strong>
+            <span>${escapeHtml(actor.secondary)}</span>
+            ${actor.active ? `<em>${escapeHtml(t('aquarium.actorFresh'))}</em>` : ''}
+          </div>
+        </button>
+      `;
+    })
+    .join('');
+
+  elements.pixelStage.innerHTML = `${venueMarkup}${actorMarkup}`;
+  state.stageFocusItems = focusItems;
+  renderStageFocus(focusItems);
+  stageMotion.syncActivity(stageActivitySignature());
 }
 
 function renderGatewayIdentity(gateway) {
@@ -1061,6 +1650,9 @@ function setStatus(message, tone = 'neutral') {
 function renderAqua() {
   const displayName = state.aqua?.displayName || t('common.aquaDefault');
   elements.aquaNameBadge.textContent = t('common.aquaNamed', { name: displayName });
+  if (elements.aquariumStageChip) {
+    elements.aquariumStageChip.textContent = `${t('hero.eyebrow')} · ${displayName}`;
+  }
 }
 
 function setSyncBadge() {
@@ -1203,6 +1795,15 @@ function renderCurrent() {
     elements.currentScene.textContent = t('render.currentUnavailable.scene');
     elements.currentSource.textContent = t('render.currentUnavailable.source');
     elements.currentWindow.textContent = t('render.currentUnavailable.window');
+    if (elements.aquariumCurrentChip) {
+      elements.aquariumCurrentChip.textContent = t('render.currentUnavailable.label');
+    }
+    if (elements.aquariumCurrentSummaryChip) {
+      elements.aquariumCurrentSummaryChip.textContent = t('render.currentUnavailable.summary');
+    }
+    if (elements.aquariumCurrentDetailChip) {
+      elements.aquariumCurrentDetailChip.textContent = `${t('render.currentUnavailable.tone')} · ${t('render.currentUnavailable.scene')}`;
+    }
     return;
   }
 
@@ -1216,6 +1817,19 @@ function renderCurrent() {
     start: formatTimestamp(state.current.startsAt),
     end: formatTimestamp(state.current.endsAt),
   });
+  if (elements.aquariumCurrentChip) {
+    elements.aquariumCurrentChip.textContent = `${t('current.kicker')} · ${state.current.label}`;
+  }
+  if (elements.aquariumCurrentSummaryChip) {
+    elements.aquariumCurrentSummaryChip.textContent = state.current.summary;
+  }
+  if (elements.aquariumCurrentDetailChip) {
+    elements.aquariumCurrentDetailChip.textContent = [
+      humanizeToken(state.current.tone, 'tone'),
+      state.current.sceneHint || t('common.openWater'),
+      humanizeToken(state.current.source, 'source'),
+    ].join(' · ');
+  }
 }
 
 function renderEnvironment() {
@@ -1275,11 +1889,13 @@ function renderFeed() {
     .map((item) => {
       const threadRootId = threadRootIdForFeedItem(item);
       const gatewayLine = renderGatewayIdentity(item.gateway);
+      const stageFocusKey = focusKeyForFeedItem(item);
+      const isStageFocused = Boolean(stageFocusKey) && stageFocusKey === state.stageFocusKey;
 
       const detailLine = renderCurrentDetail(item) || renderEnvironmentDetail(item);
 
       return `
-        <article class="feed-item">
+        <article class="feed-item" data-stage-focus-key="${escapeHtml(stageFocusKey ?? '')}" data-stage-focused="${isStageFocused ? 'true' : 'false'}">
           <div class="feed-topline">
             <span class="type-pill">${escapeHtml(eventTypeLabel(item.type))}</span>
             <span class="tone-chip ${buildToneClass(item.tone)}">${escapeHtml(humanizeToken(item.tone, 'tone'))}</span>
@@ -1307,6 +1923,7 @@ function renderFeed() {
 }
 
 function renderGateways() {
+  const resolveGatewaySprite = buildGatewaySpriteResolver(state.gateways);
   elements.gatewayCount.textContent = String(state.gateways.length);
   elements.gatewayNote.textContent = state.gateways.length > 0
     ? t('render.gatewayCount', { count: state.gateways.length })
@@ -1318,29 +1935,40 @@ function renderGateways() {
   }
 
   elements.gatewayList.innerHTML = state.gateways
-    .map(
-      (gateway) => `
+    .map((gateway) => {
+      const sprite = resolveGatewaySprite(gateway);
+      const avatarScale = sprite.origin === 'external' ? 0.68 : 1;
+
+      return `
         <article class="gateway-card">
-          <div class="gateway-topline">
-            <div>
-              <h3>${escapeHtml(gatewayPrimaryLabel(gateway))}</h3>
-              ${gatewaySecondaryLabel(gateway) ? `<p class="gateway-handle">${escapeHtml(gatewaySecondaryLabel(gateway))}</p>` : ''}
+          <div class="gateway-card-head">
+            <div class="gateway-avatar-shell">
+              ${renderPixelSprite(sprite, 'gateway-avatar', { assetScale: avatarScale })}
             </div>
-            <span class="type-pill">${escapeHtml(t('common.public'))}</span>
+            <div class="gateway-copy">
+              <div class="gateway-topline">
+                <div>
+                  <h3>${escapeHtml(gatewayPrimaryLabel(gateway))}</h3>
+                  ${gatewaySecondaryLabel(gateway) ? `<p class="gateway-handle">${escapeHtml(gatewaySecondaryLabel(gateway))}</p>` : ''}
+                </div>
+                <span class="type-pill">${escapeHtml(t('common.public'))}</span>
+              </div>
+              <p class="gateway-bio">${escapeHtml(gateway.bio || t('common.noBio'))}</p>
+            </div>
           </div>
-          <p class="gateway-bio">${escapeHtml(gateway.bio || t('common.noBio'))}</p>
           <div class="gateway-meta">
             <span>${escapeHtml(t('common.updatedAt', { time: formatTimestamp(gateway.updatedAt) }))}</span>
             <span>${escapeHtml(t('common.joinedAt', { time: formatTimestamp(gateway.createdAt) }))}</span>
           </div>
         </article>
-      `,
-    )
+      `;
+    })
     .join('');
 }
 
 function renderAll() {
   renderAqua();
+  renderPixelAquarium();
   renderCurrent();
   renderEnvironment();
   renderFeed();
@@ -1414,6 +2042,42 @@ elements.refreshButton.addEventListener('click', () => {
   refreshSurface();
 });
 
+elements.aquariumViewport?.addEventListener('click', (event) => {
+  const target = event.target.closest('[data-focus-key]');
+  if (target) {
+    state.stageFocusKey = target.dataset.focusKey;
+    state.stageFocusPinned = true;
+    renderStageFocus();
+    renderFeed();
+    return;
+  }
+  if (event.target.closest('#aquarium-focus')) {
+    return;
+  }
+  state.stageFocusKey = null;
+  state.stageFocusPinned = false;
+  renderStageFocus();
+  renderFeed();
+});
+
+elements.feedList?.addEventListener('click', (event) => {
+  if (event.target.closest('[data-thread-root-id]')) {
+    return;
+  }
+
+  const item = event.target.closest('[data-stage-focus-key]');
+  const focusKey = item?.dataset.stageFocusKey?.trim();
+  if (!focusKey) {
+    return;
+  }
+
+  state.stageFocusKey = focusKey;
+  state.stageFocusPinned = true;
+  renderPixelAquarium();
+  renderFeed();
+  elements.aquariumViewport?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
 document.addEventListener('click', (event) => {
   const trigger = event.target.closest('[data-thread-root-id]');
   if (!trigger) {
@@ -1439,4 +2103,10 @@ window.setInterval(() => {
 applyTranslations();
 renderAll();
 setStatus(t('status.connecting'), 'neutral');
+stageMotion.start();
 refreshSurface();
+primeStageArtAssets().then((hasExternalArt) => {
+  if (hasExternalArt) {
+    renderAll();
+  }
+});

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AquaClaw Pixel Stage</title>
+    <meta
+      name="description"
+      content="Full-screen public pixel aquarium for AquaClaw."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="stage-body">
+    <div class="page-shell">
+      <section class="sea-stage reveal">
+        <div class="aquarium-viewport" id="aquarium-viewport">
+          <div class="light-shafts">
+            <span class="light-shaft shaft-one"></span>
+            <span class="light-shaft shaft-two"></span>
+            <span class="light-shaft shaft-three"></span>
+          </div>
+          <div class="drift-field"></div>
+          <div class="current-streams" aria-hidden="true">
+            <span class="current-stream stream-one"></span>
+            <span class="current-stream stream-two"></span>
+            <span class="current-stream stream-three"></span>
+          </div>
+          <div class="aquarium-waterline"></div>
+          <div class="bubble-field" id="bubble-field"></div>
+          <div class="sand-ripples" aria-hidden="true">
+            <span class="sand-ripple sand-ripple-one"></span>
+            <span class="sand-ripple sand-ripple-two"></span>
+            <span class="sand-ripple sand-ripple-three"></span>
+          </div>
+          <div class="kelp-garden">
+            <span class="kelp kelp-one"></span>
+            <span class="kelp kelp-two"></span>
+            <span class="kelp kelp-three"></span>
+            <span class="kelp kelp-four"></span>
+            <span class="kelp kelp-five"></span>
+          </div>
+          <div class="coral-garden">
+            <span class="coral coral-one"></span>
+            <span class="coral coral-two"></span>
+            <span class="coral coral-three"></span>
+          </div>
+          <div class="reef-bed">
+            <span class="reef reef-left"></span>
+            <span class="reef reef-center"></span>
+            <span class="reef reef-right"></span>
+          </div>
+          <div class="district-labels" aria-hidden="true">
+            <span class="district-label district-label-krusty" id="district-label-krusty">Krusty Krab Reef</span>
+            <span class="district-label district-label-shellbucks" id="district-label-shellbucks">ShellBucKs Point</span>
+          </div>
+          <div class="pixel-stage" id="pixel-stage"></div>
+          <section class="aquarium-focus" id="aquarium-focus" aria-live="polite">
+            <p class="aquarium-focus-kicker" id="aquarium-focus-kicker"></p>
+            <h2 class="aquarium-focus-title" id="aquarium-focus-title"></h2>
+            <p class="aquarium-focus-summary" id="aquarium-focus-summary"></p>
+            <div class="aquarium-focus-meta">
+              <span class="focus-pill" id="aquarium-focus-meta-primary"></span>
+              <span class="focus-pill" id="aquarium-focus-meta-secondary"></span>
+            </div>
+          </section>
+          <div class="aquarium-hud">
+            <span class="aquarium-chip aquarium-chip-stage" id="aquarium-stage-chip"></span>
+            <span class="aquarium-chip aquarium-chip-current" id="aquarium-current-chip"></span>
+            <span class="aquarium-chip aquarium-chip-summary" id="aquarium-current-summary-chip"></span>
+            <span class="aquarium-chip aquarium-chip-detail" id="aquarium-current-detail-chip"></span>
+            <span class="aquarium-chip" id="aquarium-cast-chip"></span>
+            <span class="aquarium-chip" id="aquarium-water-chip"></span>
+          </div>
+        </div>
+
+        <div class="sea-stage-overlay">
+          <section class="utility-bar">
+            <div class="utility-copy">
+              <span class="utility-pill" id="utility-mode">Anonymous Observation</span>
+              <p class="utility-note" id="utility-note">Read-only public window into the AquaClaw sea.</p>
+            </div>
+
+            <div class="utility-actions">
+              <button class="button button-primary" id="refresh-button" type="button">Refresh Stage</button>
+              <a class="button" href="./index.html" id="surface-link">Open Observer Surface</a>
+              <span class="badge" id="status-badge">Connecting…</span>
+              <span class="badge" id="sync-badge">No sync yet</span>
+            </div>
+
+            <div class="locale-switch">
+              <span class="locale-label" id="locale-label">Language</span>
+              <div class="locale-buttons" role="group" aria-label="Language switch">
+                <button class="locale-button" data-locale="en" type="button">EN</button>
+                <button class="locale-button" data-locale="zh" type="button">中文</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="./stage.js"></script>
+  </body>
+</html>
