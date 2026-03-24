@@ -77,6 +77,32 @@ async function setHostedRegistrationPolicy(
   assert.equal(response.json().data.policy, policy);
 }
 
+async function importHostedXiaowoQueue(
+  app: ReturnType<typeof buildApp>,
+  ownerToken: string,
+  items: Array<{ headline: string; promptSummary: string; body: string }>,
+  createdAt?: string,
+) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/community-cast/bulletins/import',
+    headers: {
+      authorization: `Bearer ${ownerToken}`,
+    },
+    payload: {
+      createdAt,
+      items,
+    },
+  });
+  assert.equal(response.statusCode, 200);
+  return response.json().data as {
+    items: Array<{
+      id: string;
+      bodyDraft: string | null;
+    }>;
+  };
+}
+
 function assertRateLimited(
   response: {
     statusCode: number;
@@ -1543,7 +1569,7 @@ test('hosted owner session can patch and read community cast policy while gatewa
   await app.close();
 });
 
-test('hosted owner session can run community cast publishing while gateway tokens stay excluded', async () => {
+test('hosted owner session can run imported community cast queue items while gateway tokens stay excluded', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
   const owner = await bootstrapHostedOwner(app, 'hosted-community-cast-run-owner');
@@ -1594,18 +1620,67 @@ test('hosted owner session can run community cast publishing while gateway token
   assert.equal(root.statusCode, 201);
   const rootExpressionId = root.json().data.expression.id as string;
 
+  const imported = await importHostedXiaowoQueue(
+    app,
+    owner.credential.token,
+    [
+      {
+        headline: '海底洋葱新闻：hosted 水面又有人集体练习镇定脸',
+        promptSummary: '围绕一条国际热点改写成洋葱化插播。',
+        body: '小蜗插播一条：这条 hosted 亮线还没打算沉下去。',
+      },
+    ],
+    '2026-03-23T09:00:00.000Z',
+  );
+  assert.equal(imported.items.length, 1);
+
   const run = await app.inject({
     method: 'POST',
     url: '/api/v1/community-cast/run',
     headers: {
       authorization: `Bearer ${owner.credential.token}`,
     },
+    payload: {
+      createdAt: '2026-03-23T10:00:00.000Z',
+    },
   });
   assert.equal(run.statusCode, 200);
-  assert.equal(run.json().data.generation.action, 'created');
+  assert.equal(run.json().data.generation.action, 'reused');
   assert.equal(run.json().data.publish.action, 'published');
   assert.equal(run.json().data.publish.expression.gateway.displayName, '小蜗');
-  assert.equal(run.json().data.publish.expression.parentExpressionId, rootExpressionId);
+  assert.equal(run.json().data.publish.expression.parentExpressionId, null);
+  assert.equal(run.json().data.publish.candidate.id, imported.items[0]?.id);
+
+  const secondImport = await importHostedXiaowoQueue(
+    app,
+    owner.credential.token,
+    [
+      {
+        headline: '海底洋葱新闻：第二条 hosted 备选，留给显式覆写发布',
+        promptSummary: '围绕另一条国际热点改写成洋葱化插播。',
+        body: '小蜗插播一条：这条默认正文应该会被显式覆写。',
+      },
+    ],
+    '2026-03-23T11:00:00.000Z',
+  );
+  const publish = await app.inject({
+    method: 'POST',
+    url: '/api/v1/community-cast/run',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      candidateId: secondImport.items[0]?.id,
+      body: '小蜗插播一条：第二条 hosted 亮线这次由主人显式改写后再发。',
+      createdAt: '2026-03-23T11:30:00.000Z',
+    },
+  });
+  assert.equal(publish.statusCode, 200);
+  assert.equal(publish.json().data.generation, null);
+  assert.equal(publish.json().data.publish.action, 'published');
+  assert.equal(publish.json().data.publish.expression.gateway.displayName, '小蜗');
+  assert.equal(publish.json().data.publish.expression.parentExpressionId, null);
+  assert.match(publish.json().data.publish.candidate.bodyDraft, /主人显式改写/);
 
   const publicGateways = await app.inject({
     method: 'GET',
@@ -1624,6 +1699,26 @@ test('hosted owner session can run community cast publishing while gateway token
   assert.equal(forbidden.statusCode, 403);
   assert.equal(forbidden.json().error.code, 'forbidden');
 
+  const forbiddenImport = await app.inject({
+    method: 'POST',
+    url: '/api/v1/community-cast/bulletins/import',
+    headers: {
+      authorization: `Bearer ${participantToken}`,
+    },
+    payload: {
+      items: [
+        {
+          headline: 'forbidden',
+          promptSummary: 'forbidden',
+          body: 'forbidden',
+        },
+      ],
+    },
+  });
+  assert.equal(forbiddenImport.statusCode, 403);
+  assert.equal(forbiddenImport.json().error.code, 'forbidden');
+
+  assert.notEqual(rootExpressionId, run.json().data.publish.expression.id as string);
   await app.close();
 });
 
@@ -1691,6 +1786,14 @@ test('hosted owner session can inspect community cast bulletins and notes while 
   });
   assert.equal(root.statusCode, 201);
 
+  await importHostedXiaowoQueue(app, owner.credential.token, [
+    {
+      headline: '海底洋葱新闻：hosted 检查样本一号',
+      promptSummary: '围绕一条国际热点改写成洋葱化播报。',
+      body: '小蜗插播一条：这条 hosted 亮线又把整个水面带热了一点。',
+    },
+  ]);
+
   const run = await app.inject({
     method: 'POST',
     url: '/api/v1/community-cast/run',
@@ -1699,6 +1802,7 @@ test('hosted owner session can inspect community cast bulletins and notes while 
     },
   });
   assert.equal(run.statusCode, 200);
+  assert.equal(run.json().data.generation.action, 'reused');
   assert.equal(run.json().data.publish.action, 'published');
 
   const recharge = await app.inject({

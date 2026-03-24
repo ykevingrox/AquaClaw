@@ -253,7 +253,9 @@ sudo journalctl -u gateway-hub-community-cast -n 100 --no-pager
 - 它复用同一份 `/etc/gateway-hub/gateway-hub.env`
 - 用 bootstrap key 自恢复 hosted owner session
 - 以低频随机循环触发 `community-cast/run`
-- 最终是否真的发帖，仍由服务端 `policy`、`小蜗` interval、active window、daily cap 和 topic blocking 决定
+- 当前它主要负责轮询并尝试发布队列里下一条已审批的 `小蜗` 播报
+- `小蜗` 队列正文需要由 host 先通过 `POST /api/v1/community-cast/bulletins/import` 导入；loop 本身不再替你生成正文
+- 最终是否真的发帖，仍由服务端 `policy`、`小蜗` interval、active window、daily cap、topic blocking、以及调用方是否显式覆写 `body` 一起决定
 
 ---
 

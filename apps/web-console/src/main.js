@@ -1310,7 +1310,7 @@ const COPY = {
       title: 'Shape the rumor desk',
       action: 'Save Cast Policy',
       runAction: 'Run Now',
-      note: 'Host-owned guardrails for 小蜗 bulletin cadence plus 贝贝 / 壳壳 whisper routing. Leave daily cap blank for unlimited; leave both window clocks blank to disable that window.',
+      note: 'Host-owned guardrails for approved 小蜗 queue publish plus venue-triggered 贝贝 / 壳壳 whispers. Leave daily cap blank for unlimited; leave both window clocks blank to disable that window.',
       enabled: { label: 'Community cast' },
       dailyCap: { label: 'Daily bulletin cap', placeholder: 'Unlimited' },
       windowStart: { label: 'Global window start' },
@@ -1325,7 +1325,7 @@ const COPY = {
       qiaoqiaoEnabled: { label: '壳壳 whisper' },
       runHint: {
         label: 'Manual run',
-        note: 'Use Run Now to force one bulletin generation + publish pass.',
+        note: 'Use Run Now to let the server pick the next eligible queued 小蜗 bulletin and attempt publish.',
       },
     },
     profileCommand: {
@@ -1663,6 +1663,7 @@ const COPY = {
       communityCastIntervalRange: '{min}-{max}m cadence',
       communityCastPublished: 'published',
       communityCastDraft: 'draft',
+      communityCastNoStoredDraft: 'No stored approved body. This item only keeps headline/prompt routing hints.',
       communityCastTopicDomain: 'topic: {value}',
       communityCastSpeechGoal: 'goal: {value}',
       communityCastAnchorKind: 'anchor: {value}',
@@ -1673,6 +1674,7 @@ const COPY = {
       communityCastPolicyUpdated: 'Community-cast policy updated.',
       communityCastRunPublished: 'Community-cast run published {npc}: {headline}',
       communityCastRunCompleted: 'Community-cast run completed with action: {action}.',
+      communityCastRunSuppressed: 'Community-cast publish stayed suppressed: {reason}',
       waterTemperature: 'Water temperature',
       clarity: 'Clarity',
       tide: 'Tide',
@@ -2146,7 +2148,7 @@ const COPY = {
       title: '调整流言台',
       action: '保存播报策略',
       runAction: '立即运行',
-      note: '这是 host 持有的社区播报护栏：控制小蜗公开播报节奏，以及贝贝 / 壳壳的私语投递。每日上限留空表示不限；任一时间窗的开始和结束都留空表示关闭该时间窗。',
+      note: '这是 host 持有的社区播报护栏：控制已审批小蜗队列的发布节奏，以及贝贝 / 壳壳的场景私语投递。每日上限留空表示不限；任一时间窗的开始和结束都留空表示关闭该时间窗。',
       enabled: { label: '社区播报' },
       dailyCap: { label: '每日播报上限', placeholder: '不限' },
       windowStart: { label: '全局开始时间' },
@@ -2161,7 +2163,7 @@ const COPY = {
       qiaoqiaoEnabled: { label: '壳壳私语' },
       runHint: {
         label: '手动触发',
-        note: '点击“立即运行”会强制执行一轮候选生成和发布。',
+        note: '点击“立即运行”会让服务端挑选下一条符合条件的小蜗队列播报并尝试发布。',
       },
     },
     profileCommand: {
@@ -2498,6 +2500,7 @@ const COPY = {
       communityCastIntervalRange: '{min}-{max} 分钟节奏',
       communityCastPublished: '已发布',
       communityCastDraft: '草稿',
+      communityCastNoStoredDraft: '没有保存已审批正文；这条记录只保留标题和提示信息。',
       communityCastTopicDomain: '话题：{value}',
       communityCastSpeechGoal: '目标：{value}',
       communityCastAnchorKind: '锚点：{value}',
@@ -2508,6 +2511,7 @@ const COPY = {
       communityCastPolicyUpdated: '社区播报策略已更新。',
       communityCastRunPublished: '社区播报已发布 {npc} 的一条内容：{headline}',
       communityCastRunCompleted: '社区播报运行完成，结果：{action}。',
+      communityCastRunSuppressed: '社区播报没有真正发出：{reason}',
       waterTemperature: '水温',
       clarity: '清澈度',
       tide: '潮向',
@@ -6439,6 +6443,7 @@ function renderCommunityCastBulletinCard(bulletin, registry) {
   const npcDisplayName = communityCastNpcDisplayName(bulletin.npcId, registry);
   const status = bulletin.publishedAt ? t('common.communityCastPublished') : t('common.communityCastDraft');
   const publishedAt = bulletin.publishedAt ? formatWhen(bulletin.publishedAt) : formatWhen(bulletin.createdAt);
+  const storedDraftPreview = previewText(bulletin.bodyDraft, 220) || t('common.communityCastNoStoredDraft');
 
   return `
     <article class="pulse-candidate">
@@ -6457,7 +6462,7 @@ function renderCommunityCastBulletinCard(bulletin, registry) {
         <span class="meta-pill">${escapeHtml(t('common.communityCastAnchorKind', { value: bulletin.anchorKind || t('common.noneLabel') }))}</span>
         <span class="meta-pill">${escapeHtml(t('common.updatedAt', { time: publishedAt }))}</span>
       </div>
-      <p class="thread-note-body">${escapeHtml(previewText(bulletin.bodyDraft, 220) || t('common.noneLabel'))}</p>
+      <p class="thread-note-body">${escapeHtml(storedDraftPreview)}</p>
     </article>
   `;
 }
@@ -8296,6 +8301,7 @@ elements.communityCastRunButton.addEventListener('click', () => {
     const publishedExpression = payload.data.publish?.expression;
     const publishedCandidate = payload.data.publish?.candidate;
     const publishedNpcId = payload.data.publish?.candidate?.npcId ?? 'xiaowo';
+    const suppressedReason = Array.isArray(payload.data.publish?.reasons) ? payload.data.publish.reasons[0] : null;
     const publishedHeadline =
       previewText(publishedCandidate?.headline || publishedExpression?.body, 96)
       || communityCastNpcDisplayName(publishedNpcId, communityCastState.registry);
@@ -8305,6 +8311,8 @@ elements.communityCastRunButton.addEventListener('click', () => {
             npc: communityCastNpcDisplayName(publishedNpcId, communityCastState.registry),
             headline: publishedHeadline,
           })
+        : payload.data.publish?.action === 'suppressed' && suppressedReason
+          ? t('common.communityCastRunSuppressed', { reason: suppressedReason })
         : t('common.communityCastRunCompleted', { action: payload.data.generation?.action ?? 'suppressed' }),
     };
   });

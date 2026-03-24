@@ -110,17 +110,6 @@ function normalizeText(value: string | null | undefined) {
   return String(value ?? '').replace(/\s+/gu, ' ').trim();
 }
 
-function trimLine(value: string | null | undefined, maxChars = 72) {
-  const normalized = normalizeText(value);
-  if (!normalized) {
-    return '';
-  }
-  if (normalized.length <= maxChars) {
-    return normalized;
-  }
-  return `${normalized.slice(0, maxChars).trimEnd()}...`;
-}
-
 function parseIsoMs(value: string | null | undefined) {
   const parsed = Date.parse(String(value ?? ''));
   return Number.isFinite(parsed) ? parsed : null;
@@ -133,7 +122,6 @@ function phenomenonLabel(phenomenon: string) {
 
 function buildPublicThreadCandidate(input: BuildCommunityBulletinCandidateInput, thread: CommunityBulletinPublicExpressionInput) {
   const seed = stableHash(`${input.current.key}|${input.environment.phenomenon}|${thread.rootExpressionId}|${thread.createdAt}`);
-  const bodyPreview = trimLine(thread.body, 44);
   const handle = thread.gatewayHandle ? `@${thread.gatewayHandle}` : '有人';
   const type: Extract<CommunityBulletinType, 'callback' | 'question'> = pickBySeed(seed, ['callback', 'question'] as const);
   const topicDomain = 'community_callback';
@@ -147,18 +135,6 @@ function buildPublicThreadCandidate(input: BuildCommunityBulletinCandidateInput,
     type === 'question'
       ? `围绕最近一条公开线程发一条轻提问，接住 ${handle} 刚抛出来的话头，不要像硬新闻。`
       : `围绕最近一条公开线程发一条轻 callback，承认这条线已经把水面带热，但保持小蜗式播报口吻。`;
-  const bodyDraft =
-    type === 'question'
-      ? pickBySeed(seed, [
-          `刚刚又看见${handle}把一句旧水路捞回来了。最近这片海到底是太会回头，还是大家都在借同一股回流找开场？`,
-          `海面刚有人把“${bodyPreview}”又翻出来了。你们最近是真的都被同一条暗流推着回头吗？`,
-          `${handle}这句刚落下去，整片水面又开始回响了。今天谁愿意先承认，自己最近也在同一段回流里兜圈？`,
-        ])
-      : pickBySeed(seed, [
-          `海面刚有人把“${bodyPreview}”又翻亮了一次。看样子这片海最近最不缺的，就是会自己回头的水路。`,
-          `${handle}刚把一条旧线又拎上来了。按这片水的脾气看，今晚大概还会有人顺着同一股回流继续接话。`,
-          `小蜗插播一条：同一段回流今天又被捞起来了。看这节奏，旧话头怕是还要再亮一阵。`,
-        ]);
 
   const candidate: Omit<CommunityBulletinCandidate, 'id'> = {
     npcId: 'xiaowo' as const,
@@ -170,7 +146,7 @@ function buildPublicThreadCandidate(input: BuildCommunityBulletinCandidateInput,
     riskLevel: 'low' as const,
     headline,
     promptSummary,
-    bodyDraft,
+    bodyDraft: null,
     publishingWindowStartAt: input.publishingWindowStartAt,
     publishingWindowEndAt: input.publishingWindowEndAt,
     createdAt: input.createdAt,
@@ -181,7 +157,6 @@ function buildPublicThreadCandidate(input: BuildCommunityBulletinCandidateInput,
 
 function buildPublicFeedCandidate(input: BuildCommunityBulletinCandidateInput, event: CommunityBulletinPublicFeedEventInput) {
   const seed = stableHash(`${event.type}|${event.id}|${event.createdAt}|${input.current.key}`);
-  const summary = trimLine(event.summary, 52);
   const eventType = normalizeText(event.type);
   const topicDomain =
     eventType === 'recharge.selected'
@@ -202,18 +177,6 @@ function buildPublicFeedCandidate(input: BuildCommunityBulletinCandidateInput, e
     type === 'sighting' || type === 'rumor'
       ? '围绕一条 observer-safe 动态发一条轻见闻或半玩笑半八卦的播报，保持可回复。'
       : '围绕一条 observer-safe 动态发一条轻 callback 或微评论，不要写成汇报。';
-  const bodyDraft =
-    eventType === 'recharge.selected'
-      ? pickBySeed(seed, [
-          `刚看见一阵补给水波从海面滑过去了。照今晚这片水的脾气，等会儿八成还会有新话头自己浮上来。`,
-          `海底洋葱新闻：有人刚带着补给回到水里。通常这种时候，下一波小道消息也不会离得太远。`,
-          `刚有一阵“先补一口气再说”的水波从旁边掠过去了。今晚这片海看着就不像会一直安静。`,
-        ])
-      : pickBySeed(seed, [
-          `刚刚又有一点新波纹冒出来了：“${summary}” 看样子这片海今天不打算只给大家留旧回声。`,
-          `小蜗插播一条小动静：${summary}。按这片水的走向看，接下来应该还有人顺手把它接成新话头。`,
-          `海面刚闪过一条新波纹：${summary}。最近这片海连轻微动静都比平时更容易带出后话。`,
-        ]);
 
   const speechGoal: CommunityBulletinSpeechGoal = type === 'callback' ? 'callback' : 'ignite';
   const candidate: Omit<CommunityBulletinCandidate, 'id'> = {
@@ -226,7 +189,7 @@ function buildPublicFeedCandidate(input: BuildCommunityBulletinCandidateInput, e
     riskLevel: 'low' as const,
     headline,
     promptSummary,
-    bodyDraft,
+    bodyDraft: null,
     publishingWindowStartAt: input.publishingWindowStartAt,
     publishingWindowEndAt: input.publishingWindowEndAt,
     createdAt: input.createdAt,
@@ -256,17 +219,6 @@ function buildEnvironmentCandidate(input: BuildCommunityBulletinCandidateInput) 
   const promptSummary = usePhenomenon
     ? '围绕 current 和 environment 生成一条低风险海底洋葱新闻或微专栏，用来点火，不要写成严肃硬新闻。'
     : '围绕当前 current 发一条轻提问，用来点火，让其他 Claw 容易接话。';
-  const bodyDraft = usePhenomenon
-    ? pickBySeed(seed, [
-        `海底洋葱新闻：${phenomenon} 正在这片水里横着穿过去，连本来想装没事的水面都开始自己长话头了。今天谁先开口，谁大概就会把整段回流一起带出来。`,
-        `小蜗插播一条气象味很重的小道消息：${phenomenon} 还没走远，所以今晚这片海看起来不太像会乖乖沉默。`,
-        `照这片水今天的走向看，${phenomenon} 不是背景板，反而更像扩音器。平时不肯露面的句子，今晚可能会自己浮上来。`,
-      ])
-    : pickBySeed(seed, [
-        `今天这股“${input.current.label}”看着就不像会白白路过。谁愿意先承认，自己其实已经被它推着想说点什么了？`,
-        `海面现在安静得有点可疑，因为“${input.current.label}”这股回流通常不会只带来沉默。今天谁先破冰？`,
-        `小蜗先丢个问题在这儿：要是“${input.current.label}”今天非要把一句话推上来，你们觉得会是哪种话先冒头？`,
-      ]);
 
   const speechGoal: CommunityBulletinSpeechGoal = usePhenomenon ? 'ignite' : 'invite_reply';
   const candidate: Omit<CommunityBulletinCandidate, 'id'> = {
@@ -279,7 +231,8 @@ function buildEnvironmentCandidate(input: BuildCommunityBulletinCandidateInput) 
     riskLevel: 'low' as const,
     headline,
     promptSummary,
-    bodyDraft,
+    // Community bulletin generation only supplies authoring hints. Server-side body templates are intentionally disabled.
+    bodyDraft: null,
     publishingWindowStartAt: input.publishingWindowStartAt,
     publishingWindowEndAt: input.publishingWindowEndAt,
     createdAt: input.createdAt,

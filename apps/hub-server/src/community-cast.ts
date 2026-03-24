@@ -98,7 +98,7 @@ const MANAGED_COMMUNITY_CAST: readonly CommunityNpcProfile[] = [
     publicPostingEnabled: true,
     privateWhisperEnabled: false,
     toneGuide: ['wry', 'playful', 'observant', 'lightly theatrical'],
-    allowedTopicDomains: ['onion_news', 'community_callback', 'current_environment', 'reef_sightings', 'soft_questions'],
+    allowedTopicDomains: ['onion_news'],
     forbiddenTopicDomains: ['medical_advice', 'financial_advice', 'hard_news_claims', 'political_campaigning'],
   },
   {
@@ -274,7 +274,7 @@ function formatSuggestedPickup(input: VenueWhisperDraftInput) {
 
 export function buildVenueWhisperDraft(input: VenueWhisperDraftInput): VenueWhisperDraft {
   const seed = stableHash(
-    [input.npcId, input.venueSlug, input.cue ?? 'none', input.currentKey, input.phenomenon, input.createdAt].join('|'),
+    [input.npcId, input.venueSlug, input.cue ?? 'none', input.suggestedItem ?? 'none', input.suggestedKind ?? 'none', input.createdAt].join('|'),
   );
   const pickup = formatSuggestedPickup(input);
 
@@ -284,21 +284,15 @@ export function buildVenueWhisperDraft(input: VenueWhisperDraftInput): VenueWhis
       '贝贝眨了眨眼，像是顺手把一句八卦塞进了餐盘边。',
       '贝贝一边收银一边靠近半步，显然忍不住想先透露一点风声。',
     ]);
-    const waterRead =
-      input.phenomenon === 'lantern_swarm'
-        ? '灯群一亮，最爱借别人的热闹装懂的人会格外显眼。'
-        : input.phenomenon === 'storm_front'
-          ? '风头一紧，平时藏着的小道消息会被吹得满场乱撞。'
-          : `像“${input.currentLabel}”这种水势，最容易把轻话头吹成整晚的回声。`;
     const cueRead =
       input.cue === 'heavy_reset'
-        ? '今天来这里补能的，多半嘴比平时更松一点。'
-        : '今晚这种轻提神的节奏，很适合听谁先把场子点热。';
+        ? '今天肯坐下来狠狠干一口补给的人，多半也带着点想往外放的话。'
+        : '这种顺手提神的小停靠，最容易让人先漏出半句本来想藏着的话。';
     return {
       topicDomain: 'gossip',
       summary: `贝贝在${input.venueName}递来一条轻八卦，提醒你留意谁会先把话头吹热。`,
-      body: `${opening}她把${pickup}朝你推了推，说：“${waterRead} ${cueRead} 你要是待会儿在公开海面听见有人先夸路线、夸补能、夸自己会看潮，记一下是谁先开的头。”`,
-      tags: ['npc:beibei', `venue:${input.venueSlug}`, `current:${input.currentKey}`, `phenomenon:${input.phenomenon}`, 'gossip'],
+      body: `${opening}她把${pickup}朝你推了推，说：“${cueRead} 你要是待会儿在公开海面听见有人先夸路线、夸补能、夸自己很会带气氛，记一下是谁先开的头。”`,
+      tags: ['npc:beibei', `venue:${input.venueSlug}`, `cue:${input.cue ?? 'none'}`, 'gossip'],
       mentionPolicy: 'paraphrase_ok',
       freshnessScore: input.cue === 'heavy_reset' ? 0.82 : 0.76,
       freshHours: 36,
@@ -314,19 +308,15 @@ export function buildVenueWhisperDraft(input: VenueWhisperDraftInput): VenueWhis
     '壳壳把杯子往桌上一放，语气里已经带上了那种熟悉的阴阳味。',
     '壳壳没抬头，只把一句观察像细盐一样撒进了空气里。',
   ]);
-  const waterRead =
-    input.clarity === 'clear' || input.clarity === 'crystalline'
-      ? '水一清，人就容易误以为自己的小心思没人看见。'
-      : '水色一乱，重复别人话的人反而最容易露形。';
   const cueRead =
     input.cue === 'heavy_reset'
       ? '要是今天有人忽然把情绪说得很满，多半是在给自己撑场面。'
-      : '这种轻提神的时段，最适合看谁在借别人的热闹抬高自己。';
+      : '这种短暂停靠的时段，最适合看谁在借别人的热闹抬高自己。';
   return {
     topicDomain: 'observer_note',
     summary: `壳壳在${input.venueName}丢下一句带刺的观察，提醒你留意谁在借浪表演。`,
-    body: `${opening}他把${pickup}推到一边，淡淡地说：“${waterRead} ${cueRead} 真要开口，不如先记住谁最爱重复别人的亮点，却装得像是自己先想到的。”`,
-    tags: ['npc:qiaoqiao', `venue:${input.venueSlug}`, `current:${input.currentKey}`, `phenomenon:${input.phenomenon}`, 'observer_note'],
+    body: `${opening}他把${pickup}推到一边，淡淡地说：“${cueRead} 真要开口，不如先记住谁最爱重复别人的亮点，却装得像是自己先想到的。”`,
+    tags: ['npc:qiaoqiao', `venue:${input.venueSlug}`, `cue:${input.cue ?? 'none'}`, 'observer_note'],
     mentionPolicy: 'paraphrase_ok',
     freshnessScore: input.cue === 'heavy_reset' ? 0.79 : 0.73,
     freshHours: 30,

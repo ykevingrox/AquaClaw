@@ -10,6 +10,7 @@ import {
   type CommunityBulletinCandidate,
   type CommunityBulletinGenerationResult,
   type CommunityBulletinPublishResult,
+  type ImportCommunityBulletinCandidatesResult,
   type CommunityMemoryNote,
   type CurrentRecord,
   createGatewayStore,
@@ -296,6 +297,18 @@ interface RunCommunityCastBody {
   candidateId?: string;
   body?: string;
   createdAt?: string;
+}
+
+interface ImportCommunityCastBulletinsBody {
+  replaceUnpublished?: boolean;
+  createdAt?: string;
+  items?: Array<{
+    headline?: string;
+    promptSummary?: string;
+    body?: string;
+    publishingWindowStartAt?: string | null;
+    publishingWindowEndAt?: string | null;
+  }>;
 }
 
 interface UpdateConversationReadStateBody {
@@ -909,6 +922,15 @@ function toCommunityBulletinGenerationSummary(result: CommunityBulletinGeneratio
       lastCandidateAt: result.state.lastCandidateAt,
       remainingDailyCap: result.state.remainingDailyCap,
     },
+  };
+}
+
+function toCommunityBulletinImportSummary(result: ImportCommunityBulletinCandidatesResult) {
+  return {
+    importedAt: result.importedAt,
+    replacedCount: result.replacedCount,
+    items: result.items.map((candidate) => toCommunityBulletinCandidateSummary(candidate)),
+    policy: toCommunityCastPolicySummary(result.policy),
   };
 }
 
@@ -4195,6 +4217,172 @@ export function buildApp(options: BuildAppOptions = {}) {
         ok: false,
         error: {
           code: mapped.code,
+          message: messageText,
+        },
+      });
+    }
+  });
+
+  app.post<{ Body: ImportCommunityCastBulletinsBody }>('/api/v1/community-cast/bulletins/import', async (request, reply) => {
+    let actorHostId: string;
+
+    if (deploymentMode === 'hosted') {
+      const hostedOwner = getHostedOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!hostedOwner.ok) {
+        const endpointError = hostedOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorHostId = hostedOwner.session.host.id;
+    } else {
+      const localOwner = getLocalOwnerSessionForEndpoint(store, request.headers.authorization);
+      if (!localOwner.ok) {
+        const endpointError = localOwner.error;
+        return reply.code(endpointError.statusCode).send({
+          ok: false,
+          error: {
+            code: endpointError.code,
+            message: endpointError.message,
+          },
+        });
+      }
+      actorHostId = localOwner.session.host.id;
+    }
+
+    if (request.body?.replaceUnpublished !== undefined && typeof request.body.replaceUnpublished !== 'boolean') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'replaceUnpublished must be a boolean when provided',
+        },
+      });
+    }
+    if (request.body?.createdAt !== undefined && typeof request.body.createdAt !== 'string') {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'createdAt must be a string when provided',
+        },
+      });
+    }
+    if (!Array.isArray(request.body?.items) || request.body.items.length === 0) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: 'items must be a non-empty array',
+        },
+      });
+    }
+    for (const item of request.body.items) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'validation_failed',
+            message: 'each item must be an object',
+          },
+        });
+      }
+      if (typeof item.headline !== 'string' || !item.headline.trim()) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'validation_failed',
+            message: 'each item requires a non-empty headline',
+          },
+        });
+      }
+      if (typeof item.promptSummary !== 'string' || !item.promptSummary.trim()) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'validation_failed',
+            message: 'each item requires a non-empty promptSummary',
+          },
+        });
+      }
+      if (typeof item.body !== 'string' || !item.body.trim()) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'validation_failed',
+            message: 'each item requires a non-empty body',
+          },
+        });
+      }
+      if (item.publishingWindowStartAt !== undefined && item.publishingWindowStartAt !== null && typeof item.publishingWindowStartAt !== 'string') {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'validation_failed',
+            message: 'publishingWindowStartAt must be a string or null when provided',
+          },
+        });
+      }
+      if (item.publishingWindowEndAt !== undefined && item.publishingWindowEndAt !== null && typeof item.publishingWindowEndAt !== 'string') {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'validation_failed',
+            message: 'publishingWindowEndAt must be a string or null when provided',
+          },
+        });
+      }
+    }
+
+    try {
+      if (!store.findHostById(actorHostId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: {
+            code: 'not_found',
+            message: 'host not found',
+          },
+        });
+      }
+
+      const imported = store.importCommunityBulletinCandidates({
+        hostId: actorHostId,
+        replaceUnpublished: request.body?.replaceUnpublished,
+        createdAt: request.body?.createdAt?.trim() || undefined,
+        items: request.body.items.map((item) => ({
+          headline: item.headline?.trim() ?? '',
+          promptSummary: item.promptSummary?.trim() ?? '',
+          body: item.body?.trim() ?? '',
+          publishingWindowStartAt:
+            item.publishingWindowStartAt === undefined
+              ? undefined
+              : item.publishingWindowStartAt === null
+                ? null
+                : item.publishingWindowStartAt.trim(),
+          publishingWindowEndAt:
+            item.publishingWindowEndAt === undefined
+              ? undefined
+              : item.publishingWindowEndAt === null
+                ? null
+                : item.publishingWindowEndAt.trim(),
+        })),
+      });
+
+      return {
+        ok: true,
+        data: toCommunityBulletinImportSummary(imported),
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to import community bulletins';
+      const statusCode = messageText === 'host not found' ? 404 : 400;
+      return reply.code(statusCode).send({
+        ok: false,
+        error: {
+          code: statusCode === 404 ? 'not_found' : 'validation_failed',
           message: messageText,
         },
       });

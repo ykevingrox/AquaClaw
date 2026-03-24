@@ -142,6 +142,28 @@ async function createRechargeEvent(baseUrl: string, token: string) {
   };
 }
 
+async function importCommunityBulletinQueue(baseUrl: string, token: string, input: {
+  createdAt?: string;
+  items: Array<{
+    headline: string;
+    promptSummary: string;
+    body: string;
+  }>;
+}) {
+  const payload = await requestHosted(baseUrl, '/api/v1/community-cast/bulletins/import', {
+    method: 'POST',
+    token,
+    payload: input,
+  });
+  return payload.data as {
+    items: Array<{
+      id: string;
+      headline: string;
+      bodyDraft: string | null;
+    }>;
+  };
+}
+
 async function runCommunityCastLoopOnce(baseUrl: string, bootstrapKey: string, rootDir: string) {
   const envFilePath = path.join(rootDir, 'community-cast-loop.env');
   const stateFilePath = path.join(rootDir, 'community-cast-loop-state.json');
@@ -347,34 +369,44 @@ async function main() {
     });
     assert.equal(policy.data.policy.npcs.xiaowo.minIntervalMinutes, 60);
 
-    const bulletinAnchor = await createPublicExpression(baseUrl, beta.token, {
-      body: '今天海面最先把话头吹热的，还是蟹堡王那一圈吗？',
+    const importedBulletins = await importCommunityBulletinQueue(baseUrl, owner.token, {
+      createdAt: '2026-03-23T09:00:00.000Z',
+      items: [
+        {
+          headline: '海底洋葱新闻：蟹堡王这圈水面又把老话头重新顶上来了',
+          promptSummary: '围绕一条国际热点改写成洋葱化播报，保持可接话。',
+          body: '小蜗插播一条：蟹堡王这圈水温又把老话头重新顶上来了。',
+        },
+      ],
     });
+    assert.equal(importedBulletins.items.length, 1);
+
     const bulletinRun = await runCommunityCastLoopOnce(baseUrl, 'community-cast-e2e-secret', tempRoot);
+    assert.equal(bulletinRun.payload.run?.generationAction, 'reused');
     assert.equal(bulletinRun.payload.run?.publishAction, 'published');
+    const bulletinCandidateId = bulletinRun.payload.run?.candidateId;
+    assert.ok(bulletinCandidateId);
+    assert.equal(bulletinCandidateId, importedBulletins.items[0]?.id);
 
     const publishedBulletins = await requestHosted(baseUrl, '/api/v1/community-cast/bulletins?published=true&npcId=xiaowo', {
       token: owner.token,
     });
     assert.equal(publishedBulletins.data.items.length, 1);
-    assert.equal(publishedBulletins.data.items[0].anchorId, bulletinAnchor.id);
+    assert.equal(publishedBulletins.data.items[0].headline, importedBulletins.items[0]?.headline);
 
     const publishedExpressionId = bulletinRun.payload.run?.publishedExpressionId;
     assert.ok(publishedExpressionId);
-    const publishedThread = await requestHosted(
-      baseUrl,
-      `/api/v1/public-expressions?rootExpressionId=${encodeURIComponent(bulletinAnchor.id)}`,
-    );
-    const xiaowoReply = (publishedThread.data.items as Array<{
+    const publishedFeed = await requestHosted(baseUrl, '/api/v1/public-expressions');
+    const xiaowoRoot = (publishedFeed.data.items as Array<{
       id: string;
       parentExpressionId: string | null;
       gateway: {
         displayName: string;
       };
     }>).find((item) => item.id === publishedExpressionId);
-    assert.ok(xiaowoReply);
-    assert.equal(xiaowoReply.parentExpressionId, bulletinAnchor.id);
-    assert.equal(xiaowoReply.gateway.displayName, '小蜗');
+    assert.ok(xiaowoRoot);
+    assert.equal(xiaowoRoot.parentExpressionId, null);
+    assert.equal(xiaowoRoot.gateway.displayName, '小蜗');
 
     const rechargeEvent = await createRechargeEvent(baseUrl, alpha.token);
     const alphaMine = await requestHosted(baseUrl, '/api/v1/community-memory/mine', {

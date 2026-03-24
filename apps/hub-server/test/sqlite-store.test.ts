@@ -19,6 +19,19 @@ function registerGateway(store: GatewayStore, input: { displayName: string; hand
   return store.register(input).gateway;
 }
 
+function importXiaowoQueue(
+  store: GatewayStore,
+  hostId: string,
+  items: Array<{ headline: string; promptSummary: string; body: string }>,
+  createdAt = '2026-03-23T09:00:00.000Z',
+) {
+  return store.importCommunityBulletinCandidates({
+    hostId,
+    createdAt,
+    items,
+  });
+}
+
 function withFrozenTime<T>(iso: string, fn: () => T): T {
   const fixedNow = new Date(iso).getTime();
   const RealDate = Date;
@@ -925,7 +938,7 @@ test('sqlite backend preserves community memory notes across restart', async () 
   }
 });
 
-test('sqlite backend preserves generated xiaowo bulletin candidates across restart', () => {
+test('sqlite backend preserves imported xiaowo bulletin queue items across restart', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-community-bulletin-'));
   const databasePath = join(tempDir, 'aquaclaw.sqlite');
 
@@ -933,10 +946,6 @@ test('sqlite backend preserves generated xiaowo bulletin candidates across resta
 
   try {
     const host = store1.bootstrapLocalSession().host;
-    const alpha = registerGateway(store1, {
-      displayName: 'SQLite Bulletin Alpha',
-      handle: 'sqlite-bulletin-alpha',
-    });
 
     store1.updateCommunityCastPolicy({
       hostId: host.id,
@@ -949,17 +958,20 @@ test('sqlite backend preserves generated xiaowo bulletin candidates across resta
         },
       },
     });
-    store1.createPublicExpression({
-      gatewayId: alpha.id,
-      body: 'The reef keeps bending back toward the same bright corner.',
-      createdAt: '2026-03-23T10:00:00.000Z',
-    });
-
-    const generated = store1.generateCommunityBulletinCandidate({
-      createdAt: '2026-03-23T11:00:00.000Z',
-    });
-    assert.equal(generated.action, 'created');
-    const generatedId = generated.candidate?.id ?? null;
+    const imported = importXiaowoQueue(
+      store1,
+      host.id,
+      [
+        {
+          headline: '海底洋葱新闻：SQLite 队列一号',
+          promptSummary: '围绕一条国际热点改写成洋葱化插播。',
+          body: '小蜗插播一条：有些大场面每次一整齐，就会显得像排练过。',
+        },
+      ],
+      '2026-03-23T11:00:00.000Z',
+    );
+    assert.equal(imported.items.length, 1);
+    const importedId = imported.items[0]?.id ?? null;
 
     if (store1 instanceof SqliteGatewayStore) {
       store1.close();
@@ -969,9 +981,10 @@ test('sqlite backend preserves generated xiaowo bulletin candidates across resta
     try {
       const page = store2.listCommunityBulletins({ published: false });
       assert.equal(page.items.length, 1);
-      assert.equal(page.items[0]?.id, generatedId);
+      assert.equal(page.items[0]?.id, importedId);
       assert.equal(page.items[0]?.npcId, 'xiaowo');
-      assert.equal(page.items[0]?.anchorKind, 'public_thread');
+      assert.equal(page.items[0]?.anchorKind, 'none');
+      assert.match(page.items[0]?.bodyDraft ?? '', /排练过/);
     } finally {
       if (store2 instanceof SqliteGatewayStore) {
         store2.close();
@@ -987,7 +1000,7 @@ test('sqlite backend preserves generated xiaowo bulletin candidates across resta
   }
 });
 
-test('sqlite backend preserves published xiaowo bulletin state and managed actor hiding across restart', () => {
+test('sqlite backend preserves published imported xiaowo bulletin state and managed actor hiding across restart', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'gateway-hub-sqlite-community-bulletin-publish-'));
   const databasePath = join(tempDir, 'aquaclaw.sqlite');
 
@@ -995,10 +1008,6 @@ test('sqlite backend preserves published xiaowo bulletin state and managed actor
 
   try {
     const host = store1.bootstrapLocalSession().host;
-    const alpha = registerGateway(store1, {
-      displayName: 'SQLite Publish Alpha',
-      handle: 'sqlite-publish-alpha',
-    });
 
     store1.updateCommunityCastPolicy({
       hostId: host.id,
@@ -1013,16 +1022,20 @@ test('sqlite backend preserves published xiaowo bulletin state and managed actor
       },
     });
 
-    const root = store1.createPublicExpression({
-      gatewayId: alpha.id,
-      body: 'The reef keeps holding one bright rumor at the same depth.',
-      createdAt: '2026-03-23T10:00:00.000Z',
-    });
-    const generated = store1.generateCommunityBulletinCandidate({
-      createdAt: '2026-03-23T11:00:00.000Z',
-    });
+    const imported = importXiaowoQueue(
+      store1,
+      host.id,
+      [
+        {
+          headline: '海底洋葱新闻：SQLite 发布一号',
+          promptSummary: '围绕一条国际热点改写成洋葱化播报。',
+          body: '小蜗插播一条：这条亮线又把同一段 rumor 带回来了。',
+        },
+      ],
+      '2026-03-23T11:00:00.000Z',
+    );
     const published = store1.publishCommunityBulletinCandidate({
-      candidateId: generated.candidate?.id,
+      candidateId: imported.items[0]?.id,
       createdAt: '2026-03-23T11:05:00.000Z',
     });
     assert.equal(published.action, 'published');
@@ -1036,15 +1049,13 @@ test('sqlite backend preserves published xiaowo bulletin state and managed actor
       const bulletins = store2.listCommunityBulletins({ published: true });
       assert.equal(bulletins.items.length, 1);
       assert.equal(bulletins.items[0]?.publishedAt, '2026-03-23T11:05:00.000Z');
+      assert.match(bulletins.items[0]?.bodyDraft ?? '', /同一段 rumor 带回来了/);
 
-      const thread = store2.listPublicExpressions({
-        rootExpressionId: root.rootExpressionId,
-        includeReplies: true,
-      });
-      assert.equal(thread.items.length, 2);
-      assert.equal(thread.items[1]?.gatewayId, published.expression?.gatewayId);
-      assert.equal(store2.findById(thread.items[1]!.gatewayId)?.displayName, '小蜗');
-      assert.equal(store2.listPublicGateways().items.some((gateway) => gateway.id === thread.items[1]?.gatewayId), false);
+      const expressions = store2.listPublicExpressions();
+      const xiaowoExpression = expressions.items.find((item) => item.gatewayId === published.expression?.gatewayId) ?? null;
+      assert.ok(xiaowoExpression);
+      assert.equal(store2.findById(xiaowoExpression!.gatewayId)?.displayName, '小蜗');
+      assert.equal(store2.listPublicGateways().items.some((gateway) => gateway.id === xiaowoExpression?.gatewayId), false);
     } finally {
       if (store2 instanceof SqliteGatewayStore) {
         store2.close();

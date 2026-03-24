@@ -11,8 +11,6 @@ import {
   type VenueWhisperDraft,
 } from './community-cast.js';
 import {
-  buildCommunityBulletinCandidate,
-  createCommunityBulletinFingerprint,
   normalizeCommunityBulletinCandidate,
   type CommunityBulletinCandidate,
   type CommunityBulletinPage,
@@ -378,6 +376,28 @@ export interface CommunityBulletinGenerationResult {
   reasons: string[];
   policy: CommunityCastPolicyRecord;
   state: CommunityBulletinGenerationState;
+}
+
+export interface ImportCommunityBulletinQueueItemInput {
+  headline: string;
+  promptSummary: string;
+  body: string;
+  publishingWindowStartAt?: string | null;
+  publishingWindowEndAt?: string | null;
+}
+
+export interface ImportCommunityBulletinCandidatesInput {
+  hostId: string;
+  items: ImportCommunityBulletinQueueItemInput[];
+  replaceUnpublished?: boolean;
+  createdAt?: string;
+}
+
+export interface ImportCommunityBulletinCandidatesResult {
+  importedAt: string;
+  replacedCount: number;
+  items: CommunityBulletinCandidate[];
+  policy: CommunityCastPolicyRecord;
 }
 
 export interface CommunityBulletinPublishResult {
@@ -848,6 +868,7 @@ export interface GatewayStore {
   inspectCommunityMemoryNotes(input?: InspectCommunityMemoryNotesInput): CommunityMemoryNotePage;
   listCommunityBulletins(input?: ListCommunityBulletinsInput): CommunityBulletinPage;
   generateCommunityBulletinCandidate(input?: GenerateCommunityBulletinCandidateInput): CommunityBulletinGenerationResult;
+  importCommunityBulletinCandidates(input: ImportCommunityBulletinCandidatesInput): ImportCommunityBulletinCandidatesResult;
   publishCommunityBulletinCandidate(input?: PublishCommunityBulletinCandidateInput): CommunityBulletinPublishResult;
   acceptFriendRequest(requestId: string, actingGatewayId: string): {
     request: FriendRequestRecord;
@@ -4654,6 +4675,89 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     };
   }
 
+  importCommunityBulletinCandidates(input: ImportCommunityBulletinCandidatesInput): ImportCommunityBulletinCandidatesResult {
+    if (!this.hostsById.has(input.hostId)) {
+      throw new Error('host not found');
+    }
+    if (!Array.isArray(input.items) || input.items.length === 0) {
+      throw new Error('community bulletin items are required');
+    }
+    if (input.items.length > 200) {
+      throw new Error('too many community bulletin items');
+    }
+
+    const importedAt = input.createdAt ?? new Date().toISOString();
+    const importedAtMs = parseIsoMs(importedAt);
+    if (importedAtMs === null) {
+      throw new Error('community bulletin createdAt is invalid');
+    }
+
+    let replacedCount = 0;
+    if (input.replaceUnpublished !== false) {
+      const unpublishedIds = Array.from(this.communityBulletinsById.values())
+        .filter((candidate) => candidate.npcId === 'xiaowo' && candidate.publishedAt === null)
+        .map((candidate) => candidate.id);
+      replacedCount = unpublishedIds.length;
+      for (const candidateId of unpublishedIds) {
+        this.communityBulletinsById.delete(candidateId);
+      }
+    }
+
+    const importedItems = input.items.map((item, index) => {
+      const headline = item.headline?.trim();
+      const promptSummary = item.promptSummary?.trim();
+      const body = item.body?.trim();
+      if (!headline) {
+        throw new Error('community bulletin headline is required');
+      }
+      if (!promptSummary) {
+        throw new Error('community bulletin promptSummary is required');
+      }
+      if (!body) {
+        throw new Error('community bulletin body is required');
+      }
+
+      const candidate = normalizeCommunityBulletinCandidate({
+        id: `community-bulletin-${randomUUID()}`,
+        npcId: 'xiaowo',
+        type: 'onion_news',
+        anchorKind: 'none',
+        anchorId: null,
+        topicDomain: 'onion_news',
+        speechGoal: 'ignite',
+        riskLevel: 'low',
+        headline,
+        promptSummary,
+        bodyDraft: body,
+        publishingWindowStartAt: item.publishingWindowStartAt ?? null,
+        publishingWindowEndAt: item.publishingWindowEndAt ?? null,
+        createdAt: new Date(importedAtMs + index).toISOString(),
+        publishedAt: null,
+      });
+      this.communityBulletinsById.set(candidate.id, candidate);
+      return cloneCommunityBulletinCandidateRecord(candidate);
+    });
+
+    this.appendAuditRecord({
+      actorGatewayId: null,
+      targetGatewayId: null,
+      action: 'community_cast.bulletins_imported',
+      metadata: {
+        hostId: input.hostId,
+        importedCount: importedItems.length,
+        replacedCount,
+      },
+      createdAt: importedAt,
+    });
+
+    return {
+      importedAt,
+      replacedCount,
+      items: importedItems,
+      policy: this.getCommunityCastPolicy(),
+    };
+  }
+
   generateCommunityBulletinCandidate(input: GenerateCommunityBulletinCandidateInput = {}): CommunityBulletinGenerationResult {
     const generatedAt = input.createdAt ?? new Date().toISOString();
     const nowMs = parseIsoMs(generatedAt);
@@ -4700,23 +4804,25 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       const createdAtMs = parseIsoMs(event.createdAt);
       return createdAtMs !== null && nowMs - createdAtMs <= 90 * 60_000;
     }).length;
-    const recentBulletins = Array.from(this.communityBulletinsById.values())
+    const recentPublishedBulletins = Array.from(this.communityBulletinsById.values())
       .filter((candidate) => candidate.npcId === 'xiaowo')
       .filter((candidate) => {
-        const createdAtMs = parseIsoMs(candidate.createdAt);
-        return createdAtMs !== null && createdAtMs <= nowMs && nowMs - createdAtMs <= 24 * 60 * 60_000;
+        const publishedAtMs = parseIsoMs(candidate.publishedAt);
+        return publishedAtMs !== null && publishedAtMs <= nowMs && nowMs - publishedAtMs <= 24 * 60 * 60_000;
       })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
-    const lastCandidate = recentBulletins[0] ?? null;
-    const lastCandidateAgeMs = lastCandidate ? nowMs - Date.parse(lastCandidate.createdAt) : null;
+      .sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? '') || b.id.localeCompare(a.id));
+    const queuedCandidates = Array.from(this.communityBulletinsById.values())
+      .filter((candidate) => candidate.npcId === 'xiaowo' && candidate.publishedAt === null)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    const lastCandidate = queuedCandidates[queuedCandidates.length - 1] ?? recentPublishedBulletins[0] ?? null;
     const remainingDailyCap =
-      policy.globalDailyCap === null ? null : Math.max(0, policy.globalDailyCap - recentBulletins.length);
+      policy.globalDailyCap === null ? null : Math.max(0, policy.globalDailyCap - recentPublishedBulletins.length);
     const state: CommunityBulletinGenerationState = {
       globalWindowActive,
       npcWindowActive,
       recentPublicExpressionCount,
       recentObserverEventCount,
-      recentBulletinCount: recentBulletins.length,
+      recentBulletinCount: recentPublishedBulletins.length,
       lastCandidateAt: lastCandidate?.createdAt ?? null,
       remainingDailyCap,
     };
@@ -4741,105 +4847,27 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       reasons.push('community cast daily cap is exhausted');
       return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
     }
-    if (
-      lastCandidate &&
-      lastCandidate.publishedAt === null &&
-      lastCandidateAgeMs !== null &&
-      lastCandidateAgeMs < policy.npcs.xiaowo.minIntervalMinutes * 60_000
-    ) {
-      reasons.push('reusing the latest unpublished xiaowo candidate inside the minimum interval');
+    const queuedCandidate =
+      queuedCandidates.find((candidate) => candidate.bodyDraft?.trim() && !this.isBlockedCommunityTopic(policy, candidate.topicDomain))
+      ?? null;
+    if (queuedCandidate) {
+      reasons.push('using the next approved xiaowo bulletin candidate from the manual queue');
       return {
         generatedAt,
         action: 'reused',
-        candidate: cloneCommunityBulletinCandidateRecord(lastCandidate),
+        candidate: cloneCommunityBulletinCandidateRecord(queuedCandidate),
         reasons,
         policy,
         state,
       };
     }
-    if (lastCandidateAgeMs !== null && lastCandidateAgeMs < policy.npcs.xiaowo.minIntervalMinutes * 60_000) {
-      reasons.push('xiaowo minimum interval has not elapsed yet');
-      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
-    }
-    if (recentPublicExpressionCount >= 2 || recentObserverEventCount >= 4) {
-      reasons.push('the public surface is already active enough that xiaowo should stay ashore for now');
-      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
-    }
-    const hasFreshAnchor = recentPublicExpressions.length > 0 || recentObserverFeedEvents.length > 0;
-    if (!hasFreshAnchor && lastCandidateAgeMs !== null && lastCandidateAgeMs < policy.npcs.xiaowo.maxIntervalMinutes * 60_000) {
-      reasons.push('no fresh public anchor is available yet and the soft upper interval has not elapsed');
+    if (queuedCandidates.some((candidate) => candidate.bodyDraft?.trim())) {
+      reasons.push('all queued xiaowo bulletin candidates are currently blocked by topic policy');
       return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
     }
 
-    const current = this.getCurrent();
-    const environment = this.getEnvironment();
-    const draft = buildCommunityBulletinCandidate({
-      current: {
-        id: current.id,
-        key: current.key,
-        label: current.label,
-        summary: current.summary,
-        tone: current.tone,
-      },
-      environment: {
-        id: environment.id,
-        waterTemperatureC: environment.waterTemperatureC,
-        clarity: environment.clarity,
-        tideDirection: environment.tideDirection,
-        surfaceState: environment.surfaceState,
-        phenomenon: environment.phenomenon,
-        summary: environment.summary,
-      },
-      recentPublicExpressions: recentPublicExpressions.slice(0, 6).map((expression) => ({
-        id: expression.id,
-        rootExpressionId: expression.rootExpressionId,
-        parentExpressionId: expression.parentExpressionId,
-        body: expression.body,
-        tone: expression.tone,
-        createdAt: expression.createdAt,
-        gatewayHandle: this.gatewaysById.get(expression.gatewayId)?.handle ?? null,
-      })),
-      recentPublicFeedEvents: recentObserverFeedEvents.slice(0, 6).map((event) => ({
-        id: event.id,
-        type: event.type,
-        summary: event.summary,
-        createdAt: event.createdAt,
-      })),
-      createdAt: generatedAt,
-      publishingWindowStartAt: this.buildPolicyClockBoundaryIso(policy.npcs.xiaowo.activeWindowStart, nowMs),
-      publishingWindowEndAt: this.buildPolicyClockBoundaryIso(policy.npcs.xiaowo.activeWindowEnd, nowMs),
-    });
-    if (this.isBlockedCommunityTopic(policy, draft.topicDomain)) {
-      reasons.push(`community cast topic domain "${draft.topicDomain}" is blocked`);
-      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
-    }
-    const duplicate = recentBulletins.find(
-      (candidate) => createCommunityBulletinFingerprint(candidate) === createCommunityBulletinFingerprint(draft),
-    );
-    if (duplicate) {
-      reasons.push('a similar xiaowo bulletin candidate already exists inside the recent dedupe window');
-      return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
-    }
-
-    const candidate = normalizeCommunityBulletinCandidate({
-      id: `community-bulletin-${randomUUID()}`,
-      ...draft,
-    });
-    this.communityBulletinsById.set(candidate.id, candidate);
-
-    return {
-      generatedAt,
-      action: 'created',
-      candidate: cloneCommunityBulletinCandidateRecord(candidate),
-      reasons,
-      policy,
-      state: {
-        ...state,
-        recentBulletinCount: state.recentBulletinCount + 1,
-        lastCandidateAt: candidate.createdAt,
-        remainingDailyCap: state.remainingDailyCap === null ? null : Math.max(0, state.remainingDailyCap - 1),
-      },
-    };
+    reasons.push('no approved xiaowo bulletin candidate is queued');
+    return { generatedAt, action: 'suppressed', candidate: null, reasons, policy, state };
   }
 
   publishCommunityBulletinCandidate(input: PublishCommunityBulletinCandidateInput = {}): CommunityBulletinPublishResult {
@@ -4884,7 +4912,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       normalizedCandidateId === null
         ? Array.from(this.communityBulletinsById.values())
             .filter((item) => item.npcId === 'xiaowo' && item.publishedAt === null)
-            .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0] ?? null
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))[0] ?? null
         : this.communityBulletinsById.get(normalizedCandidateId) ?? null;
     if (!candidate) {
       throw new Error('community bulletin candidate not found');

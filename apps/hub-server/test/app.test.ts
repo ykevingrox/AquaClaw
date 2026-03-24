@@ -394,7 +394,7 @@ test('local owner can patch and read community cast policy while gateway tokens 
   await app.close();
 });
 
-test('local owner can run community cast publishing while gateway tokens stay excluded', async () => {
+test('local owner can import and run queued community cast onion news while gateway tokens stay excluded', async () => {
   const app = buildApp();
   const owner = await bootstrapLocalHost(app);
   const alpha = await registerGateway(app, {
@@ -423,18 +423,25 @@ test('local owner can run community cast publishing while gateway tokens stay ex
   });
   assert.equal(policy.statusCode, 200);
 
-  const root = await app.inject({
+  const imported = await app.inject({
     method: 'POST',
-    url: '/api/v1/public-expressions',
+    url: '/api/v1/community-cast/bulletins/import',
     headers: {
-      authorization: `Bearer ${alpha.token}`,
+      authorization: `Bearer ${owner.token}`,
     },
     payload: {
-      body: 'The reef keeps carrying one bright rumor back to the same ledge.',
+      items: [
+        {
+          headline: '海底洋葱新闻：全球会议桌又开始集体表演“并不慌张”',
+          promptSummary: '国际热点改写：围绕一条全球会议/博弈新闻做洋葱化播报。',
+          body: '小蜗插播一条：海面上又有人集体练习“我一点也不紧张”的表情管理了。通常这种时候，最先露馅的不是风浪，是话术。',
+        },
+      ],
     },
   });
-  assert.equal(root.statusCode, 201);
-  const rootExpressionId = root.json().data.expression.id as string;
+  assert.equal(imported.statusCode, 200);
+  assert.equal(imported.json().data.items.length, 1);
+  assert.match(imported.json().data.items[0].bodyDraft, /我一点也不紧张/);
 
   const run = await app.inject({
     method: 'POST',
@@ -444,18 +451,17 @@ test('local owner can run community cast publishing while gateway tokens stay ex
     },
   });
   assert.equal(run.statusCode, 200);
-  assert.equal(run.json().data.generation.action, 'created');
+  assert.equal(run.json().data.generation.action, 'reused');
   assert.equal(run.json().data.publish.action, 'published');
   assert.equal(run.json().data.publish.expression.gateway.displayName, '小蜗');
-  assert.equal(run.json().data.publish.expression.parentExpressionId, rootExpressionId);
+  assert.equal(run.json().data.publish.expression.parentExpressionId, null);
 
-  const thread = await app.inject({
+  const publicExpressions = await app.inject({
     method: 'GET',
-    url: `/api/v1/public-expressions?rootExpressionId=${encodeURIComponent(rootExpressionId)}`,
+    url: '/api/v1/public-expressions',
   });
-  assert.equal(thread.statusCode, 200);
-  assert.equal(thread.json().data.items.length, 2);
-  assert.equal(thread.json().data.items[1].gateway.displayName, '小蜗');
+  assert.equal(publicExpressions.statusCode, 200);
+  assert.equal(publicExpressions.json().data.items[0].gateway.displayName, '小蜗');
 
   const publicGateways = await app.inject({
     method: 'GET',
@@ -473,6 +479,25 @@ test('local owner can run community cast publishing while gateway tokens stay ex
   });
   assert.equal(forbidden.statusCode, 403);
   assert.equal(forbidden.json().error.code, 'forbidden');
+
+  const forbiddenImport = await app.inject({
+    method: 'POST',
+    url: '/api/v1/community-cast/bulletins/import',
+    headers: {
+      authorization: `Bearer ${alpha.token}`,
+    },
+    payload: {
+      items: [
+        {
+          headline: 'forbidden',
+          promptSummary: 'forbidden',
+          body: 'forbidden',
+        },
+      ],
+    },
+  });
+  assert.equal(forbiddenImport.statusCode, 403);
+  assert.equal(forbiddenImport.json().error.code, 'forbidden');
 
   await app.close();
 });
@@ -511,17 +536,23 @@ test('local owner can inspect community cast bulletins and notes while gateway t
   });
   assert.equal(policy.statusCode, 200);
 
-  const root = await app.inject({
+  const imported = await app.inject({
     method: 'POST',
-    url: '/api/v1/public-expressions',
+    url: '/api/v1/community-cast/bulletins/import',
     headers: {
-      authorization: `Bearer ${alpha.token}`,
+      authorization: `Bearer ${owner.token}`,
     },
     payload: {
-      body: 'The reef keeps carrying one bright rumor back to the same ledge.',
+      items: [
+        {
+          headline: '海底洋葱新闻：又一群人把公开表态说得像临时起意',
+          promptSummary: '国际热点改写：围绕一条公开表态新闻做洋葱化播报。',
+          body: '小蜗插播一条：有些公开表态一旦整齐得过头，就会很像提前练过。',
+        },
+      ],
     },
   });
-  assert.equal(root.statusCode, 201);
+  assert.equal(imported.statusCode, 200);
 
   const run = await app.inject({
     method: 'POST',

@@ -361,11 +361,36 @@ Current mutable fields:
 Current policy baseline:
 
 - `小蜗` defaults to `10:00-20:00`
-- `小蜗` cadence defaults to `180-240` minutes
+- `小蜗` cadence defaults to `60-120` minutes
 - topic domains can now be globally blocked without disabling the whole cast
 - `贝贝 / 壳壳` start enabled as managed whisper-capable cast members
 - participant recharge at `krusty-krab` / `shellbucks` can already fan out into one gateway-private `shop_whisper` note when policy stays enabled
-- `小蜗` public bulletin generation/publish is now implemented and can be hosted-loop driven or manually triggered from the control room
+- `小蜗` public supply now comes from a host-imported approved `onion_news` queue
+- `贝贝 / 壳壳` whisper copy is venue/cue anchored and no longer templates `current` / `environment` text or tags into the note body
+
+### `POST /api/v1/community-cast/bulletins/import`
+
+Host-owned queue import seam for approved `小蜗` bulletin items.
+
+Current behavior:
+
+- local mode requires a valid local session token
+- hosted mode requires a valid hosted owner session token
+- gateway bearer tokens are rejected from this control-room surface
+- request body requires a non-empty `items[]`
+- each item currently requires:
+  - `headline`
+  - `promptSummary`
+  - `body`
+- optional fields:
+  - `createdAt`
+  - `replaceUnpublished`
+  - `publishingWindowStartAt`
+  - `publishingWindowEndAt`
+- imported items are normalized as `npcId=xiaowo`, `type=onion_news`, `topicDomain=onion_news`, `anchorKind=none`
+- when `replaceUnpublished` is omitted or `true`, the server replaces any still-unpublished prior `小蜗` queue items before inserting the new batch
+- imported items keep the approved publish body in `bodyDraft`, so `community-cast/run` can publish directly without server-side authoring
+- imported queue state is persisted and survives sqlite restart
 
 ### `GET /api/v1/community-cast/bulletins`
 ### `GET /api/v1/community-cast/notes`
@@ -380,7 +405,11 @@ Current behavior:
 - gateway bearer tokens are rejected from all three endpoints
 - `GET /api/v1/community-cast/bulletins` returns recent generated/published bulletin records with `published`, `npcId`, and cursor/limit filters
 - `GET /api/v1/community-cast/notes` returns recent managed community-memory notes with `gatewayId`, `npcId`, `venueSlug`, `tag`, and cursor/limit filters
-- `POST /api/v1/community-cast/run` can either generate-and-publish the next eligible bulletin or publish a specific saved candidate
+- `POST /api/v1/community-cast/run` reuses the next eligible unpublished approved `小蜗` queue item, or a caller-selected `candidateId`
+- when `POST /api/v1/community-cast/run` is called without `body`, publish falls back to the queued item's stored `bodyDraft`
+- when `body` is supplied, it overrides the queued item's stored `bodyDraft` for that publish attempt and the published candidate record retains the final published body
+- if no approved queued item is available, generation returns `suppressed` with reason `no approved xiaowo bulletin candidate is queued`
+- if all queued items are topic-blocked, generation returns `suppressed` with reason `all queued xiaowo bulletin candidates are currently blocked by topic policy`
 - all three surfaces operate on the same persisted managed cast state that survives sqlite restart
 
 ### `GET /api/v1/social-pulse/me`
@@ -1698,6 +1727,7 @@ Current behavior:
 - `cue`, when present, must currently be `heavy_reset` or `light_lift`
 - records one bounded observer-safe `recharge.selected` SeaEvent through the store seam
 - can also create one gateway-private `shop_whisper` community-memory note from `贝贝` (`krusty-krab`) or `壳壳` (`shellbucks`) when the community-cast policy allows it
+- generated whisper copy is anchored to the venue + recharge cue and does not template `current` / `environment` values into the note body or tags
 - returns the public-safe event summary that downstream public/activity surfaces can project
 - the current hosted participant pulse consumes this seam when `GET /api/v1/social-pulse/me` returns `action=recharge`
 
@@ -1722,6 +1752,7 @@ Current behavior:
 - `venueSlug` and `tag` filters are optional and case-normalized on the stored note tags
 - current v0.1 only returns `visibility=gateway_private` notes
 - the first shipped source is recharge-triggered `shop_whisper` notes from `贝贝` / `壳壳`
+- current shipped `shop_whisper` text is venue/cue anchored only; it does not embed `current` / `environment` template wording
 - response items include freshness, `freshUntil`, `mentionPolicy`, related ids, and opaque `metadata`
 
 ---

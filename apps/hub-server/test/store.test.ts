@@ -8,6 +8,19 @@ function registerGateway(store: GatewayStore, input: { displayName: string; hand
   return store.register(input).gateway;
 }
 
+function importXiaowoQueue(
+  store: GatewayStore,
+  hostId: string,
+  items: Array<{ headline: string; promptSummary: string; body: string }>,
+  createdAt = '2026-03-23T09:00:00.000Z',
+) {
+  return store.importCommunityBulletinCandidates({
+    hostId,
+    createdAt,
+    items,
+  });
+}
+
 function withFrozenTime<T>(iso: string, fn: () => T): T {
   const fixedNow = new Date(iso).getTime();
   const RealDate = Date;
@@ -122,10 +135,9 @@ test('GatewayStore can patch community cast policy with nested NPC settings', ()
   assert.equal(readBack.npcs.xiaowo.minIntervalMinutes, 90);
 });
 
-test('GatewayStore can generate and reuse a xiaowo bulletin candidate from a recent public thread', () => {
+test('GatewayStore can import a xiaowo onion-news queue and select the next approved candidate', () => {
   const store: GatewayStore = createGatewayStore();
   const host = store.bootstrapLocalSession().host;
-  const alpha = registerGateway(store, { displayName: 'Bulletin Alpha', handle: 'bulletin-alpha-store' });
 
   store.updateCommunityCastPolicy({
     hostId: host.id,
@@ -139,30 +151,56 @@ test('GatewayStore can generate and reuse a xiaowo bulletin candidate from a rec
     },
   });
 
-  const expression = store.createPublicExpression({
-    gatewayId: alpha.id,
-    body: 'The tide keeps dragging old routes back into view.',
+  const imported = importXiaowoQueue(store, host.id, [
+    {
+      headline: '海底洋葱新闻：全球会议桌又开始集体表演“并不慌张”',
+      promptSummary: '国际热点改写：围绕一条全球会议/博弈新闻做洋葱化播报，保持可接话。',
+      body: '小蜗插播一条：海面上又有人集体练习“我一点也不紧张”的表情管理了。通常这种时候，最先露馅的不是风浪，是话术。',
+    },
+    {
+      headline: '海底洋葱新闻：又一波人试图把旧账说成新战略',
+      promptSummary: '国际热点改写：围绕一条旧议题回潮新闻做洋葱化播报，保持轻戏谑。',
+      body: '小蜗再记一笔：有些人每次把旧账端上来，都要先改个新名字。改名当然容易，海面记性差才比较难。',
+    },
+  ]);
+  assert.equal(imported.replacedCount, 0);
+  assert.equal(imported.items.length, 2);
+  assert.equal(imported.items[0]?.topicDomain, 'onion_news');
+  assert.equal(imported.items[0]?.anchorKind, 'none');
+  assert.match(imported.items[0]?.bodyDraft ?? '', /小蜗插播一条/);
+
+  const generation = store.generateCommunityBulletinCandidate({
     createdAt: '2026-03-23T10:00:00.000Z',
   });
-
-  const first = store.generateCommunityBulletinCandidate({
-    createdAt: '2026-03-23T11:00:00.000Z',
-  });
-  assert.equal(first.action, 'created');
-  assert.equal(first.candidate?.npcId, 'xiaowo');
-  assert.equal(first.candidate?.anchorKind, 'public_thread');
-  assert.equal(first.candidate?.anchorId, expression.rootExpressionId);
-  assert.equal(typeof first.candidate?.bodyDraft, 'string');
-  assert.equal(store.listCommunityBulletins({ published: false }).items.length, 1);
-
-  const second = store.generateCommunityBulletinCandidate({
-    createdAt: '2026-03-23T11:30:00.000Z',
-  });
-  assert.equal(second.action, 'reused');
-  assert.equal(second.candidate?.id, first.candidate?.id);
+  assert.equal(generation.action, 'reused');
+  assert.equal(generation.candidate?.id, imported.items[0]?.id);
 });
 
-test('GatewayStore suppresses blocked community-cast topic domains for both bulletins and venue whispers', () => {
+test('GatewayStore suppresses xiaowo bulletin generation when no approved onion-news queue is loaded', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+
+  store.updateCommunityCastPolicy({
+    hostId: host.id,
+    activeWindowStart: null,
+    activeWindowEnd: null,
+    npcs: {
+      xiaowo: {
+        activeWindowStart: null,
+        activeWindowEnd: null,
+      },
+    },
+  });
+
+  const generated = store.generateCommunityBulletinCandidate({
+    createdAt: '2026-03-23T11:00:00.000Z',
+  });
+  assert.equal(generated.action, 'suppressed');
+  assert.equal(generated.candidate, null);
+  assert.match(generated.reasons.join(' | '), /no approved xiaowo bulletin candidate is queued/i);
+});
+
+test('GatewayStore suppresses blocked community-cast topic domains for imported xiaowo queue and venue whispers', () => {
   const store: GatewayStore = createGatewayStore();
   const host = store.bootstrapLocalSession().host;
   const alpha = registerGateway(store, { displayName: 'Blocked Topic Alpha', handle: 'blocked-topic-alpha-store' });
@@ -171,7 +209,7 @@ test('GatewayStore suppresses blocked community-cast topic domains for both bull
     hostId: host.id,
     activeWindowStart: null,
     activeWindowEnd: null,
-    blockedTopicDomains: ['community_callback', 'observer_note'],
+    blockedTopicDomains: ['onion_news', 'observer_note'],
     npcs: {
       xiaowo: {
         activeWindowStart: null,
@@ -180,19 +218,21 @@ test('GatewayStore suppresses blocked community-cast topic domains for both bull
     },
   });
 
-  store.createPublicExpression({
-    gatewayId: alpha.id,
-    body: 'The tide keeps dragging old routes back into view.',
-    createdAt: '2026-03-23T10:00:00.000Z',
-  });
+  importXiaowoQueue(store, host.id, [
+    {
+      headline: '海底洋葱新闻：又一群人把公开表态说得像临时起意',
+      promptSummary: '国际热点改写：围绕一条公开表态新闻做洋葱化播报。',
+      body: '小蜗插播一条：有些公开表态一旦整齐得过头，就会很像提前练过。',
+    },
+  ]);
 
   const generation = store.generateCommunityBulletinCandidate({
     createdAt: '2026-03-23T11:00:00.000Z',
   });
   assert.equal(generation.action, 'suppressed');
   assert.equal(generation.candidate, null);
-  assert.match(generation.reasons.join(' | '), /topic domain "community_callback" is blocked/i);
-  assert.equal(store.listCommunityBulletins().items.length, 0);
+  assert.match(generation.reasons.join(' | '), /blocked by topic policy/i);
+  assert.equal(store.listCommunityBulletins().items.length, 1);
 
   store.recordRechargeActivity({
     gatewayId: alpha.id,
@@ -207,11 +247,9 @@ test('GatewayStore suppresses blocked community-cast topic domains for both bull
   assert.equal(notes.items.length, 0);
 });
 
-test('GatewayStore suppresses xiaowo bulletin generation when the public surface is already hot', () => {
+test('GatewayStore can replace unpublished xiaowo queue items during daily import while keeping published history', () => {
   const store: GatewayStore = createGatewayStore();
   const host = store.bootstrapLocalSession().host;
-  const alpha = registerGateway(store, { displayName: 'Hot Alpha', handle: 'hot-alpha-store' });
-  const beta = registerGateway(store, { displayName: 'Hot Beta', handle: 'hot-beta-store' });
 
   store.updateCommunityCastPolicy({
     hostId: host.id,
@@ -225,80 +263,48 @@ test('GatewayStore suppresses xiaowo bulletin generation when the public surface
     },
   });
 
-  store.createPublicExpression({
-    gatewayId: alpha.id,
-    body: 'The water is too bright to stay quiet.',
-    createdAt: '2026-03-23T10:10:00.000Z',
+  const firstImport = importXiaowoQueue(store, host.id, [
+    {
+      headline: '海底洋葱新闻：第一批候选一号',
+      promptSummary: '第一批 prompt 1',
+      body: '第一批 body 1',
+    },
+    {
+      headline: '海底洋葱新闻：第一批候选二号',
+      promptSummary: '第一批 prompt 2',
+      body: '第一批 body 2',
+    },
+  ]);
+
+  const firstPublish = store.publishCommunityBulletinCandidate({
+    candidateId: firstImport.items[0]?.id,
+    createdAt: '2026-03-23T10:00:00.000Z',
   });
-  store.createPublicExpression({
-    gatewayId: beta.id,
-    body: 'Then say it before the tide changes again.',
-    createdAt: '2026-03-23T10:40:00.000Z',
-  });
+  assert.equal(firstPublish.action, 'published');
 
-  const result = store.generateCommunityBulletinCandidate({
-    createdAt: '2026-03-23T11:00:00.000Z',
-  });
-
-  assert.equal(result.action, 'suppressed');
-  assert.equal(result.candidate, null);
-  assert.match(result.reasons.join(' | '), /already active enough/i);
-  assert.equal(store.listCommunityBulletins().items.length, 0);
-});
-
-test('GatewayStore suppresses duplicate fallback xiaowo bulletins when current and environment have not meaningfully changed', () => {
-  withFrozenTime('2026-03-23T10:00:00.000Z', () => {
-    const store: GatewayStore = createGatewayStore();
-    const host = store.bootstrapLocalSession().host;
-
-    store.updateCommunityCastPolicy({
-      hostId: host.id,
-      activeWindowStart: null,
-      activeWindowEnd: null,
-      npcs: {
-        xiaowo: {
-          minIntervalMinutes: 60,
-          maxIntervalMinutes: 60,
-          activeWindowStart: null,
-          activeWindowEnd: null,
-        },
+  const secondImport = importXiaowoQueue(
+    store,
+    host.id,
+    [
+      {
+        headline: '海底洋葱新闻：第二批候选一号',
+        promptSummary: '第二批 prompt 1',
+        body: '第二批 body 1',
       },
-    });
+    ],
+    '2026-03-23T12:00:00.000Z',
+  );
+  assert.equal(secondImport.replacedCount, 1);
 
-    store.setCurrent({
-      key: 'ember-run',
-      label: 'Ember Run',
-      summary: 'A warm looping current that keeps pulling old routes forward.',
-      tone: 'playful',
-      startsAt: '2026-03-23T00:00:00.000Z',
-      endsAt: '2026-03-24T00:00:00.000Z',
-    });
-    store.setEnvironment({
-      waterTemperatureC: 22,
-      clarity: 'clear',
-      tideDirection: 'crosswind',
-      surfaceState: 'glassy',
-      phenomenon: 'warm_bloom',
-      summary: 'Warm bloom keeps the water bright and a little too ready to echo.',
-      expiresAt: '2026-03-24T00:00:00.000Z',
-    });
-
-    const first = store.generateCommunityBulletinCandidate({
-      createdAt: '2026-03-23T10:00:00.000Z',
-    });
-    assert.equal(first.action, 'created');
-    assert.equal(first.candidate?.anchorKind, 'environment');
-
-    const second = store.generateCommunityBulletinCandidate({
-      createdAt: '2026-03-23T12:30:00.000Z',
-    });
-    assert.equal(second.action, 'suppressed');
-    assert.equal(second.candidate, null);
-    assert.match(second.reasons.join(' | '), /similar xiaowo bulletin candidate already exists/i);
-  });
+  const unpublished = store.listCommunityBulletins({ published: false }).items;
+  const published = store.listCommunityBulletins({ published: true }).items;
+  assert.equal(unpublished.length, 1);
+  assert.equal(unpublished[0]?.headline, '海底洋葱新闻：第二批候选一号');
+  assert.equal(published.length, 1);
+  assert.equal(published[0]?.headline, '海底洋葱新闻：第一批候选一号');
 });
 
-test('GatewayStore can publish a xiaowo bulletin as a managed public reply without entering the public roster', () => {
+test('GatewayStore can publish imported xiaowo onion news as a managed public root without entering the public roster', () => {
   const store: GatewayStore = createGatewayStore();
   const host = store.bootstrapLocalSession().host;
   const alpha = registerGateway(store, { displayName: 'Publish Alpha', handle: 'publish-alpha-store' });
@@ -317,24 +323,27 @@ test('GatewayStore can publish a xiaowo bulletin as a managed public reply witho
     },
   });
 
-  const root = store.createPublicExpression({
-    gatewayId: alpha.id,
-    body: 'The lantern line keeps catching the same glint every night.',
-    createdAt: '2026-03-23T10:00:00.000Z',
-  });
+  const imported = importXiaowoQueue(store, host.id, [
+    {
+      headline: '海底洋葱新闻：有人又把全球“临时措施”说成长期信仰',
+      promptSummary: '国际热点改写：围绕一条全球政策/博弈新闻做洋葱化播报。',
+      body: '小蜗插播一条：有些“临时措施”一旦说得太熟练，就会开始像某种长期信仰。海面最会装作意外的，往往不是结果，是口气。',
+    },
+  ]);
   const generated = store.generateCommunityBulletinCandidate({
     createdAt: '2026-03-23T11:00:00.000Z',
   });
-  assert.equal(generated.action, 'created');
+  assert.equal(generated.action, 'reused');
 
   const published = store.publishCommunityBulletinCandidate({
-    candidateId: generated.candidate?.id,
+    candidateId: generated.candidate?.id ?? imported.items[0]?.id,
     createdAt: '2026-03-23T11:05:00.000Z',
   });
   assert.equal(published.action, 'published');
   assert.equal(published.candidate?.publishedAt, '2026-03-23T11:05:00.000Z');
-  assert.equal(published.expression?.rootExpressionId, root.rootExpressionId);
-  assert.equal(published.expression?.parentExpressionId, root.id);
+  assert.match(published.candidate?.bodyDraft ?? '', /临时措施/);
+  assert.equal(published.expression?.parentExpressionId, null);
+  assert.equal(published.expression?.rootExpressionId, published.expression?.id);
 
   const xiaowo = published.expression ? store.findById(published.expression.gatewayId) : null;
   assert.equal(xiaowo?.displayName, '小蜗');
@@ -342,69 +351,13 @@ test('GatewayStore can publish a xiaowo bulletin as a managed public reply witho
   assert.equal(store.searchGateways({ viewerGatewayId: alpha.id, q: 'xiaowo' }).length, 0);
 
   const feed = store.listPublicSeaFeed();
-  assert.equal(feed.items[0]?.type, 'public_expression.replied');
+  assert.equal(feed.items[0]?.type, 'public_expression.created');
   assert.equal(feed.items[0]?.actorGatewayId, published.expression?.gatewayId ?? null);
-  assert.equal(feed.items[0]?.metadata.replyToGatewayId, alpha.id);
-});
-
-test('GatewayStore can publish a fallback xiaowo bulletin as a new public thread root', () => {
-  withFrozenTime('2026-03-23T10:00:00.000Z', () => {
-    const store: GatewayStore = createGatewayStore();
-    const host = store.bootstrapLocalSession().host;
-
-    store.updateCommunityCastPolicy({
-      hostId: host.id,
-      activeWindowStart: null,
-      activeWindowEnd: null,
-      npcs: {
-        xiaowo: {
-          minIntervalMinutes: 60,
-          maxIntervalMinutes: 60,
-          activeWindowStart: null,
-          activeWindowEnd: null,
-        },
-      },
-    });
-
-    store.setCurrent({
-      key: 'quiet-loop',
-      label: 'Quiet Loop',
-      summary: 'A soft loop keeps nudging half-finished thoughts back toward the surface.',
-      tone: 'reflective',
-      startsAt: '2026-03-23T00:00:00.000Z',
-      endsAt: '2026-03-24T00:00:00.000Z',
-    });
-    store.setEnvironment({
-      waterTemperatureC: 21,
-      clarity: 'clear',
-      tideDirection: 'incoming',
-      surfaceState: 'glassy',
-      phenomenon: 'warm_bloom',
-      summary: 'Warm bloom makes every quiet corner feel a little more expectant.',
-      expiresAt: '2026-03-24T00:00:00.000Z',
-    });
-
-    const generated = store.generateCommunityBulletinCandidate({
-      createdAt: '2026-03-23T10:00:00.000Z',
-    });
-    assert.equal(generated.action, 'created');
-    assert.equal(generated.candidate?.anchorKind, 'environment');
-
-    const published = store.publishCommunityBulletinCandidate({
-      candidateId: generated.candidate?.id,
-      createdAt: '2026-03-23T10:05:00.000Z',
-    });
-    assert.equal(published.action, 'published');
-    assert.equal(published.expression?.parentExpressionId, null);
-    assert.equal(published.expression?.rootExpressionId, published.expression?.id);
-  });
 });
 
 test('GatewayStore suppresses publishing a second xiaowo bulletin inside the publish cooldown', () => {
   const store: GatewayStore = createGatewayStore();
   const host = store.bootstrapLocalSession().host;
-  const alpha = registerGateway(store, { displayName: 'Cooldown Alpha', handle: 'cooldown-alpha-store' });
-  const beta = registerGateway(store, { displayName: 'Cooldown Beta', handle: 'cooldown-beta-store' });
 
   store.updateCommunityCastPolicy({
     hostId: host.id,
@@ -420,25 +373,29 @@ test('GatewayStore suppresses publishing a second xiaowo bulletin inside the pub
     },
   });
 
-  store.createPublicExpression({
-    gatewayId: alpha.id,
-    body: 'The first reef bell keeps carrying farther than it should.',
-    createdAt: '2026-03-23T09:00:00.000Z',
-  });
+  const imported = importXiaowoQueue(store, host.id, [
+    {
+      headline: '海底洋葱新闻：第一条队列内容',
+      promptSummary: '第一条 prompt',
+      body: '第一条 body',
+    },
+    {
+      headline: '海底洋葱新闻：第二条队列内容',
+      promptSummary: '第二条 prompt',
+      body: '第二条 body',
+    },
+  ]);
+
   const firstCandidate = store.generateCommunityBulletinCandidate({
     createdAt: '2026-03-23T10:00:00.000Z',
   });
-  assert.equal(firstCandidate.action, 'created');
-
-  store.createPublicExpression({
-    gatewayId: beta.id,
-    body: 'Someone finally answered it from the darker side of the reef.',
-    createdAt: '2026-03-23T11:00:00.000Z',
-  });
+  assert.equal(firstCandidate.action, 'reused');
   const secondCandidate = store.generateCommunityBulletinCandidate({
     createdAt: '2026-03-23T11:10:00.000Z',
   });
-  assert.equal(secondCandidate.action, 'created');
+  assert.equal(secondCandidate.action, 'reused');
+  assert.equal(firstCandidate.candidate?.id, imported.items[0]?.id);
+  assert.equal(secondCandidate.candidate?.id, imported.items[0]?.id);
 
   store.updateCommunityCastPolicy({
     hostId: host.id,
@@ -455,8 +412,14 @@ test('GatewayStore suppresses publishing a second xiaowo bulletin inside the pub
   });
   assert.equal(firstPublish.action, 'published');
 
+  const nextCandidate = store.generateCommunityBulletinCandidate({
+    createdAt: '2026-03-23T11:40:00.000Z',
+  });
+  assert.equal(nextCandidate.action, 'reused');
+  assert.equal(nextCandidate.candidate?.id, imported.items[1]?.id);
+
   const secondPublish = store.publishCommunityBulletinCandidate({
-    candidateId: secondCandidate.candidate?.id,
+    candidateId: nextCandidate.candidate?.id,
     createdAt: '2026-03-23T11:45:00.000Z',
   });
   assert.equal(secondPublish.action, 'suppressed');
@@ -600,61 +563,101 @@ test('GatewayStore community memory notes stay gateway-private and support filte
 });
 
 test('GatewayStore recharge venue whisper writes community memory notes and respects community-cast policy disablement', () => {
-  const store: GatewayStore = createGatewayStore();
-  const host = store.bootstrapLocalSession().host;
-  const alpha = registerGateway(store, { displayName: 'Whisper Alpha', handle: 'whisper-alpha-store' });
+  withFrozenTime('2026-03-20T12:00:00.000Z', () => {
+    const store: GatewayStore = createGatewayStore();
+    const host = store.bootstrapLocalSession().host;
+    const alpha = registerGateway(store, { displayName: 'Whisper Alpha', handle: 'whisper-alpha-store' });
 
-  const shellbucksEvent = store.recordRechargeActivity({
-    gatewayId: alpha.id,
-    venueSlug: 'shellbucks',
-    venueName: 'ShellBucks',
-    cue: 'light_lift',
-    suggestedItem: '月光水母茶',
-    suggestedKind: '茶饮',
-    createdAt: '2026-03-20T12:00:00.000Z',
-  });
-  let notes = store.listCommunityMemoryNotes({ gatewayId: alpha.id });
-  assert.equal(notes.items.length, 1);
-  assert.equal(notes.items[0]?.npcId, 'qiaoqiao');
-  assert.equal(notes.items[0]?.venueSlug, 'shellbucks');
-  assert.equal(notes.items[0]?.relatedSeaEventIds[0], shellbucksEvent.id);
-  assert.equal(notes.items[0]?.mentionPolicy, 'paraphrase_ok');
+    store.setCurrent({
+      key: 'template-ban-current',
+      label: 'CURRENT TEMPLATE SHOULD NOT APPEAR',
+      summary: 'A deliberately loud current label for template-ban regression coverage.',
+      tone: 'playful',
+      startsAt: '2026-03-20T00:00:00.000Z',
+      endsAt: '2026-03-21T00:00:00.000Z',
+    });
+    store.setEnvironment({
+      waterTemperatureC: 19,
+      clarity: 'clear',
+      tideDirection: 'crosswind',
+      surfaceState: 'glassy',
+      phenomenon: 'storm_front',
+      summary: 'A deliberately loud phenomenon for template-ban regression coverage.',
+      expiresAt: '2026-03-21T00:00:00.000Z',
+    });
 
-  store.updateCommunityCastPolicy({
-    hostId: host.id,
-    npcs: {
-      beibei: {
-        enabled: false,
+    const shellbucksEvent = store.recordRechargeActivity({
+      gatewayId: alpha.id,
+      venueSlug: 'shellbucks',
+      venueName: 'ShellBucks',
+      cue: 'light_lift',
+      suggestedItem: '月光水母茶',
+      suggestedKind: '茶饮',
+      createdAt: '2026-03-20T12:00:00.000Z',
+    });
+    let notes = store.listCommunityMemoryNotes({ gatewayId: alpha.id });
+    assert.equal(notes.items.length, 1);
+    assert.equal(notes.items[0]?.npcId, 'qiaoqiao');
+    assert.equal(notes.items[0]?.venueSlug, 'shellbucks');
+    assert.equal(notes.items[0]?.relatedSeaEventIds[0], shellbucksEvent.id);
+    assert.equal(notes.items[0]?.mentionPolicy, 'paraphrase_ok');
+    assert.equal(notes.items[0]?.body.includes('CURRENT TEMPLATE SHOULD NOT APPEAR'), false);
+    assert.equal(notes.items[0]?.body.includes('storm_front'), false);
+    assert.equal(notes.items[0]?.tags.some((tag) => tag.startsWith('current:') || tag.startsWith('phenomenon:')), false);
+
+    const krustyEvent = store.recordRechargeActivity({
+      gatewayId: alpha.id,
+      venueSlug: 'krusty-krab',
+      venueName: 'Krusty Krab',
+      cue: 'heavy_reset',
+      suggestedItem: '海藻奶昔',
+      suggestedKind: '奶昔',
+      createdAt: '2026-03-20T12:30:00.000Z',
+    });
+    notes = store.listCommunityMemoryNotes({ gatewayId: alpha.id });
+    assert.equal(notes.items.length, 2);
+    assert.equal(notes.items[0]?.npcId, 'beibei');
+    assert.equal(notes.items[0]?.relatedSeaEventIds[0], krustyEvent.id);
+    assert.equal(notes.items[0]?.body.includes('CURRENT TEMPLATE SHOULD NOT APPEAR'), false);
+    assert.equal(notes.items[0]?.body.includes('storm_front'), false);
+    assert.equal(notes.items[0]?.tags.some((tag) => tag.startsWith('current:') || tag.startsWith('phenomenon:')), false);
+
+    store.updateCommunityCastPolicy({
+      hostId: host.id,
+      npcs: {
+        beibei: {
+          enabled: false,
+        },
       },
-    },
-  });
-  store.recordRechargeActivity({
-    gatewayId: alpha.id,
-    venueSlug: 'krusty-krab',
-    venueName: 'Krusty Krab',
-    cue: 'heavy_reset',
-    suggestedItem: '海藻奶昔',
-    suggestedKind: '奶昔',
-    createdAt: '2026-03-20T13:00:00.000Z',
-  });
-  notes = store.listCommunityMemoryNotes({ gatewayId: alpha.id });
-  assert.equal(notes.items.length, 1);
+    });
+    store.recordRechargeActivity({
+      gatewayId: alpha.id,
+      venueSlug: 'krusty-krab',
+      venueName: 'Krusty Krab',
+      cue: 'heavy_reset',
+      suggestedItem: '海藻奶昔',
+      suggestedKind: '奶昔',
+      createdAt: '2026-03-20T13:00:00.000Z',
+    });
+    notes = store.listCommunityMemoryNotes({ gatewayId: alpha.id });
+    assert.equal(notes.items.length, 2);
 
-  store.updateCommunityCastPolicy({
-    hostId: host.id,
-    enabled: false,
+    store.updateCommunityCastPolicy({
+      hostId: host.id,
+      enabled: false,
+    });
+    store.recordRechargeActivity({
+      gatewayId: alpha.id,
+      venueSlug: 'shellbucks',
+      venueName: 'ShellBucks',
+      cue: 'heavy_reset',
+      suggestedItem: '深海浓缩',
+      suggestedKind: '咖啡',
+      createdAt: '2026-03-20T14:00:00.000Z',
+    });
+    notes = store.listCommunityMemoryNotes({ gatewayId: alpha.id });
+    assert.equal(notes.items.length, 2);
   });
-  store.recordRechargeActivity({
-    gatewayId: alpha.id,
-    venueSlug: 'shellbucks',
-    venueName: 'ShellBucks',
-    cue: 'heavy_reset',
-    suggestedItem: '深海浓缩',
-    suggestedKind: '咖啡',
-    createdAt: '2026-03-20T14:00:00.000Z',
-  });
-  notes = store.listCommunityMemoryNotes({ gatewayId: alpha.id });
-  assert.equal(notes.items.length, 1);
 });
 
 test('createGatewayStore requires databaseUrl for postgres backend', () => {

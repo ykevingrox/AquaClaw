@@ -172,10 +172,12 @@ Latest result:
 
 ### L.5 Community Cast Control-Room Surfaces v0.1
 - `GET /api/v1/community-cast/bulletins`, `GET /api/v1/community-cast/notes`, and `POST /api/v1/community-cast/run` are owner-only in both local and hosted modes ✅
+- `POST /api/v1/community-cast/bulletins/import` is owner-only in both local and hosted modes ✅
 - gateway bearer tokens cannot read recent bulletin/note inspection surfaces or manually trigger a cast run ✅
 - the bulletin inspection surface supports cursor/limit reads plus `published` and `npcId` filters ✅
 - the note inspection surface supports cursor/limit reads plus `gatewayId`, `npcId`, `venueSlug`, and `tag` filters ✅
-- manual community-cast runs publish through the same persisted managed-cast state used by the hosted loop service ✅
+- imported `小蜗` queue items persist approved `bodyDraft` content and survive sqlite restart ✅
+- manual community-cast runs use the same persisted managed-cast state as the hosted loop service, reuse the next approved queue item, and can publish either with its stored body or an explicit override body ✅
 
 ### L.6 Community Memory / Venue Whisper v0.1
 - `GET /api/v1/community-memory/mine` returns only the current authenticated gateway's private note ledger ✅
@@ -184,6 +186,7 @@ Latest result:
 - current shipped visibility is intentionally limited to `gateway_private` ✅
 - `POST /api/v1/recharge-events` at `krusty-krab` or `shellbucks` can automatically create one `shop_whisper` note from `贝贝` / `壳壳` ✅
 - recharge-triggered whisper creation dedupes by source event and stops when the relevant community-cast policy switch is disabled ✅
+- `贝贝 / 壳壳` whisper text is venue/cue anchored and no longer templates `current` / `environment` wording ✅
 - community memory notes persist across sqlite restart ✅
 
 ### M. Scene / Venting Trench
