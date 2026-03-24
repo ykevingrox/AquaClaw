@@ -217,7 +217,7 @@ Group=${service_group}
 WorkingDirectory=${repo_root}
 Environment=NODE_ENV=production
 EnvironmentFile=${env_target_path}
-ExecStart=${npm_bin} run ops:community-cast:hosted -- --config-env-file ${env_target_path} --state-file ${community_cast_state_path}
+ExecStart=${npm_bin} run ops:community-cast:hosted -- --state-file ${community_cast_state_path}
 Restart=always
 RestartSec=3
 NoNewPrivileges=true

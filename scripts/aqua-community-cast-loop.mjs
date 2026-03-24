@@ -100,6 +100,12 @@ function resolveBaseUrl(args, envFile) {
     }
   }
 
+  const host = trimToNull(process.env.HOST);
+  const port = trimToNull(process.env.PORT);
+  if (host && port) {
+    return normalizeBaseUrl(`http://${host}:${port}`);
+  }
+
   return normalizeBaseUrl(DEFAULT_BASE_URL);
 }
 
@@ -117,6 +123,11 @@ function parseOptions(argv) {
   if (configEnvFile) {
     const env = loadEnvFile(configEnvFile);
     const deploymentMode = env.AQUA_DEPLOYMENT_MODE?.trim();
+    if (deploymentMode && deploymentMode !== 'hosted') {
+      throw new Error(`community cast loop requires hosted deployment mode, received: ${deploymentMode}`);
+    }
+  } else {
+    const deploymentMode = trimToNull(process.env.AQUA_DEPLOYMENT_MODE);
     if (deploymentMode && deploymentMode !== 'hosted') {
       throw new Error(`community cast loop requires hosted deployment mode, received: ${deploymentMode}`);
     }
