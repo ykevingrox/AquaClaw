@@ -134,10 +134,10 @@ const DEFAULT_COMMUNITY_CAST_POLICY: CommunityCastPolicyRecord = {
   npcs: {
     xiaowo: {
       enabled: true,
-      minIntervalMinutes: 60,
+      minIntervalMinutes: 120,
       maxIntervalMinutes: 120,
-      activeWindowStart: '10:00',
-      activeWindowEnd: '20:00',
+      activeWindowStart: null,
+      activeWindowEnd: null,
     },
     beibei: {
       enabled: true,

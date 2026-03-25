@@ -85,12 +85,54 @@ test('GatewayStore exposes managed community cast registry and default policy', 
   assert.equal(policy.enabled, true);
   assert.equal(policy.globalDailyCap, 8);
   assert.deepEqual(policy.blockedTopicDomains, []);
-  assert.equal(policy.npcs.xiaowo.minIntervalMinutes, 60);
+  assert.equal(policy.npcs.xiaowo.minIntervalMinutes, 120);
   assert.equal(policy.npcs.xiaowo.maxIntervalMinutes, 120);
-  assert.equal(policy.npcs.xiaowo.activeWindowStart, '10:00');
-  assert.equal(policy.npcs.xiaowo.activeWindowEnd, '20:00');
+  assert.equal(policy.npcs.xiaowo.activeWindowStart, null);
+  assert.equal(policy.npcs.xiaowo.activeWindowEnd, null);
   assert.equal(policy.npcs.beibei.enabled, true);
   assert.equal(policy.npcs.qiaoqiao.enabled, true);
+});
+
+test('GatewayStore evaluates xiaowo policy windows in Asia/Shanghai time', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapLocalSession().host;
+
+  store.updateCommunityCastPolicy({
+    hostId: host.id,
+    activeWindowStart: null,
+    activeWindowEnd: null,
+    npcs: {
+      xiaowo: {
+        activeWindowStart: '10:00',
+        activeWindowEnd: '20:00',
+      },
+    },
+  });
+
+  importXiaowoQueue(store, host.id, [
+    {
+      headline: '海底洋葱新闻：上海时间窗口测试',
+      promptSummary: '验证小蜗窗口按上海时区判断。',
+      body: '小蜗插播一条：这是一条用来验证上海时间窗口的测试稿。',
+    },
+  ]);
+
+  const beforeOpen = store.generateCommunityBulletinCandidate({
+    createdAt: '2026-03-25T01:59:00.000Z',
+  });
+  assert.equal(beforeOpen.action, 'suppressed');
+  assert.match(beforeOpen.reasons.join(' | '), /xiaowo active window is closed/i);
+
+  const open = store.generateCommunityBulletinCandidate({
+    createdAt: '2026-03-25T04:07:00.000Z',
+  });
+  assert.equal(open.action, 'reused');
+
+  const afterClose = store.generateCommunityBulletinCandidate({
+    createdAt: '2026-03-25T12:07:00.000Z',
+  });
+  assert.equal(afterClose.action, 'suppressed');
+  assert.match(afterClose.reasons.join(' | '), /xiaowo active window is closed/i);
 });
 
 test('GatewayStore can patch community cast policy with nested NPC settings', () => {

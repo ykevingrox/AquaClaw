@@ -1799,6 +1799,19 @@ function parseQuietHourMinutes(value: string, label: string) {
   return Number.parseInt(match[1], 10) * 60 + Number.parseInt(match[2], 10);
 }
 
+const COMMUNITY_CAST_POLICY_TIME_ZONE = 'Asia/Shanghai';
+const COMMUNITY_CAST_POLICY_UTC_OFFSET_MINUTES = 8 * 60;
+const COMMUNITY_CAST_POLICY_UTC_OFFSET_MS = COMMUNITY_CAST_POLICY_UTC_OFFSET_MINUTES * 60_000;
+
+function getCommunityCastPolicyLocalDate(nowMs: number) {
+  return new Date(nowMs + COMMUNITY_CAST_POLICY_UTC_OFFSET_MS);
+}
+
+function getCommunityCastPolicyLocalMinutes(nowMs: number) {
+  const localDate = getCommunityCastPolicyLocalDate(nowMs);
+  return localDate.getUTCHours() * 60 + localDate.getUTCMinutes();
+}
+
 function assertValidQuietHoursTimeZone(value: string) {
   const timeZone = String(value).trim();
   if (!timeZone) {
@@ -9026,8 +9039,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       return true;
     }
 
-    const now = new Date(nowMs);
-    const localMinutes = now.getHours() * 60 + now.getMinutes();
+    const localMinutes = getCommunityCastPolicyLocalMinutes(nowMs);
     const startMinutes = parseQuietHourMinutes(start, 'community cast window start');
     const endMinutes = parseQuietHourMinutes(end, 'community cast window end');
 
@@ -9042,9 +9054,18 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
 
     const [hours, minutes] = clock.split(':').map((value) => Number.parseInt(value, 10));
-    const boundary = new Date(nowMs);
-    boundary.setHours(hours ?? 0, minutes ?? 0, 0, 0);
-    return boundary.toISOString();
+    const localDate = getCommunityCastPolicyLocalDate(nowMs);
+    const boundaryMs =
+      Date.UTC(
+        localDate.getUTCFullYear(),
+        localDate.getUTCMonth(),
+        localDate.getUTCDate(),
+        hours ?? 0,
+        minutes ?? 0,
+        0,
+        0,
+      ) - COMMUNITY_CAST_POLICY_UTC_OFFSET_MS;
+    return new Date(boundaryMs).toISOString();
   }
 
   exportSnapshot(): GatewayStoreSnapshot {
