@@ -3,7 +3,9 @@ import {
   buildGatewayFocusKey,
   buildStageActivity,
   gatewayRecentFeedItems as collectGatewayRecentFeedItems,
+  recentFeedItems as collectRecentFeedItems,
   recentGatewayIds as collectRecentGatewayIds,
+  resolveFocusKeyForFeedItem,
 } from './stage-activity.js';
 import { createStageMotionController } from './stage-motion.js';
 import { buildGatewaySlots, getCommunityCastSlot, getVenueSlot, resolvePlacementScale } from './stage-layout.js';
@@ -71,6 +73,8 @@ const COPY = {
       idleMetaSecondary: 'No private state',
       noRecentMotion: 'No recent public motion has surfaced for this shell yet.',
       noBio: 'No public bio written yet.',
+      latestMotion: 'Latest motion',
+      liveNow: 'Live on stage',
       recentMotion: '{count} recent public ripples',
       profileLine: 'Public profile',
       updatedAt: 'Updated {time}',
@@ -211,6 +215,8 @@ const COPY = {
       idleMetaSecondary: '不展示私密状态',
       noRecentMotion: '这只小龙虾附近暂时还没有新的公开动静浮上来。',
       noBio: '这只小龙虾还没有公开简介。',
+      latestMotion: '最新动态',
+      liveNow: '舞台实时动态',
       recentMotion: '最近有 {count} 条公开涟漪',
       profileLine: '公开资料',
       updatedAt: '更新于 {time}',
@@ -308,6 +314,9 @@ const elements = {
   aquariumFocusKicker: document.querySelector('#aquarium-focus-kicker'),
   aquariumFocusMetaPrimary: document.querySelector('#aquarium-focus-meta-primary'),
   aquariumFocusMetaSecondary: document.querySelector('#aquarium-focus-meta-secondary'),
+  aquariumFocusMotion: document.querySelector('#aquarium-focus-motion'),
+  aquariumFocusMotionBody: document.querySelector('#aquarium-focus-motion-body'),
+  aquariumFocusMotionKicker: document.querySelector('#aquarium-focus-motion-kicker'),
   aquariumFocusSummary: document.querySelector('#aquarium-focus-summary'),
   aquariumFocusTitle: document.querySelector('#aquarium-focus-title'),
   aquariumHud: document.querySelector('#aquarium-hud'),
@@ -543,6 +552,53 @@ function gatewayRecentFeedItems(gatewayId) {
 
 function gatewayFocusKey(gateway) {
   return buildGatewayFocusKey(gateway, gatewayPrimaryLabel);
+}
+
+function focusRecentFeedItems(focusKey, limit = 3) {
+  if (!focusKey) {
+    return [];
+  }
+  return collectRecentFeedItems(state.feed, numericTimestamp, state.feed.length)
+    .filter((item) => resolveFocusKeyForFeedItem(item, {
+      gateways: state.gateways,
+      gatewayPrimaryLabel,
+      gatewaySecondaryLabel,
+    }) === focusKey)
+    .slice(0, limit);
+}
+
+function latestStageLeadItem() {
+  return collectRecentFeedItems(state.feed, numericTimestamp, 1)[0] ?? null;
+}
+
+function focusMotionPreview(value) {
+  return expressionPreview(value, state.locale === 'zh' ? 110 : 210);
+}
+
+function buildFocusMotion(selected) {
+  if (!selected?.focusKey) {
+    return null;
+  }
+
+  const recentItem = focusRecentFeedItems(selected.focusKey, 1)[0] ?? null;
+  if (recentItem) {
+    return {
+      kicker: recentItem.createdAt
+        ? `${t('focus.latestMotion')} · ${formatRelative(recentItem.createdAt)}`
+        : t('focus.latestMotion'),
+      body: focusMotionPreview(localizeFeedSummary(recentItem)),
+    };
+  }
+
+  const leadItem = latestStageLeadItem();
+  if (leadItem && state.stageActivity?.bubbleFocusKey === selected.focusKey) {
+    return {
+      kicker: t('focus.liveNow'),
+      body: focusMotionPreview(localizeFeedSummary(leadItem)),
+    };
+  }
+
+  return null;
 }
 
 function currentStageActivity() {
@@ -812,6 +868,7 @@ function renderStageFocus(focusItems = state.stageFocusItems) {
 
   if (!selected) {
     elements.aquariumFocus.hidden = true;
+    elements.aquariumFocusMotion.hidden = true;
     elements.aquariumViewport.dataset.focusKind = 'none';
     elements.aquariumViewport.dataset.focusPinned = 'false';
     elements.aquariumFocus.dataset.idle = 'false';
@@ -827,10 +884,14 @@ function renderStageFocus(focusItems = state.stageFocusItems) {
   }
 
   elements.aquariumFocus.hidden = false;
+  const motion = buildFocusMotion(selected);
 
   elements.aquariumFocusKicker.textContent = selected.focusKicker;
   elements.aquariumFocusTitle.textContent = selected.focusTitle;
   elements.aquariumFocusSummary.textContent = selected.focusSummary;
+  elements.aquariumFocusMotion.hidden = !motion;
+  elements.aquariumFocusMotionKicker.textContent = motion?.kicker ?? '';
+  elements.aquariumFocusMotionBody.textContent = motion?.body ?? '';
   elements.aquariumFocusMetaPrimary.textContent = selected.focusMetaPrimary;
   elements.aquariumFocusMetaSecondary.textContent = selected.focusMetaSecondary;
   elements.aquariumViewport.dataset.focusKind = selected.focusKind ?? 'idle';

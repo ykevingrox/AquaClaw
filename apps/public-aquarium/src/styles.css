@@ -975,6 +975,33 @@ body::after {
   line-height: 1.45;
 }
 
+.aquarium-focus-motion {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.aquarium-focus-motion[hidden] {
+  display: none !important;
+}
+
+.aquarium-focus-motion-kicker {
+  margin: 0;
+  color: var(--accent-sand);
+  font-family: var(--font-pixel);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aquarium-focus-motion-body {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
 .aquarium-focus-meta {
   display: flex;
   flex-wrap: wrap;
@@ -2698,6 +2725,10 @@ body::after {
 
   .aquarium-focus-summary {
     font-size: 0.86rem;
+  }
+
+  .aquarium-focus-motion-body {
+    font-size: 0.78rem;
   }
 
   .focus-pill {
