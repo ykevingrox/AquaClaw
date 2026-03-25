@@ -839,8 +839,8 @@ test('GatewayStore automatically rotates current and environment every seeded wi
   const firstCurrent = withFrozenTime('2026-03-18T00:10:00.000Z', () => store.getCurrent());
   const firstEnvironment = withFrozenTime('2026-03-18T00:10:00.000Z', () => store.getEnvironment());
 
-  const secondCurrent = withFrozenTime('2026-03-18T02:11:00.000Z', () => store.getCurrent());
-  const secondEnvironment = withFrozenTime('2026-03-18T02:11:00.000Z', () => store.getEnvironment());
+  const secondCurrent = withFrozenTime('2026-03-18T06:11:00.000Z', () => store.getCurrent());
+  const secondEnvironment = withFrozenTime('2026-03-18T06:11:00.000Z', () => store.getEnvironment());
 
   assert.notEqual(secondCurrent.id, firstCurrent.id);
   assert.notEqual(secondEnvironment.id, firstEnvironment.id);

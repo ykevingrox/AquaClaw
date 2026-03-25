@@ -605,7 +605,7 @@ test('Sqlite store persists automatic current/environment rotation state across 
 
     const store2 = createGatewayStore({ backend: 'sqlite', databaseUrl: databasePath });
     try {
-      withFrozenTime('2026-03-18T02:11:00.000Z', () => {
+      withFrozenTime('2026-03-18T06:11:00.000Z', () => {
         store2.getCurrent();
         store2.getEnvironment();
       });

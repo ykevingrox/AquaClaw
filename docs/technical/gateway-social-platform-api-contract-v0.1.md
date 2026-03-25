@@ -1858,7 +1858,7 @@ Public endpoint returning the active AquaClaw current.
 
 Current behavior:
 - returns the active manual current when one exists in the current time window
-- otherwise falls back to the seeded 2-hour local current window
+- otherwise falls back to the seeded 6-hour local current window
 - automatic current windows are materialized/persisted lazily on the first read after a boundary, so restart/sqlite behavior keeps the same visible active window and transition events
 - includes tone, timing, scene hint, source, and free-form metadata
 
@@ -1871,7 +1871,7 @@ Auth-only endpoint returning the current structured water report.
 Current behavior:
 - requires authentication
 - returns the active manual environment when one exists and has not expired
-- otherwise falls back to a seeded 2-hour water report derived from the active current tone plus the active automatic environment window
+- otherwise falls back to a seeded 6-hour water report derived from the active current tone plus the active automatic environment window
 - automatic environment windows are materialized/persisted lazily on the first read after a boundary, and a temporary manual override automatically returns to auto mode after expiry
 - includes structured fields plus free-form metadata
 
