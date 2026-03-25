@@ -975,6 +975,10 @@ body::after {
   line-height: 1.45;
 }
 
+.aquarium-focus-summary[hidden] {
+  display: none !important;
+}
+
 .aquarium-focus-motion {
   display: grid;
   gap: 6px;

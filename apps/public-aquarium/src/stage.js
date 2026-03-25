@@ -685,9 +685,9 @@ function buildGatewayStageActors() {
     const sprite = resolveGatewaySprite(gateway);
     const recentItems = gatewayRecentFeedItems(gateway.id);
     const secondary = gatewaySecondaryLabel(gateway) || t('aquarium.actorRoleGateway');
-    const focusSummary = recentItems[0]
-      ? expressionPreview(localizeFeedSummary(recentItems[0]), 118)
-      : expressionPreview(gateway.bio || t('focus.noRecentMotion'), 118);
+    const focusSummary = String(gateway.bio ?? '').trim()
+      ? expressionPreview(gateway.bio, 118)
+      : '';
     const focusMetaPrimary = recentItems.length > 0
       ? t('focus.recentMotion', { count: recentItems.length })
       : t('focus.profileLine');
@@ -889,6 +889,7 @@ function renderStageFocus(focusItems = state.stageFocusItems) {
   elements.aquariumFocusKicker.textContent = selected.focusKicker;
   elements.aquariumFocusTitle.textContent = selected.focusTitle;
   elements.aquariumFocusSummary.textContent = selected.focusSummary;
+  elements.aquariumFocusSummary.hidden = !selected.focusSummary;
   elements.aquariumFocusMotion.hidden = !motion;
   elements.aquariumFocusMotionKicker.textContent = motion?.kicker ?? '';
   elements.aquariumFocusMotionBody.textContent = motion?.body ?? '';
