@@ -888,7 +888,7 @@ test('GatewayStore temporary manual environment override returns to automatic ro
   assert.equal(resumedEvent.metadata.source, 'seeded');
 });
 
-test('GatewayStore encounter seam records and reuses the same pair record', () => {
+test('GatewayStore encounter seam records the first pair memory only once', () => {
   const store: GatewayStore = createGatewayStore();
   const alpha = registerGateway(store, { displayName: 'Encounter Alpha', handle: 'encounter-alpha-store' });
   const beta = registerGateway(store, { displayName: 'Encounter Beta', handle: 'encounter-beta-store' });
@@ -906,14 +906,15 @@ test('GatewayStore encounter seam records and reuses the same pair record', () =
     gatewayAId: alpha.id,
     gatewayBId: beta.id,
     actorGatewayId: alpha.id,
-    trigger: 'message.sent',
-    summary: '@encounter-alpha-store and @encounter-beta-store exchanged a direct message',
+    trigger: 'friend_request.accepted',
+    summary: '@encounter-alpha-store and @encounter-beta-store should stay on the first encounter memory',
     topics: ['coral', 'maps'],
   });
 
   assert.equal(secondEncounter.id, firstEncounter.id);
-  assert.equal(secondEncounter.encounterCount, 2);
-  assert.equal(secondEncounter.recentTopics.includes('coral'), true);
+  assert.equal(secondEncounter.encounterCount, 1);
+  assert.equal(secondEncounter.lastSummary, firstEncounter.lastSummary);
+  assert.equal(secondEncounter.recentTopics.includes('coral'), false);
 
   const encounters = store.listEncounters({
     viewerGatewayId: alpha.id,
@@ -926,7 +927,8 @@ test('GatewayStore encounter seam records and reuses the same pair record', () =
     viewerGatewayId: alpha.id,
     scope: 'mine',
   });
-  assert.equal(mineFeed.items.some((event) => event.type === 'encounter.updated'), true);
+  assert.equal(mineFeed.items.some((event) => event.type === 'encounter.recorded'), true);
+  assert.equal(mineFeed.items.some((event) => event.type === 'encounter.updated'), false);
 });
 
 test('GatewayStore accepts custom encounter synthesis rules', () => {
@@ -954,21 +956,23 @@ test('GatewayStore accepts custom encounter synthesis rules', () => {
     gatewayAId: alpha.id,
     gatewayBId: beta.id,
     actorGatewayId: alpha.id,
-    trigger: 'message.sent',
-    messageBody: 'kelp coral tide maps sonar',
+    trigger: 'friend_request.accepted',
+    summary: '@encounter-rules-alpha and @encounter-rules-beta should stay on the first seed',
+    topics: ['kelp', 'coral'],
   });
-  assert.deepEqual(second.recentTopics, ['kelp', 'coral', 'reef-bond']);
-  assert.equal(second.notes.length, 2);
+  assert.deepEqual(second.recentTopics, ['reef-bond']);
+  assert.equal(second.notes.length, 1);
 
   const third = store.recordEncounter({
     gatewayAId: alpha.id,
     gatewayBId: beta.id,
     actorGatewayId: alpha.id,
-    trigger: 'message.sent',
-    messageBody: 'luma reef quiet signal',
+    trigger: 'friend_request.accepted',
+    summary: '@encounter-rules-alpha and @encounter-rules-beta should still stay on the first seed',
+    topics: ['luma', 'reef'],
   });
-  assert.deepEqual(third.recentTopics, ['luma', 'reef', 'kelp']);
-  assert.equal(third.notes.length, 2);
+  assert.deepEqual(third.recentTopics, ['reef-bond']);
+  assert.equal(third.notes.length, 1);
 });
 
 test('GatewayStore social pulse dry-run prefers replying to a live friend thread', () => {
@@ -1768,7 +1772,7 @@ test('GatewayStore first direct message updates encounter continuity and writes 
     viewerGatewayId: alpha.id,
     gatewayId: alpha.id,
   });
-  assert.equal(encounters.items[0]?.encounterCount, 2);
+  assert.equal(encounters.items[0]?.encounterCount, 1);
 });
 
 test('GatewayStore participant social pulse can plan a public reply for a recent public thread', () => {

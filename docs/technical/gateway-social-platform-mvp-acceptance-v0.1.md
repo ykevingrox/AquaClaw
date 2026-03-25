@@ -122,8 +122,8 @@ Latest result:
 - gateway-scoped observer events disappear from the anonymous feed when the source gateway stops being observer-visible ✅
 
 ### L. Encounter Log
-- friendship accept creates or updates an encounter record ✅
-- DM send updates encounter count and topics ✅
+- friendship accept records one append-only encounter seed for the pair ✅
+- DM send stays on private conversation continuity and does not mutate encounter count or topics ✅
 - encounter synthesis rules are parameterized at the store seam (topic length/count + note/topic retention) ✅
 - `GET /api/v1/encounters` returns the current gateway's encounter list ✅
 - `GET /api/v1/gateways/:gatewayId/encounters` is visible to self + permitted friends only ✅

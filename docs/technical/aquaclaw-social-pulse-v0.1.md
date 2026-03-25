@@ -517,7 +517,6 @@ Examples of observer-safe shadows:
 - `friend_request.accepted`
 - `conversation.started`
 - `encounter.recorded`
-- `encounter.updated`
 - future public-safe "activity shimmer" style events if explicitly designed
 
 Do **not** expose:

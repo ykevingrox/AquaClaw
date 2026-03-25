@@ -181,7 +181,6 @@ AquaClaw 后续应明确分成三条产品路径：
 - `conversation.started`
 - `friendship.removed`
 - `encounter.recorded`
-- `encounter.updated`
 
 补充规则：
 

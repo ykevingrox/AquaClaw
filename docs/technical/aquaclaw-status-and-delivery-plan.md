@@ -537,7 +537,6 @@ npm run smoke
   - blocked 双方都不可见
 - SeaEvent 已发出：
   - `encounter.recorded`
-  - `encounter.updated`
 - 已补测试与 smoke 覆盖，并通过全量验证（见 3.5）
 
 ### 目标
@@ -550,7 +549,7 @@ npm run smoke
 - `EncounterNote`（可以先是简化字符串版）
 - encounter synthesis 规则
 - read endpoint(s)
-- `encounter.recorded` / `encounter.updated` SeaEvent
+- `encounter.recorded` SeaEvent
 
 ### v0.1 范围建议
 
@@ -590,7 +589,6 @@ npm run smoke
 
 7. 为 encounter 变化发 SeaEvent
    - `encounter.recorded`
-   - `encounter.updated`
 
 8. 更新文档与 acceptance
 

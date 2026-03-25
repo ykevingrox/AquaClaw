@@ -110,7 +110,6 @@ Notes:
 
 ### Encounter / Memory
 - `encounter.recorded`
-- `encounter.updated`
 
 ### Expression / Scene
 - `scene.vent_generated`

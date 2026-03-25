@@ -1209,7 +1209,7 @@ export interface SetEnvironmentInput {
   actorGatewayId?: string | null;
 }
 
-export type EncounterTrigger = 'friend_request.accepted' | 'message.sent';
+export type EncounterTrigger = 'friend_request.accepted';
 
 export interface RecordEncounterInput {
   gatewayAId: string;
@@ -1218,7 +1218,6 @@ export interface RecordEncounterInput {
   trigger: EncounterTrigger;
   summary?: string;
   topics?: string[];
-  messageBody?: string;
   createdAt?: string;
 }
 
@@ -1427,7 +1426,6 @@ const PUBLIC_OBSERVER_EVENT_TYPES = new Set([
   'conversation.started',
   'friendship.removed',
   'encounter.recorded',
-  'encounter.updated',
   'public_expression.created',
   'public_expression.replied',
 ]);
@@ -5361,41 +5359,32 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
 
     const pair = this.normalizeEncounterPair(input.gatewayAId, input.gatewayBId);
     const pairKey = this.encounterPairKey(pair[0], pair[1]);
-    const now = input.createdAt ?? new Date().toISOString();
     const existing = this.encountersByPairKey.get(pairKey) ?? null;
-    const nextTopics = this.mergeEncounterTopics(
-      [...this.defaultEncounterTopics(input.trigger), ...(input.topics ?? []), ...(input.messageBody ? this.extractEncounterTopics(input.messageBody) : [])],
-      existing?.recentTopics ?? [],
-    );
-    const nextNotes = this.mergeEncounterNotes(summary, existing?.notes ?? []);
+    if (existing) {
+      return existing;
+    }
 
-    const encounter: EncounterRecord = existing
-      ? {
-          ...existing,
-          encounterCount: existing.encounterCount + 1,
-          lastEncounteredAt: now,
-          lastSummary: summary,
-          recentTopics: nextTopics,
-          notes: nextNotes,
-          updatedAt: now,
-        }
-      : {
-          id: `encounter-${randomUUID()}`,
-          gatewayAId: pair[0],
-          gatewayBId: pair[1],
-          encounterCount: 1,
-          lastEncounteredAt: now,
-          lastSummary: summary,
-          recentTopics: nextTopics,
-          notes: nextNotes,
-          createdAt: now,
-          updatedAt: now,
-        };
+    const now = input.createdAt ?? new Date().toISOString();
+    const nextTopics = this.mergeEncounterTopics([...this.defaultEncounterTopics(), ...(input.topics ?? [])], []);
+    const nextNotes = this.mergeEncounterNotes(summary, []);
+
+    const encounter: EncounterRecord = {
+      id: `encounter-${randomUUID()}`,
+      gatewayAId: pair[0],
+      gatewayBId: pair[1],
+      encounterCount: 1,
+      lastEncounteredAt: now,
+      lastSummary: summary,
+      recentTopics: nextTopics,
+      notes: nextNotes,
+      createdAt: now,
+      updatedAt: now,
+    };
 
     this.encountersByPairKey.set(pairKey, encounter);
 
-    const type = existing ? 'encounter.updated' : 'encounter.recorded';
-    const tone: SeaEventTone = existing ? 'reflective' : 'playful';
+    const type = 'encounter.recorded';
+    const tone: SeaEventTone = 'playful';
     const metadata = {
       encounterId: encounter.id,
       encounterCount: encounter.encounterCount,
@@ -5744,15 +5733,6 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     const sandboxConversation =
       this.isLocalReefSandboxGatewayId(input.senderGatewayId) || this.isLocalReefSandboxGatewayId(peerGatewayId);
     if (!sandboxConversation) {
-      this.recordEncounter({
-        gatewayAId: input.senderGatewayId,
-        gatewayBId: peerGatewayId,
-        actorGatewayId: input.senderGatewayId,
-        trigger: 'message.sent',
-        messageBody: body,
-        createdAt: now,
-      });
-
       const previousLatestMessageAtMs = previousLatestMessage ? Date.parse(previousLatestMessage.createdAt) : Number.NaN;
       const sceneReason =
         previousMessages.length === 0
@@ -6370,11 +6350,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     );
   }
 
-  private defaultEncounterTopics(trigger: EncounterTrigger) {
-    if (trigger === 'friend_request.accepted') {
-      return [...this.encounterSynthesisRules.friendRequestAcceptedSeedTopics];
-    }
-    return [];
+  private defaultEncounterTopics() {
+    return [...this.encounterSynthesisRules.friendRequestAcceptedSeedTopics];
   }
 
   private buildEncounterSummary(input: RecordEncounterInput) {
@@ -6383,10 +6360,75 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     }
     const gatewayALabel = this.gatewayLabel(input.gatewayAId);
     const gatewayBLabel = this.gatewayLabel(input.gatewayBId);
-    if (input.trigger === 'friend_request.accepted') {
-      return `${gatewayALabel} and ${gatewayBLabel} formed a first encounter memory`;
+    return `${gatewayALabel} and ${gatewayBLabel} formed a first encounter memory`;
+  }
+
+  private selectEncounterSeedSummary(encounter: EncounterRecord) {
+    const seededSummary = [encounter.lastSummary, ...encounter.notes]
+      .map((note) => note.trim())
+      .find((note) => /formed a first encounter memory$/iu.test(note));
+
+    if (seededSummary) {
+      return seededSummary;
     }
-    return `${gatewayALabel} and ${gatewayBLabel} exchanged a direct message`;
+
+    return this.buildEncounterSummary({
+      gatewayAId: encounter.gatewayAId,
+      gatewayBId: encounter.gatewayBId,
+      trigger: 'friend_request.accepted',
+    });
+  }
+
+  private isEncounterPollutedByDirectMessages(encounter: EncounterRecord) {
+    if (encounter.encounterCount !== 1) {
+      return true;
+    }
+    if (encounter.lastEncounteredAt !== encounter.createdAt || encounter.updatedAt !== encounter.createdAt) {
+      return true;
+    }
+    if (/direct message/iu.test(encounter.lastSummary)) {
+      return true;
+    }
+    return encounter.notes.some((note) => /direct message/iu.test(note));
+  }
+
+  private normalizeEncounterRecord(encounter: EncounterRecord): EncounterRecord {
+    const pair = this.normalizeEncounterPair(encounter.gatewayAId, encounter.gatewayBId);
+
+    if (!this.isEncounterPollutedByDirectMessages(encounter)) {
+      return {
+        ...encounter,
+        gatewayAId: pair[0],
+        gatewayBId: pair[1],
+      };
+    }
+
+    const createdAt = encounter.createdAt || encounter.lastEncounteredAt || encounter.updatedAt;
+    const seedSummary = this.selectEncounterSeedSummary({
+      ...encounter,
+      gatewayAId: pair[0],
+      gatewayBId: pair[1],
+    });
+
+    return {
+      ...encounter,
+      gatewayAId: pair[0],
+      gatewayBId: pair[1],
+      encounterCount: 1,
+      lastEncounteredAt: createdAt,
+      lastSummary: seedSummary,
+      recentTopics: this.mergeEncounterTopics(this.defaultEncounterTopics(), []),
+      notes: [seedSummary],
+      createdAt,
+      updatedAt: createdAt,
+    };
+  }
+
+  private normalizeSeaEventForEncounterBoundary(event: SeaEvent): SeaEvent | null {
+    if (event.type === 'encounter.updated') {
+      return null;
+    }
+    return event;
   }
 
   private latestEncounterForGateway(gatewayId: string) {
@@ -9347,7 +9389,12 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       this.conversationReadStatesByKey.set(this.conversationReadStateKey(readState.conversationId, readState.gatewayId), readState);
     }
     this.auditLog.push(...snapshot.auditLog);
-    this.seaEvents.push(...snapshot.seaEvents);
+    for (const event of snapshot.seaEvents) {
+      const normalizedEvent = this.normalizeSeaEventForEncounterBoundary(event);
+      if (normalizedEvent) {
+        this.seaEvents.push(normalizedEvent);
+      }
+    }
     for (const current of snapshot.currents) {
       this.currentsById.set(current.id, current);
     }
@@ -9359,7 +9406,11 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.activeEnvironmentId = snapshot.activeEnvironmentId ?? null;
     this.automaticEnvironmentId = snapshot.automaticEnvironmentId ?? null;
     for (const encounter of snapshot.encounters) {
-      this.encountersByPairKey.set(this.encounterPairKey(encounter.gatewayAId, encounter.gatewayBId), encounter);
+      const normalizedEncounter = this.normalizeEncounterRecord(encounter);
+      this.encountersByPairKey.set(
+        this.encounterPairKey(normalizedEncounter.gatewayAId, normalizedEncounter.gatewayBId),
+        normalizedEncounter,
+      );
     }
     for (const scene of snapshot.scenes) {
       this.scenesById.set(scene.id, scene);

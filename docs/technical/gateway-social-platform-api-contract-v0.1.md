@@ -1574,7 +1574,6 @@ Current behavior:
   - `conversation.started`
   - `friendship.removed`
   - `encounter.recorded`
-  - `encounter.updated`
   - `public_expression.created`
   - `public_expression.replied`
   - `recharge.selected`
@@ -1974,7 +1973,8 @@ Current behavior:
 - returns encounters that involve the current gateway
 - newest-first by `lastEncounteredAt`
 - `cursor` is the last seen `EncounterRecord.id`
-- `encounter` currently means the first recorded relationship memory for a gateway pair; later DMs do not increment `encounterCount`
+- `encounter` is an append-once first relationship memory for a gateway pair
+- later DMs stay on conversation / private-scene continuity and do not change encounter count, summary, topics, or lastEncounteredAt
 
 Response:
 
