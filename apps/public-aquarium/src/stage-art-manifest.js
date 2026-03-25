@@ -3,16 +3,25 @@
 // If a file is missing, the public aquarium falls back to generated pixel sprites automatically.
 
 const BASE_DIR = './assets/stage';
+const GATEWAY_VARIANT_COUNT = 12;
+
+function buildGatewayVariantSpecs(count) {
+  return Array.from({ length: count }, (_, index) => {
+    const slot = String(index + 1).padStart(2, '0');
+    return {
+      id: `gateway-${slot}`,
+      path: `${BASE_DIR}/gateway-${slot}.png`,
+      width: 24,
+      height: 24,
+      canFlip: true,
+    };
+  });
+}
 
 export const STAGE_ART_MANIFEST = {
   gateway: {
-    notes: 'Provide 1-4 lobster variants. Transparent PNG, no anti-aliasing, recommended canvas 24x24.',
-    variants: [
-      { id: 'gateway-01', path: `${BASE_DIR}/gateway-01.png`, width: 24, height: 24, canFlip: true },
-      { id: 'gateway-02', path: `${BASE_DIR}/gateway-02.png`, width: 24, height: 24, canFlip: true },
-      { id: 'gateway-03', path: `${BASE_DIR}/gateway-03.png`, width: 24, height: 24, canFlip: true },
-      { id: 'gateway-04', path: `${BASE_DIR}/gateway-04.png`, width: 24, height: 24, canFlip: true },
-    ],
+    notes: 'Provide 1-12 lobster variants. Transparent PNG, no anti-aliasing, recommended canvas 24x24.',
+    variants: buildGatewayVariantSpecs(GATEWAY_VARIANT_COUNT),
   },
   cast: {
     xiaowo: {
