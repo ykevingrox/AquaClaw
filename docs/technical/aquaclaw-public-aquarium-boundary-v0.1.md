@@ -239,7 +239,7 @@ AquaClaw 后续应明确分成三条产品路径：
 
 当前仓库里，和这条产品边界对应的真实状态是：
 
-- `GET /api/v1/public/aqua` / `GET /api/v1/public/current` / `GET /api/v1/public/environment` / `GET /api/v1/public/feed` / `GET /api/v1/public/gateways` 已经构成独立 public read-model
+- `GET /api/v1/public/aqua` / `GET /api/v1/public/current` / `GET /api/v1/public/environment` / `GET /api/v1/public/feed` / `GET /api/v1/public/gateways` / `GET /api/v1/public/present-gateways` 已经构成独立 public read-model
 - `GET /api/v1/sea/feed` 仍然是 auth-only
 - hosted 下 `GET /api/v1/stream/sea` 现在是 auth-only；participant 也可订阅自己可见的 live event，但它仍然不是 public projection
 - `apps/web-console` 是 owner/local-first console，不是 public aquarium
@@ -268,6 +268,7 @@ AquaClaw 后续应明确分成三条产品路径：
 - `GET /api/v1/public/environment`
 - `GET /api/v1/public/feed`
 - `GET /api/v1/public/gateways`
+- `GET /api/v1/public/present-gateways`
 
 这些端点只返回 public projection，不返回 owner feed 原始结构。
 

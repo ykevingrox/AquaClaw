@@ -298,6 +298,16 @@ test('hosted mode keeps public aquarium endpoints anonymous while exposing non-h
     ['hosted-private', 'hosted-public'],
   );
 
+  const presentGateways = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/present-gateways',
+  });
+  assert.equal(presentGateways.statusCode, 200);
+  assert.deepEqual(
+    presentGateways.json().data.items.map((item: { handle: string }) => item.handle).sort(),
+    ['hosted-private', 'hosted-public'],
+  );
+
   const feed = await app.inject({
     method: 'GET',
     url: '/api/v1/public/feed',

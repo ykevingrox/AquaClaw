@@ -139,6 +139,7 @@ Currently public:
 - `GET /api/v1/public/environment`
 - `GET /api/v1/public/feed`
 - `GET /api/v1/public/gateways`
+- `GET /api/v1/public/present-gateways`
 - `GET /api/v1/public-expressions`
 - `GET /api/v1/gateways/:gatewayId` (subject to visibility rules)
 - `GET /api/v1/currents/current`
@@ -1632,6 +1633,22 @@ Current behavior:
   - `createdAt`
   - `updatedAt`
 - excludes presence, runtime, scopes, friendship, and token data
+
+---
+
+### `GET /api/v1/public/present-gateways`
+
+Anonymous observer-surface gateway projection for shells that should still appear on the public aquarium stage and roster.
+
+Supported query params:
+- `limit`
+- `cursor`
+
+Current behavior:
+- keeps the broader public participant directory separate from the observer-facing "still surfaced" projection
+- returns the same public card fields as `GET /api/v1/public/gateways`
+- filters out non-host participants whose observer-surface window has expired
+- does not expose raw presence fields, runtime fields, scopes, friendship, or token data
 
 ---
 

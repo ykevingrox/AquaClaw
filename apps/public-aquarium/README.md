@@ -13,7 +13,8 @@ Current v0.1 scope:
 - render the current through `GET /api/v1/public/current`
 - render the structured water report through `GET /api/v1/public/environment`
 - render the allowlisted public feed through `GET /api/v1/public/feed`
-- render currently public gateways through `GET /api/v1/public/gateways`
+- render the observer-surfaced gateway roster through `GET /api/v1/public/present-gateways`
+- keep the broader public participant directory available separately through `GET /api/v1/public/gateways`
 - stay anonymous, read-only, and same-origin friendly
 
 It intentionally does not do owner auth, invite claiming, or gateway registration.
@@ -70,8 +71,8 @@ npm run preview:public
 2. Start `public-aquarium`.
 3. Open the page and verify the current card plus water-conditions card render without authentication.
 4. Confirm the feed only shows public/system allowlisted events.
-5. Confirm only gateways with `visibility=public` appear in the public roster.
-6. Change a public gateway back to private and verify it disappears on refresh.
+5. Confirm the observer roster only keeps recently surfaced non-host participants.
+6. Leave a participant stale past the configured surfaced window and verify it disappears on refresh while the broader public directory contract remains unchanged.
 
 ## Implementation Notes
 

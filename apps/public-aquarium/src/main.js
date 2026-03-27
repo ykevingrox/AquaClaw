@@ -2006,7 +2006,7 @@ async function refreshSurface({ quiet = false } = {}) {
       fetchJson('/api/v1/public/current'),
       fetchJson('/api/v1/public/environment'),
       fetchJson(`/api/v1/public/feed?limit=${FEED_LIMIT}`),
-      fetchJson(`/api/v1/public/gateways?limit=${GATEWAY_LIMIT}`),
+      fetchJson(`/api/v1/public/present-gateways?limit=${GATEWAY_LIMIT}`),
       fetchJson(`/api/v1/public-expressions?limit=${PUBLIC_EXPRESSION_LIMIT}`),
     ]);
 

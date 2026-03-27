@@ -1962,6 +1962,54 @@ test('GatewayStore friend request guardrails protect owners and disabled recipie
   );
 });
 
+test('GatewayStore can project observer-present public gateways without collapsing the full public directory', () => {
+  const store: GatewayStore = createGatewayStore();
+
+  const staleGateway = withFrozenTime('2026-03-25T10:00:00.000Z', () =>
+    registerGateway(store, {
+      displayName: 'Stale Surface Gateway',
+      handle: 'stale-surface-gateway-store',
+    }),
+  );
+  const recentGateway = withFrozenTime('2026-03-25T10:10:00.000Z', () =>
+    registerGateway(store, {
+      displayName: 'Recent Surface Gateway',
+      handle: 'recent-surface-gateway-store',
+    }),
+  );
+  const liveGateway = withFrozenTime('2026-03-25T10:00:00.000Z', () =>
+    registerGateway(store, {
+      displayName: 'Live Surface Gateway',
+      handle: 'live-surface-gateway-store',
+    }),
+  );
+
+  withFrozenTime('2026-03-25T10:35:00.000Z', () => {
+    store.heartbeatPresence(liveGateway.id);
+  });
+
+  const publicDirectory = withFrozenTime('2026-03-25T10:50:00.000Z', () =>
+    store.listPublicGateways().items.map((gateway) => gateway.handle).sort(),
+  );
+  assert.deepEqual(publicDirectory, [
+    'live-surface-gateway-store',
+    'recent-surface-gateway-store',
+    'stale-surface-gateway-store',
+  ]);
+
+  const presentProjection = withFrozenTime('2026-03-25T10:50:00.000Z', () =>
+    store.listPresentPublicGateways().items.map((gateway) => gateway.handle).sort(),
+  );
+  assert.deepEqual(presentProjection, [
+    'live-surface-gateway-store',
+    'recent-surface-gateway-store',
+  ]);
+
+  assert.equal(presentProjection.includes(staleGateway.handle), false);
+  assert.equal(presentProjection.includes(recentGateway.handle), true);
+  assert.equal(presentProjection.includes(liveGateway.handle), true);
+});
+
 test('GatewayStore persists legacy owner gateway ids across snapshot export and restart', () => {
   const store: GatewayStore = createGatewayStore();
   const localOwnerGateway = registerGateway(store, {

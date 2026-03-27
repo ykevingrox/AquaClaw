@@ -1772,6 +1772,43 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
   });
 
+  app.get<{ Querystring: PublicGatewayQuerystring }>('/api/v1/public/present-gateways', async (request, reply) => {
+    const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
+    if ('error' in parsedLimit) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedLimit.error,
+        },
+      });
+    }
+
+    try {
+      const gateways = store.listPresentPublicGateways({
+        cursor: request.query.cursor?.trim() || undefined,
+        limit: parsedLimit.value,
+      });
+
+      return {
+        ok: true,
+        data: {
+          items: gateways.items.map((gateway) => toPublicGatewaySummary(gateway)),
+          nextCursor: gateways.nextCursor,
+        },
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'failed to list present public gateways';
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: messageText,
+        },
+      });
+    }
+  });
+
   app.get<{ Querystring: PublicExpressionQuerystring }>('/api/v1/public-expressions', async (request, reply) => {
     const parsedLimit = parsePositiveIntegerQuery(request.query.limit);
     if ('error' in parsedLimit) {

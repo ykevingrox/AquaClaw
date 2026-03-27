@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/app.js';
+import { createGatewayStore } from '../src/store.js';
 
 function buildActiveCurrentWindow(durationMinutes = 2 * 60) {
   return {
@@ -51,6 +52,36 @@ async function bootstrapLocalHost(app: ReturnType<typeof buildApp>, payload?: { 
       bio: string;
     },
   };
+}
+
+async function withFrozenTime<T>(iso: string, fn: () => Promise<T> | T): Promise<T> {
+  const fixedNow = new Date(iso).getTime();
+  const RealDate = Date;
+
+  class MockDate extends RealDate {
+    constructor(value?: string | number | Date) {
+      if (arguments.length === 0) {
+        super(fixedNow);
+        return;
+      }
+      super(value as string | number | Date);
+    }
+
+    static now() {
+      return fixedNow;
+    }
+  }
+
+  Object.setPrototypeOf(MockDate, RealDate);
+  MockDate.parse = RealDate.parse;
+  MockDate.UTC = RealDate.UTC;
+
+  globalThis.Date = MockDate as DateConstructor;
+  try {
+    return await fn();
+  } finally {
+    globalThis.Date = RealDate;
+  }
 }
 
 test('health endpoint returns ok', async () => {
@@ -1975,6 +2006,18 @@ test('public aquarium endpoints expose anonymous sea state plus all non-host par
   assert.equal('status' in gateways.json().data.items[0], false);
   assert.equal('visibility' in gateways.json().data.items[0], false);
 
+  const presentGateways = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/present-gateways',
+  });
+  assert.equal(presentGateways.statusCode, 200);
+  assert.deepEqual(
+    presentGateways.json().data.items.map((item: { handle: string }) => item.handle).sort(),
+    ['alpha-public', 'beta-invite'],
+  );
+  assert.equal('status' in presentGateways.json().data.items[0], false);
+  assert.equal('visibility' in presentGateways.json().data.items[0], false);
+
   const feed = await app.inject({
     method: 'GET',
     url: '/api/v1/public/feed',
@@ -2295,6 +2338,68 @@ test('public aquarium hides the bootstrapped local host while still showing non-
     feed.json().data.items.some((item: { gateway: { handle: string } | null }) => item.gateway?.handle === 'shore-host'),
     false,
   );
+
+  await app.close();
+});
+
+test('public present gateways keep stale participants out of observer surfaces while the public directory stays intact', async () => {
+  const store = createGatewayStore();
+
+  await withFrozenTime('2026-03-25T10:00:00.000Z', () => {
+    store.register({
+      displayName: 'Stale Public Claw',
+      handle: 'stale-public-claw',
+      visibility: 'public',
+    });
+  });
+  await withFrozenTime('2026-03-25T10:10:00.000Z', () => {
+    store.register({
+      displayName: 'Recent Invite Claw',
+      handle: 'recent-invite-claw',
+      visibility: 'invite_only',
+    });
+  });
+  const liveGateway = await withFrozenTime('2026-03-25T10:00:00.000Z', () =>
+    store.register({
+      displayName: 'Live Public Claw',
+      handle: 'live-public-claw',
+      visibility: 'public',
+    }).gateway,
+  );
+  await withFrozenTime('2026-03-25T10:35:00.000Z', () => {
+    store.heartbeatPresence(liveGateway.id);
+  });
+
+  const app = buildApp({ store });
+
+  const directory = await withFrozenTime('2026-03-25T10:50:00.000Z', () =>
+    app.inject({
+      method: 'GET',
+      url: '/api/v1/public/gateways',
+    }),
+  );
+  assert.equal(directory.statusCode, 200);
+  assert.deepEqual(
+    directory.json().data.items.map((item: { handle: string }) => item.handle).sort(),
+    ['live-public-claw', 'recent-invite-claw', 'stale-public-claw'],
+  );
+
+  const present = await withFrozenTime('2026-03-25T10:50:00.000Z', () =>
+    app.inject({
+      method: 'GET',
+      url: '/api/v1/public/present-gateways',
+    }),
+  );
+  assert.equal(present.statusCode, 200);
+  assert.deepEqual(
+    present.json().data.items.map((item: { handle: string }) => item.handle).sort(),
+    ['live-public-claw', 'recent-invite-claw'],
+  );
+  assert.equal(
+    present.json().data.items.some((item: { handle: string }) => item.handle === 'stale-public-claw'),
+    false,
+  );
+  assert.equal('status' in present.json().data.items[0], false);
 
   await app.close();
 });

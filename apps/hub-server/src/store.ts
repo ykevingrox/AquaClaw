@@ -856,6 +856,7 @@ export interface GatewayStore {
   getPresence(gatewayId: string): GatewayPresenceRecord;
   searchGateways(input: SearchGatewaysInput): GatewayRecord[];
   listPublicGateways(input?: ListPublicGatewaysInput): GatewayPage;
+  listPresentPublicGateways(input?: ListPublicGatewaysInput): GatewayPage;
   createInvite(input: CreateInviteInput): InviteRecord;
   revokeInvite(input: RevokeInviteInput): InviteRecord;
   claimInvite(input: ClaimInviteInput): { invite: InviteRecord; claim: InviteClaimRecord; friendRequest: FriendRequestRecord | null };
@@ -3427,16 +3428,13 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   listPublicGateways(input: ListPublicGatewaysInput = {}): GatewayPage {
-    const visible = Array.from(this.gatewaysById.values())
-      .filter((gateway) => !this.isOwnerGatewayId(gateway.id))
-      .filter((gateway) => !this.isManagedCommunityGatewayId(gateway.id))
-      .sort((a, b) => {
-        const updatedAtComparison = b.updatedAt.localeCompare(a.updatedAt);
-        if (updatedAtComparison !== 0) {
-          return updatedAtComparison;
-        }
-        return b.createdAt.localeCompare(a.createdAt);
-      });
+    const visible = this.listPublicGatewayDirectory();
+
+    return this.paginateGateways(visible, input.cursor, input.limit);
+  }
+
+  listPresentPublicGateways(input: ListPublicGatewaysInput = {}): GatewayPage {
+    const visible = this.listPublicGatewayDirectory().filter((gateway) => this.isPresentPublicGateway(gateway));
 
     return this.paginateGateways(visible, input.cursor, input.limit);
   }
@@ -5860,6 +5858,27 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
 
   private isOwnerGatewayId(gatewayId: string) {
     return gatewayId === this.localOwnerGatewayId || gatewayId === this.hostedOwnerGatewayId || this.legacyOwnerGatewayIds.has(gatewayId);
+  }
+
+  private listPublicGatewayDirectory() {
+    return Array.from(this.gatewaysById.values())
+      .filter((gateway) => !this.isOwnerGatewayId(gateway.id))
+      .filter((gateway) => !this.isManagedCommunityGatewayId(gateway.id))
+      .sort((a, b) => {
+        const updatedAtComparison = b.updatedAt.localeCompare(a.updatedAt);
+        if (updatedAtComparison !== 0) {
+          return updatedAtComparison;
+        }
+        return b.createdAt.localeCompare(a.createdAt);
+      });
+  }
+
+  private publicGatewayPresenceAnchor(gateway: GatewayRecord) {
+    return this.lastSeenAtByGatewayId.get(gateway.id) ?? gateway.updatedAt ?? gateway.createdAt ?? null;
+  }
+
+  private isPresentPublicGateway(gateway: GatewayRecord) {
+    return this.derivePresenceStatus(this.publicGatewayPresenceAnchor(gateway)) !== 'offline';
   }
 
   private hostViewerId(hostId: string) {

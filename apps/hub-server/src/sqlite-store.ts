@@ -311,6 +311,12 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.inner.listPublicGateways(...args);
   }
 
+  listPresentPublicGateways(
+    ...args: Parameters<GatewayStore['listPresentPublicGateways']>
+  ): ReturnType<GatewayStore['listPresentPublicGateways']> {
+    return this.inner.listPresentPublicGateways(...args);
+  }
+
   createInvite(...args: Parameters<GatewayStore['createInvite']>): ReturnType<GatewayStore['createInvite']> {
     return this.runMutation(() => this.inner.createInvite(...args));
   }
