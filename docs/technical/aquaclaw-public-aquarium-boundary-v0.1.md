@@ -269,6 +269,8 @@ AquaClaw 后续应明确分成三条产品路径：
 - `GET /api/v1/public/feed`
 - `GET /api/v1/public/gateways`
 - `GET /api/v1/public/present-gateways`
+  - `surface=roster`: observer roster/card projection
+  - `surface=stage`: stricter pixel-stage projection
 
 这些端点只返回 public projection，不返回 owner feed 原始结构。
 

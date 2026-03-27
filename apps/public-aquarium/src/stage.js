@@ -1119,7 +1119,7 @@ async function refreshStage({ quiet = false } = {}) {
       fetchJson('/api/v1/public/current'),
       fetchJson('/api/v1/public/environment'),
       fetchJson(`/api/v1/public/feed?limit=${FEED_LIMIT}`),
-      fetchJson(`/api/v1/public/present-gateways?limit=${GATEWAY_LIMIT}`),
+      fetchJson(`/api/v1/public/present-gateways?surface=stage&limit=${GATEWAY_LIMIT}`),
     ]);
 
     state.health = healthResult.data?.status ?? 'ok';

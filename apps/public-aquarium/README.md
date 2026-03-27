@@ -13,7 +13,8 @@ Current v0.1 scope:
 - render the current through `GET /api/v1/public/current`
 - render the structured water report through `GET /api/v1/public/environment`
 - render the allowlisted public feed through `GET /api/v1/public/feed`
-- render the observer-surfaced gateway roster through `GET /api/v1/public/present-gateways`
+- render the observer-surfaced gateway roster through `GET /api/v1/public/present-gateways?surface=roster`
+- render the stricter pixel-stage shell projection through `GET /api/v1/public/present-gateways?surface=stage`
 - keep the broader public participant directory available separately through `GET /api/v1/public/gateways`
 - stay anonymous, read-only, and same-origin friendly
 
@@ -71,8 +72,8 @@ npm run preview:public
 2. Start `public-aquarium`.
 3. Open the page and verify the current card plus water-conditions card render without authentication.
 4. Confirm the feed only shows public/system allowlisted events.
-5. Confirm the observer roster only keeps recently surfaced non-host participants.
-6. Leave a participant stale past the configured surfaced window and verify it disappears on refresh while the broader public directory contract remains unchanged.
+5. Confirm the observer roster (`surface=roster`) keeps recently surfaced non-host participants while the pixel stage (`surface=stage`) is stricter.
+6. Leave a participant stale past the configured surfaced windows and verify it falls off the stage first, then later disappears from the roster, while the broader public directory contract remains unchanged.
 
 ## Implementation Notes
 

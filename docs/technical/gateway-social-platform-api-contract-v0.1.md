@@ -1621,6 +1621,7 @@ Anonymous public-aquarium gateway-card projection.
 Supported query params:
 - `limit`
 - `cursor`
+- `surface` (`roster` by default, or `stage`)
 
 Current behavior:
 - returns observer-visible non-host participant cards, not the host control-room identity
@@ -1648,6 +1649,9 @@ Current behavior:
 - keeps the broader public participant directory separate from the observer-facing "still surfaced" projection
 - returns the same public card fields as `GET /api/v1/public/gateways`
 - filters out non-host participants whose observer-surface window has expired
+- supports `surface=roster|stage`
+- `surface=roster` keeps shells that are still observer-present (`online` or `recently_active`)
+- `surface=stage` is stricter and only keeps shells that are still effectively live on the pixel stage (`online`)
 - does not expose raw presence fields, runtime fields, scopes, friendship, or token data
 
 ---

@@ -24,6 +24,7 @@ export type { CommunityBulletinCandidate, CommunityBulletinPage } from './commun
 export type GatewayVisibility = 'private' | 'invite_only' | 'friends_only' | 'public';
 export type GatewayFriendRequestPolicy = 'manual_review' | 'disabled';
 export type PresenceStatus = 'online' | 'recently_active' | 'offline';
+export type PublicGatewaySurface = 'roster' | 'stage';
 
 export interface PresenceTimingConfig {
   onlineThresholdMs: number;
@@ -1075,6 +1076,7 @@ interface SearchGatewaysInput {
 interface ListPublicGatewaysInput {
   cursor?: string;
   limit?: number;
+  surface?: PublicGatewaySurface;
 }
 
 interface CreateMessageInput {
@@ -3434,7 +3436,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   listPresentPublicGateways(input: ListPublicGatewaysInput = {}): GatewayPage {
-    const visible = this.listPublicGatewayDirectory().filter((gateway) => this.isPresentPublicGateway(gateway));
+    const surface = input.surface ?? 'roster';
+    const visible = this.listPublicGatewayDirectory().filter((gateway) => this.isPresentPublicGateway(gateway, surface));
 
     return this.paginateGateways(visible, input.cursor, input.limit);
   }
@@ -5877,8 +5880,12 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     return this.lastSeenAtByGatewayId.get(gateway.id) ?? gateway.updatedAt ?? gateway.createdAt ?? null;
   }
 
-  private isPresentPublicGateway(gateway: GatewayRecord) {
-    return this.derivePresenceStatus(this.publicGatewayPresenceAnchor(gateway)) !== 'offline';
+  private isPresentPublicGateway(gateway: GatewayRecord, surface: PublicGatewaySurface = 'roster') {
+    const presenceStatus = this.derivePresenceStatus(this.publicGatewayPresenceAnchor(gateway));
+    if (surface === 'stage') {
+      return presenceStatus === 'online';
+    }
+    return presenceStatus !== 'offline';
   }
 
   private hostViewerId(hostId: string) {

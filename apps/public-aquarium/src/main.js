@@ -686,7 +686,8 @@ const state = {
   current: null,
   environment: null,
   feed: [],
-  gateways: [],
+  rosterGateways: [],
+  stageGateways: [],
   health: null,
   activeThreadItems: [],
   activeThreadRootId: null,
@@ -942,7 +943,7 @@ function recentGatewayIds() {
 function buildBubbleField() {
   const activity = state.stageActivity;
   const bubbleCount = activity?.energy === 'high' ? 18 : activity?.energy === 'medium' ? 16 : 14;
-  const seedBase = `${state.current?.tone ?? 'neutral'}:${state.environment?.phenomenon ?? 'none'}:${state.feed.length}:${state.gateways.length}`;
+  const seedBase = `${state.current?.tone ?? 'neutral'}:${state.environment?.phenomenon ?? 'none'}:${state.feed.length}:${state.stageGateways.length}`;
   return Array.from({ length: bubbleCount }, (_, index) => {
     const seed = stableHash(`${seedBase}:${index}`);
     const left = 5 + (seed % 90);
@@ -971,7 +972,7 @@ function gatewayFocusKey(gateway) {
 
 function focusKeyForFeedItem(item) {
   return resolveFocusKeyForFeedItem(item, {
-    gateways: state.gateways,
+    gateways: state.stageGateways,
     gatewayPrimaryLabel,
     gatewaySecondaryLabel,
   });
@@ -982,7 +983,7 @@ function currentStageActivity() {
     bubbleMaxLength: state.locale === 'zh' ? 24 : 44,
     expressionPreview,
     feed: state.feed,
-    gateways: state.gateways,
+    gateways: state.stageGateways,
     gatewayPrimaryLabel,
     gatewaySecondaryLabel,
     localizeFeedSummary,
@@ -1016,9 +1017,9 @@ function defaultStageFocus() {
 
 function buildGatewayStageActors() {
   const recentIds = recentGatewayIds();
-  const resolveGatewaySprite = buildGatewaySpriteResolver(state.gateways);
+  const resolveGatewaySprite = buildGatewaySpriteResolver(state.stageGateways);
   const pinnedFocusKey = state.stageFocusPinned ? state.stageFocusKey : null;
-  const visibleGateways = [...state.gateways]
+  const visibleGateways = [...state.stageGateways]
     .sort((left, right) => {
       const pinnedGap = Number(gatewayFocusKey(right) === pinnedFocusKey) - Number(gatewayFocusKey(left) === pinnedFocusKey);
       if (pinnedGap !== 0) {
@@ -1280,8 +1281,8 @@ function renderPixelAquarium() {
   const stageActors = [...buildCommunityCastActors(state.stageActivity), ...buildGatewayStageActors()].sort((left, right) => left.y - right.y);
   const focusItems = [];
 
-  elements.aquariumCastChip.textContent = state.gateways.length > 0
-    ? t('aquarium.castChip', { gateways: state.gateways.length, cast: 3 })
+  elements.aquariumCastChip.textContent = state.stageGateways.length > 0
+    ? t('aquarium.castChip', { gateways: state.stageGateways.length, cast: 3 })
     : t('aquarium.castOnlyChip', { cast: 3 });
 
   elements.aquariumWaterChip.textContent = state.environment
@@ -1934,18 +1935,18 @@ function renderFeed() {
 }
 
 function renderGateways() {
-  const resolveGatewaySprite = buildGatewaySpriteResolver(state.gateways);
-  elements.gatewayCount.textContent = String(state.gateways.length);
-  elements.gatewayNote.textContent = state.gateways.length > 0
-    ? t('render.gatewayCount', { count: state.gateways.length })
+  const resolveGatewaySprite = buildGatewaySpriteResolver(state.rosterGateways);
+  elements.gatewayCount.textContent = String(state.rosterGateways.length);
+  elements.gatewayNote.textContent = state.rosterGateways.length > 0
+    ? t('render.gatewayCount', { count: state.rosterGateways.length })
     : t('render.gatewayNone');
 
-  if (state.gateways.length === 0) {
+  if (state.rosterGateways.length === 0) {
     elements.gatewayList.innerHTML = `<div class="empty-state">${escapeHtml(t('render.gatewayEmpty'))}</div>`;
     return;
   }
 
-  elements.gatewayList.innerHTML = state.gateways
+  elements.gatewayList.innerHTML = state.rosterGateways
     .map((gateway) => {
       const sprite = resolveGatewaySprite(gateway);
       const avatarScale = sprite.origin === 'external' ? 0.68 : 1;
@@ -2000,13 +2001,23 @@ async function refreshSurface({ quiet = false } = {}) {
   }
 
   try {
-    const [healthResult, aquaResult, currentResult, environmentResult, feedResult, gatewaysResult, publicExpressionsResult] = await Promise.all([
+    const [
+      healthResult,
+      aquaResult,
+      currentResult,
+      environmentResult,
+      feedResult,
+      rosterGatewaysResult,
+      stageGatewaysResult,
+      publicExpressionsResult,
+    ] = await Promise.all([
       fetchJson('/health'),
       fetchJson('/api/v1/public/aqua'),
       fetchJson('/api/v1/public/current'),
       fetchJson('/api/v1/public/environment'),
       fetchJson(`/api/v1/public/feed?limit=${FEED_LIMIT}`),
-      fetchJson(`/api/v1/public/present-gateways?limit=${GATEWAY_LIMIT}`),
+      fetchJson(`/api/v1/public/present-gateways?surface=roster&limit=${GATEWAY_LIMIT}`),
+      fetchJson(`/api/v1/public/present-gateways?surface=stage&limit=${GATEWAY_LIMIT}`),
       fetchJson(`/api/v1/public-expressions?limit=${PUBLIC_EXPRESSION_LIMIT}`),
     ]);
 
@@ -2015,7 +2026,8 @@ async function refreshSurface({ quiet = false } = {}) {
     state.current = currentResult.data.current;
     state.environment = environmentResult.data.environment;
     state.feed = Array.isArray(feedResult.data.items) ? feedResult.data.items : [];
-    state.gateways = Array.isArray(gatewaysResult.data.items) ? gatewaysResult.data.items : [];
+    state.rosterGateways = Array.isArray(rosterGatewaysResult.data.items) ? rosterGatewaysResult.data.items : [];
+    state.stageGateways = Array.isArray(stageGatewaysResult.data.items) ? stageGatewaysResult.data.items : [];
     state.publicExpressions = Array.isArray(publicExpressionsResult.data.items) ? publicExpressionsResult.data.items : [];
     state.lastSyncedAt = new Date().toISOString();
     state.lastSuccessfulSyncAt = Date.now();

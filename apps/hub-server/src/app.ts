@@ -25,6 +25,7 @@ import {
   type GatewayVisibility,
   type HostRecord,
   type HostedRegistrationPolicy,
+  type PublicGatewaySurface,
   type PublicExpressionRecord,
   type SeaEvent,
   type SeaEventLiveSource,
@@ -251,6 +252,7 @@ interface CommunityCastNotesQuerystring {
 interface PublicGatewayQuerystring {
   limit?: string;
   cursor?: string;
+  surface?: string;
 }
 
 interface PublicExpressionQuerystring {
@@ -1298,6 +1300,19 @@ function parseBooleanQuery(value: string | undefined, fieldName: string) {
   return { error: `${fieldName} must be a boolean` } as const;
 }
 
+function parsePublicGatewaySurfaceQuery(value: string | undefined) {
+  if (value === undefined) {
+    return { value: undefined } as const;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'roster' || normalized === 'stage') {
+    return { value: normalized as PublicGatewaySurface } as const;
+  }
+
+  return { error: 'surface must be one of roster, stage' } as const;
+}
+
 function friendRequestErrorToHttp(message: string) {
   if (message === 'pending request already exists') {
     return { statusCode: 409, code: 'pending_request_exists' };
@@ -1783,11 +1798,22 @@ export function buildApp(options: BuildAppOptions = {}) {
         },
       });
     }
+    const parsedSurface = parsePublicGatewaySurfaceQuery(request.query.surface);
+    if ('error' in parsedSurface) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: 'validation_failed',
+          message: parsedSurface.error,
+        },
+      });
+    }
 
     try {
       const gateways = store.listPresentPublicGateways({
         cursor: request.query.cursor?.trim() || undefined,
         limit: parsedLimit.value,
+        surface: parsedSurface.value,
       });
 
       return {

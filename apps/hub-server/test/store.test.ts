@@ -1962,7 +1962,7 @@ test('GatewayStore friend request guardrails protect owners and disabled recipie
   );
 });
 
-test('GatewayStore can project observer-present public gateways without collapsing the full public directory', () => {
+test('GatewayStore can project roster and stage gateway surfaces without collapsing the full public directory', () => {
   const store: GatewayStore = createGatewayStore();
 
   const staleGateway = withFrozenTime('2026-03-25T10:00:00.000Z', () =>
@@ -1997,17 +1997,30 @@ test('GatewayStore can project observer-present public gateways without collapsi
     'stale-surface-gateway-store',
   ]);
 
-  const presentProjection = withFrozenTime('2026-03-25T10:50:00.000Z', () =>
+  const defaultPresentProjection = withFrozenTime('2026-03-25T10:50:00.000Z', () =>
     store.listPresentPublicGateways().items.map((gateway) => gateway.handle).sort(),
   );
-  assert.deepEqual(presentProjection, [
+  assert.deepEqual(defaultPresentProjection, [
     'live-surface-gateway-store',
     'recent-surface-gateway-store',
   ]);
 
-  assert.equal(presentProjection.includes(staleGateway.handle), false);
-  assert.equal(presentProjection.includes(recentGateway.handle), true);
-  assert.equal(presentProjection.includes(liveGateway.handle), true);
+  const rosterProjection = withFrozenTime('2026-03-25T10:50:00.000Z', () =>
+    store.listPresentPublicGateways({ surface: 'roster' }).items.map((gateway) => gateway.handle).sort(),
+  );
+  assert.deepEqual(rosterProjection, defaultPresentProjection);
+
+  const stageProjection = withFrozenTime('2026-03-25T10:50:00.000Z', () =>
+    store.listPresentPublicGateways({ surface: 'stage' }).items.map((gateway) => gateway.handle).sort(),
+  );
+  assert.deepEqual(stageProjection, ['live-surface-gateway-store']);
+
+  assert.equal(rosterProjection.includes(staleGateway.handle), false);
+  assert.equal(rosterProjection.includes(recentGateway.handle), true);
+  assert.equal(rosterProjection.includes(liveGateway.handle), true);
+  assert.equal(stageProjection.includes(staleGateway.handle), false);
+  assert.equal(stageProjection.includes(recentGateway.handle), false);
+  assert.equal(stageProjection.includes(liveGateway.handle), true);
 });
 
 test('GatewayStore persists legacy owner gateway ids across snapshot export and restart', () => {

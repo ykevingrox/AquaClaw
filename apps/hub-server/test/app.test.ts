@@ -2342,7 +2342,7 @@ test('public aquarium hides the bootstrapped local host while still showing non-
   await app.close();
 });
 
-test('public present gateways keep stale participants out of observer surfaces while the public directory stays intact', async () => {
+test('public present gateways split roster and stage observer surfaces while keeping the directory intact', async () => {
   const store = createGatewayStore();
 
   await withFrozenTime('2026-03-25T10:00:00.000Z', () => {
@@ -2384,22 +2384,67 @@ test('public present gateways keep stale participants out of observer surfaces w
     ['live-public-claw', 'recent-invite-claw', 'stale-public-claw'],
   );
 
-  const present = await withFrozenTime('2026-03-25T10:50:00.000Z', () =>
+  const presentDefault = await withFrozenTime('2026-03-25T10:50:00.000Z', () =>
     app.inject({
       method: 'GET',
       url: '/api/v1/public/present-gateways',
     }),
   );
-  assert.equal(present.statusCode, 200);
+  assert.equal(presentDefault.statusCode, 200);
   assert.deepEqual(
-    present.json().data.items.map((item: { handle: string }) => item.handle).sort(),
+    presentDefault.json().data.items.map((item: { handle: string }) => item.handle).sort(),
     ['live-public-claw', 'recent-invite-claw'],
   );
+
+  const presentRoster = await withFrozenTime('2026-03-25T10:50:00.000Z', () =>
+    app.inject({
+      method: 'GET',
+      url: '/api/v1/public/present-gateways?surface=roster',
+    }),
+  );
+  assert.equal(presentRoster.statusCode, 200);
+  assert.deepEqual(
+    presentRoster.json().data.items.map((item: { handle: string }) => item.handle).sort(),
+    ['live-public-claw', 'recent-invite-claw'],
+  );
+
+  const presentStage = await withFrozenTime('2026-03-25T10:50:00.000Z', () =>
+    app.inject({
+      method: 'GET',
+      url: '/api/v1/public/present-gateways?surface=stage',
+    }),
+  );
+  assert.equal(presentStage.statusCode, 200);
+  assert.deepEqual(
+    presentStage.json().data.items.map((item: { handle: string }) => item.handle).sort(),
+    ['live-public-claw'],
+  );
+
   assert.equal(
-    present.json().data.items.some((item: { handle: string }) => item.handle === 'stale-public-claw'),
+    presentRoster.json().data.items.some((item: { handle: string }) => item.handle === 'stale-public-claw'),
     false,
   );
-  assert.equal('status' in present.json().data.items[0], false);
+  assert.equal(
+    presentStage.json().data.items.some((item: { handle: string }) => item.handle === 'recent-invite-claw'),
+    false,
+  );
+  assert.equal('status' in presentDefault.json().data.items[0], false);
+  assert.equal('status' in presentStage.json().data.items[0], false);
+
+  await app.close();
+});
+
+test('public present gateways reject invalid observer surfaces', async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: 'GET',
+    url: '/api/v1/public/present-gateways?surface=lagoon',
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.json().error.code, 'validation_failed');
+  assert.equal(response.json().error.message, 'surface must be one of roster, stage');
 
   await app.close();
 });
