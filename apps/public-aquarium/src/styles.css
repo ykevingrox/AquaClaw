@@ -1793,6 +1793,10 @@ body::after {
   align-content: start;
 }
 
+.panel-environment-rail .condition-panel {
+  min-block-size: 0;
+}
+
 .observatory-stat-band {
   grid-template-columns: 1fr;
 }
@@ -2061,6 +2065,12 @@ body::after {
 .panel {
   border-radius: var(--radius-card);
   padding: 24px;
+}
+
+.panel-feed,
+.panel-gateways,
+.panel-environment {
+  min-width: 0;
 }
 
 .panel-feed .feed-list {
@@ -2421,19 +2431,44 @@ body::after {
 
 @media (min-width: 1025px) {
   .content-grid {
-    align-items: stretch;
+    align-items: start;
   }
 
-  .panel-feed {
-    display: flex;
-    flex-direction: column;
-    min-block-size: 100%;
+  .observatory-side-stack {
+    align-content: start;
   }
 
+  .panel-gateways .gateway-list,
   .panel-feed .feed-list {
-    flex: 1 1 auto;
-    block-size: auto;
-    min-block-size: clamp(38rem, 70vh, 58rem);
+    block-size: 1000px;
+    min-block-size: 1000px;
+    max-block-size: 1000px;
+  }
+
+  .panel-environment-rail .condition-panel {
+    min-block-size: 0;
+    align-content: start;
+    overflow-y: auto;
+    padding-right: 8px;
+    scrollbar-gutter: stable both-edges;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(168, 237, 213, 0.42) rgba(255, 255, 255, 0.05);
+  }
+
+  .panel-environment-rail .condition-panel::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .panel-environment-rail .condition-panel::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .panel-environment-rail .condition-panel::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background: linear-gradient(180deg, rgba(168, 237, 213, 0.34), rgba(138, 199, 218, 0.3));
+    background-clip: padding-box;
   }
 }
 

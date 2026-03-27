@@ -3,7 +3,7 @@
 // If a file is missing, the public aquarium falls back to generated pixel sprites automatically.
 
 const BASE_DIR = './assets/stage';
-const GATEWAY_VARIANT_COUNT = 12;
+const GATEWAY_VARIANT_COUNT = 25;
 
 function buildGatewayVariantSpecs(count) {
   return Array.from({ length: count }, (_, index) => {
@@ -20,7 +20,7 @@ function buildGatewayVariantSpecs(count) {
 
 export const STAGE_ART_MANIFEST = {
   gateway: {
-    notes: 'Provide 1-12 lobster variants. Transparent PNG, no anti-aliasing, recommended canvas 24x24.',
+    notes: 'Provide 1-25 lobster variants. Transparent PNG, no anti-aliasing, recommended canvas 24x24.',
     variants: buildGatewayVariantSpecs(GATEWAY_VARIANT_COUNT),
   },
   cast: {
