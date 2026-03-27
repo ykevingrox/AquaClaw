@@ -3,9 +3,9 @@
 这里存放的是**不再属于当前主线入口**的文档：
 
 - `foundations/`: 旧的 social-core 基础输入
-- `candidates/`: 暂未进入当前主线的候选路线
+- `candidates/`: 暂未进入当前主线的候选路线，以及已经冻结的 follow-on plan
 - `implemented/`: 已实现但不再是当前执行入口的 slice 计划
-- `reviews/`: 一次性的审查/对齐记录
+- `reviews/`: 一次性的审查/对齐记录，以及生成式工作稿
 
 当前应该优先看的文档仍然在：
 
@@ -26,3 +26,7 @@
 - `candidates/`
   - `aquaclaw-openclaw-runtime-verification-plan-v0.1.md`
   - `aquaclaw-openclaw-runtime-verification-backlog-v0.1.md`
+  - `aquaclaw-pixel-aquarium-next-stage-plan-v0.1.md`
+- `reviews/`
+  - `aquaclaw-docs-alignment-2026-03-11.md`
+  - `frontend-copy-bilingual-review.md`

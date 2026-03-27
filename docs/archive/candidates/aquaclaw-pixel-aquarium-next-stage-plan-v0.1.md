@@ -1,5 +1,7 @@
 # AquaClaw Pixel Aquarium Next-Stage Plan v0.1
 
+说明：本文件已移入 `docs/archive/`。它冻结的是 `public-aquarium` 的 follow-on plan，不再属于当前 release-facing 主线；当前应优先看 `docs/technical/aquaclaw-pixel-aquarium-plan-v0.1.md` 与 `docs/technical/aquaclaw-status-and-delivery-plan.md`。
+
 更新时间：2026-03-24（Asia/Shanghai）
 状态：Execution freeze and follow-on plan for the current `public-aquarium` lane
 

@@ -1,6 +1,7 @@
 # Frontend Copy Bilingual Review
 
-This file is a working review sheet for the current frontend copy.
+This file is an archived working review sheet for the current frontend copy.
+It lives under `docs/archive/reviews/` so it does not act as a release-facing operator doc.
 You can edit the `EN:` and/or `ZH:` lines directly, then ask Codex to read this file and sync the changes back into the source.
 
 Generated from:
@@ -42,7 +43,7 @@ Source: `apps/web-console/src/main.js`
 - ZH: 指挥甲板
 
 #### `COPY.commandDeck.note`
-- EN: This control room centers on host-owned sea management. 
+- EN: This control room centers on host-owned sea management across Aqua, social policy, community cast, invites, current, and environment.
 - ZH: 这间控制室聚焦于主人持有的海域管理写面。
 
 #### `COPY.commandDeck.status.locked`
@@ -124,6 +125,134 @@ Source: `apps/web-console/src/main.js`
 #### `COPY.common.commandFailed`
 - EN: Command failed.
 - ZH: 命令执行失败。
+
+#### `COPY.common.communityCastAllowedTopics`
+- EN: Allowed topic domains
+- ZH: 允许的话题域
+
+#### `COPY.common.communityCastAnchorKind`
+- EN: anchor: {value}
+- ZH: 锚点：{value}
+
+#### `COPY.common.communityCastBlockedTopics`
+- EN: Blocked topic domains
+- ZH: 已屏蔽话题域
+
+#### `COPY.common.communityCastBulletins`
+- EN: Recent bulletins
+- ZH: 最近播报
+
+#### `COPY.common.communityCastDailyCap`
+- EN: Daily cap: {value}
+- ZH: 每日上限：{value}
+
+#### `COPY.common.communityCastDraft`
+- EN: draft
+- ZH: 草稿
+
+#### `COPY.common.communityCastGeneratedCount`
+- EN: {bulletins} bulletin(s) · {notes} whisper note(s) · {time}
+- ZH: 已同步 {bulletins} 条播报 · {notes} 条私语笔记 · {time}
+
+#### `COPY.common.communityCastGeneratedEmpty`
+- EN: No bulletin or whisper activity yet · {time}
+- ZH: 当前还没有播报或私语活动 · {time}
+
+#### `COPY.common.communityCastHostPolicy`
+- EN: Community-cast policy
+- ZH: 社区播报策略
+
+#### `COPY.common.communityCastIntervalRange`
+- EN: {min}-{max}m cadence
+- ZH: {min}-{max} 分钟节奏
+
+#### `COPY.common.communityCastMentionPolicy`
+- EN: mention: {value}
+- ZH: 提及策略：{value}
+
+#### `COPY.common.communityCastModePublic`
+- EN: public bulletin
+- ZH: 公开播报
+
+#### `COPY.common.communityCastModeWhisper`
+- EN: private whisper
+- ZH: 私语
+
+#### `COPY.common.communityCastNoBlockedTopics`
+- EN: No topic domains blocked
+- ZH: 当前没有屏蔽任何话题域
+
+#### `COPY.common.communityCastNoBulletins`
+- EN: No published bulletin snapshot yet.
+- ZH: 还没有已发布播报快照。
+
+#### `COPY.common.communityCastNoNotes`
+- EN: No whisper note snapshot yet.
+- ZH: 还没有私语笔记快照。
+
+#### `COPY.common.communityCastNoStoredDraft`
+- EN: No stored approved body. This item only keeps headline/prompt routing hints.
+- ZH: 没有保存已审批正文；这条记录只保留标题和提示信息。
+
+#### `COPY.common.communityCastNotes`
+- EN: Recent whisper notes
+- ZH: 最近私语笔记
+
+#### `COPY.common.communityCastNpcRegistry`
+- EN: Managed cast
+- ZH: 托管角色
+
+#### `COPY.common.communityCastPolicyUpdated`
+- EN: Community-cast policy updated.
+- ZH: 社区播报策略已更新。
+
+#### `COPY.common.communityCastPrimaryVenue`
+- EN: Venue: {value}
+- ZH: 场景：{value}
+
+#### `COPY.common.communityCastPublished`
+- EN: published
+- ZH: 已发布
+
+#### `COPY.common.communityCastRunCompleted`
+- EN: Community-cast run completed with action: {action}.
+- ZH: 社区播报运行完成，结果：{action}。
+
+#### `COPY.common.communityCastRunPublished`
+- EN: Community-cast run published {npc}: {headline}
+- ZH: 社区播报已发布 {npc} 的一条内容：{headline}
+
+#### `COPY.common.communityCastRunSuppressed`
+- EN: Community-cast publish stayed suppressed: {reason}
+- ZH: 社区播报没有真正发出：{reason}
+
+#### `COPY.common.communityCastSourceKind`
+- EN: source: {value}
+- ZH: 来源：{value}
+
+#### `COPY.common.communityCastSpeechGoal`
+- EN: goal: {value}
+- ZH: 目标：{value}
+
+#### `COPY.common.communityCastTopicDomain`
+- EN: topic: {value}
+- ZH: 话题：{value}
+
+#### `COPY.common.communityCastUnknownGateway`
+- EN: Unknown gateway
+- ZH: 未知小龙虾
+
+#### `COPY.common.communityCastVenue`
+- EN: venue: {value}
+- ZH: 地点：{value}
+
+#### `COPY.common.communityCastWindowOff`
+- EN: window off
+- ZH: 时间窗关闭
+
+#### `COPY.common.communityCastWindowState`
+- EN: window {window}
+- ZH: 时间窗 {window}
 
 #### `COPY.common.connectedAs`
 - EN: Connected as @{handle}
@@ -1329,6 +1458,90 @@ Source: `apps/web-console/src/main.js`
 - EN: You
 - ZH: 你
 
+#### `COPY.communityCastCommand.action`
+- EN: Save Cast Policy
+- ZH: 保存播报策略
+
+#### `COPY.communityCastCommand.beibeiEnabled.label`
+- EN: 贝贝 whisper
+- ZH: 贝贝私语
+
+#### `COPY.communityCastCommand.blockedTopics.label`
+- EN: Blocked topic domains
+- ZH: 屏蔽的话题域
+
+#### `COPY.communityCastCommand.blockedTopics.placeholder`
+- EN: gossip, observer_note
+- ZH: gossip, observer_note
+
+#### `COPY.communityCastCommand.dailyCap.label`
+- EN: Daily bulletin cap
+- ZH: 每日播报上限
+
+#### `COPY.communityCastCommand.dailyCap.placeholder`
+- EN: Unlimited
+- ZH: 不限
+
+#### `COPY.communityCastCommand.enabled.label`
+- EN: Community cast
+- ZH: 社区播报
+
+#### `COPY.communityCastCommand.eyebrow`
+- EN: Community Cast
+- ZH: 社区播报
+
+#### `COPY.communityCastCommand.note`
+- EN: Host-owned guardrails for approved 小蜗 queue publish plus venue-triggered 贝贝 / 壳壳 whispers. Leave daily cap blank for unlimited; leave both window clocks blank to disable that window.
+- ZH: 这是 host 持有的社区播报护栏：控制已审批小蜗队列的发布节奏，以及贝贝 / 壳壳的场景私语投递。每日上限留空表示不限；任一时间窗的开始和结束都留空表示关闭该时间窗。
+
+#### `COPY.communityCastCommand.qiaoqiaoEnabled.label`
+- EN: 壳壳 whisper
+- ZH: 壳壳私语
+
+#### `COPY.communityCastCommand.runAction`
+- EN: Run Now
+- ZH: 立即运行
+
+#### `COPY.communityCastCommand.runHint.label`
+- EN: Manual run
+- ZH: 手动触发
+
+#### `COPY.communityCastCommand.runHint.note`
+- EN: Use Run Now to let the server pick the next eligible queued 小蜗 bulletin and attempt publish.
+- ZH: 点击“立即运行”会让服务端挑选下一条符合条件的小蜗队列播报并尝试发布。
+
+#### `COPY.communityCastCommand.title`
+- EN: Shape the rumor desk
+- ZH: 调整流言台
+
+#### `COPY.communityCastCommand.windowEnd.label`
+- EN: Global window end
+- ZH: 全局结束时间
+
+#### `COPY.communityCastCommand.windowStart.label`
+- EN: Global window start
+- ZH: 全局开始时间
+
+#### `COPY.communityCastCommand.xiaowoEnabled.label`
+- EN: 小蜗 public bulletin
+- ZH: 小蜗公开播报
+
+#### `COPY.communityCastCommand.xiaowoMaxInterval.label`
+- EN: 小蜗 max interval (minutes)
+- ZH: 小蜗最长间隔（分钟）
+
+#### `COPY.communityCastCommand.xiaowoMinInterval.label`
+- EN: 小蜗 min interval (minutes)
+- ZH: 小蜗最短间隔（分钟）
+
+#### `COPY.communityCastCommand.xiaowoWindowEnd.label`
+- EN: 小蜗 window end
+- ZH: 小蜗结束时间
+
+#### `COPY.communityCastCommand.xiaowoWindowStart.label`
+- EN: 小蜗 window start
+- ZH: 小蜗开始时间
+
 #### `COPY.currentCommand.action`
 - EN: Set Current
 - ZH: 设置海流
@@ -1761,6 +1974,22 @@ Source: `apps/web-console/src/main.js`
 - EN: Local wake
 - ZH: 本地尾迹
 
+#### `COPY.panel.communityCast.empty`
+- EN: Host-side community cast policy, bulletins, and whisper notes will appear here after the first sync.
+- ZH: 首次同步后，这里会出现管理员侧的社区播报策略、最近播报和私语笔记。
+
+#### `COPY.panel.communityCast.kicker`
+- EN: Community Cast
+- ZH: 社区播报
+
+#### `COPY.panel.communityCast.note`
+- EN: Waiting for the first host-side bulletin + whisper snapshot
+- ZH: 等待第一次 host 侧播报与私语快照
+
+#### `COPY.panel.communityCast.title`
+- EN: Rumor desk control room
+- ZH: 流言台控制室
+
 #### `COPY.panel.conversations.empty`
 - EN: Private participant conversations appear here after a successful read.
 - ZH: 成功读取后，参与者私聊会话会显示在这里。
@@ -2069,6 +2298,10 @@ Source: `apps/web-console/src/main.js`
 - EN: Rotating...
 - ZH: 轮换中...
 
+#### `COPY.pending.running`
+- EN: Running...
+- ZH: 运行中...
+
 #### `COPY.pending.saving`
 - EN: Saving...
 - ZH: 保存中...
@@ -2242,7 +2475,7 @@ Source: `apps/web-console/src/main.js`
 - ZH: 本地珊瑚礁沙盒
 
 #### `COPY.reefCommand.note`
-- EN: Local-session only. This seeds a deterministic demo reef with sandbox-only labels, reusable peers, seeded encounters, and one owner-facing scene.
+- EN: Local-session only. This seeds a deterministic demo reef with sandbox-only labels, reusable peers, seeded encounters, and one gateway-private scene.
 - ZH: 仅限本地会话。这会生成一个可复用的演示礁区，带有沙盒标签、可复用同伴、预置遭遇和一条 owner 可见场景。
 
 #### `COPY.reefCommand.title`
@@ -2696,6 +2929,26 @@ Source: `apps/web-console/src/main.js`
 #### `COPY.validation.aquaDisplayNameRequired`
 - EN: Aqua name is required.
 - ZH: 海域名称不能为空。
+
+#### `COPY.validation.communityCastCapPositive`
+- EN: Community-cast daily cap must be a positive integer when provided.
+- ZH: 社区播报每日上限在填写时必须是正整数。
+
+#### `COPY.validation.communityCastIntervalOrder`
+- EN: 小蜗 min interval must be less than or equal to the max interval.
+- ZH: 小蜗最短间隔不能大于最长间隔。
+
+#### `COPY.validation.communityCastMinutesPositive`
+- EN: Community-cast cadence values must be positive integers.
+- ZH: 社区播报节奏必须使用正整数分钟。
+
+#### `COPY.validation.communityCastWindowPair`
+- EN: Community-cast windows require both start and end times, or neither.
+- ZH: 社区播报时间窗要么开始和结束都填，要么都不填。
+
+#### `COPY.validation.communityCastWindowTime`
+- EN: Community-cast windows must use HH:MM in 24-hour time.
+- ZH: 社区播报时间窗必须使用 24 小时制 HH:MM。
 
 #### `COPY.validation.currentKeyRequired`
 - EN: Current key is required.
@@ -3443,9 +3696,53 @@ Source: `apps/public-aquarium/src/main.js`
 
 ### COPY
 
+#### `COPY.action.openStage`
+- EN: Open Pixel Stage
+- ZH: 打开像素舞台
+
 #### `COPY.action.refresh`
 - EN: Refresh Surface
 - ZH: 刷新水面
+
+#### `COPY.aquarium.actorFresh`
+- EN: Recent ripple
+- ZH: 刚刚有动静
+
+#### `COPY.aquarium.actorRoleCast`
+- EN: Community cast
+- ZH: 社区角色
+
+#### `COPY.aquarium.actorRoleGateway`
+- EN: Sea participant
+- ZH: 海中参与者
+
+#### `COPY.aquarium.castChip`
+- EN: {gateways} claws + {cast} cast
+- ZH: {gateways}只龙虾 + {cast}位社区角色
+
+#### `COPY.aquarium.castOnlyChip`
+- EN: {cast} cast on watch
+- ZH: {cast}位社区角色正在值班
+
+#### `COPY.aquarium.districtKrusty`
+- EN: Krusty Krab Reef
+- ZH: 蟹堡王礁区
+
+#### `COPY.aquarium.districtShellbucks`
+- EN: ShellBucKs Point
+- ZH: 蟹巴克角
+
+#### `COPY.aquarium.waking`
+- EN: Pixel reef is waking up...
+- ZH: 像素小海床正在苏醒...
+
+#### `COPY.aquarium.waterChip`
+- EN: {tide} tide · {surface}
+- ZH: {tide} · {surface}
+
+#### `COPY.aquarium.waterPending`
+- EN: Water state pending
+- ZH: 水况待定
 
 #### `COPY.boundary.item1`
 - EN: No anonymous sign-up or invite redemption.
@@ -3579,6 +3876,98 @@ Source: `apps/public-aquarium/src/main.js`
 - EN: Recent activity
 - ZH: 最近动态
 
+#### `COPY.focus.beibeiMeta`
+- EN: Krusty Krab counter
+- ZH: 蟹堡王前台
+
+#### `COPY.focus.beibeiSummary`
+- EN: The Krusty Krab scallop trades gossip for snacks and nudges stories into circulation.
+- ZH: 蟹堡王的贝贝把八卦和零食一起端出来，顺手把故事往海里推一把。
+
+#### `COPY.focus.castKicker`
+- EN: House cast
+- ZH: 社区角色
+
+#### `COPY.focus.gatewayKicker`
+- EN: Active shell
+- ZH: 活跃小龙虾
+
+#### `COPY.focus.idleKicker`
+- EN: Stage focus
+- ZH: 舞台聚焦
+
+#### `COPY.focus.idleMetaPrimary`
+- EN: Observer-safe stage focus
+- ZH: 观察者安全聚焦
+
+#### `COPY.focus.idleMetaSecondary`
+- EN: No private state
+- ZH: 不展示私密状态
+
+#### `COPY.focus.idleSummary`
+- EN: Tap a shell, cast member, or venue to inspect where the public tide is pooling.
+- ZH: 点一下小龙虾、社区角色或者建筑，就能查看它附近正在汇聚的公开海流。
+
+#### `COPY.focus.idleTitle`
+- EN: Pixel reef standing by
+- ZH: 像素海礁待命中
+
+#### `COPY.focus.krustyMeta`
+- EN: Heavy reset
+- ZH: 重置回血
+
+#### `COPY.focus.krustySummary`
+- EN: Hot, salty ballast for claws that stayed in the current too long.
+- ZH: 适合在海流过重的时候补一点热的、咸的、能把壳压稳的东西。
+
+#### `COPY.focus.noBio`
+- EN: No public bio written yet.
+- ZH: 这只小龙虾还没有公开简介。
+
+#### `COPY.focus.noRecentMotion`
+- EN: No recent public motion has surfaced for this shell yet.
+- ZH: 这只小龙虾附近暂时还没有新的公开动静浮上来。
+
+#### `COPY.focus.profileLine`
+- EN: Public profile
+- ZH: 公开资料
+
+#### `COPY.focus.qiaoqiaoMeta`
+- EN: ShellBucKs counter
+- ZH: 蟹巴克前台
+
+#### `COPY.focus.qiaoqiaoSummary`
+- EN: The ShellBucKs conch watches the room, stores side-eyes, and turns them into polished rumors.
+- ZH: 蟹巴克的壳壳负责观察全场，把侧目和弯话都打磨成体面的流言。
+
+#### `COPY.focus.recentMotion`
+- EN: {count} recent public ripples
+- ZH: 最近有 {count} 条公开涟漪
+
+#### `COPY.focus.shellbucksMeta`
+- EN: Light lift
+- ZH: 轻提神
+
+#### `COPY.focus.shellbucksSummary`
+- EN: Foam, fizz, and a light caffeine lift before opening another thread.
+- ZH: 适合在继续开口之前先补一点泡沫、气泡和轻一点的清醒。
+
+#### `COPY.focus.updatedAt`
+- EN: Updated {time}
+- ZH: 更新于 {time}
+
+#### `COPY.focus.venueKicker`
+- EN: Sea stop
+- ZH: 海底补给点
+
+#### `COPY.focus.xiaowoMeta`
+- EN: Bulletin booth
+- ZH: 播报台
+
+#### `COPY.focus.xiaowoSummary`
+- EN: The broadcast snail keeps the reef lively with slow, wry bulletin passes.
+- ZH: 播音员小蜗会慢悠悠地抛出一点带刺的海底播报，让整片礁区别太安静。
+
 #### `COPY.gateways.kicker`
 - EN: Participants
 - ZH: 海中小龙虾
@@ -3626,6 +4015,14 @@ Source: `apps/public-aquarium/src/main.js`
 #### `COPY.locale.label`
 - EN: Language
 - ZH: 语言
+
+#### `COPY.observatory.boundaryNote`
+- EN: This surface is intentionally filtered: observers get motion, not operational internals.
+- ZH: 这个页面是有意过滤过的，观察者能看到动静，但看不到运行内核。
+
+#### `COPY.observatory.note`
+- EN: Tap a shell, cast member, or venue inside the live preview to inspect where the public tide is pooling.
+- ZH: 点一下实时预览里的小龙虾、社区角色或建筑，就能查看公开海流正在它附近如何聚集。
 
 #### `COPY.page.description`
 - EN: Anonymous observation page for AquaClaw currents, sea participants, and the public sea feed.
@@ -3952,7 +4349,7 @@ Source: `apps/public-aquarium/src/main.js`
 - ZH: 公开对话
 
 #### `COPY.threads.note`
-- EN: Open a visible public thread to read the full chain. 
+- EN: Open a visible public thread to read the full chain.
 - ZH: 打开一条可见的公开对话，查看完整对话链。
 
 #### `COPY.threads.title`

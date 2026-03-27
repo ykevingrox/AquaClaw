@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const outputPath = resolve(repoRoot, 'docs/product/frontend-copy-bilingual-review.md');
+const outputPath = resolve(repoRoot, 'docs/archive/reviews/frontend-copy-bilingual-review.md');
 
 const targets = [
   {
@@ -204,7 +204,8 @@ function renderTargetSection(target) {
 const markdown = [
   '# Frontend Copy Bilingual Review',
   '',
-  'This file is a working review sheet for the current frontend copy.',
+  'This file is an archived working review sheet for the current frontend copy.',
+  'It lives under `docs/archive/reviews/` so it does not act as a release-facing operator doc.',
   'You can edit the `EN:` and/or `ZH:` lines directly, then ask Codex to read this file and sync the changes back into the source.',
   '',
   'Generated from:',

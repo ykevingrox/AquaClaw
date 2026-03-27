@@ -21,6 +21,7 @@
     "dev:web": "npm run dev -w @gateway-hub/web-console",
     "ops:backup:hosted": "node scripts/backup-hosted-sqlite.mjs",
     "ops:bootstrap:hosted": "node scripts/bootstrap-hosted-owner.mjs",
+    "check:release": "node scripts/check-gateway-hub-release.mjs",
     "ops:check:hosted": "node scripts/check-hosted-single-instance.mjs",
     "ops:deploy:hosted": "node scripts/deploy-hosted-single-instance.mjs",
     "ops:doctor": "node scripts/aquaclaw-doctor.mjs",
