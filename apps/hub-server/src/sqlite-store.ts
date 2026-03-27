@@ -94,6 +94,17 @@ export class SqliteGatewayStore implements GatewayStore, SeaEventLiveSource {
 
     const snapshot = JSON.parse(row.snapshot_json) as GatewayStoreSnapshot;
     this.inner.importSnapshot(snapshot);
+    const migratedSnapshotJson = JSON.stringify(this.inner.exportSnapshot());
+    if (migratedSnapshotJson !== row.snapshot_json) {
+      this.db
+        .prepare(
+          `update gateway_store_state
+             set snapshot_json = ?,
+                 updated_at = ?
+           where id = 1`,
+        )
+        .run(migratedSnapshotJson, new Date().toISOString());
+    }
   }
 
   private persistSnapshot() {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createGatewayStore, InMemoryGatewayStore, type GatewayStore } from '../src/store.js';
+import { createGatewayStore, HANDLE_MAX_LENGTH, InMemoryGatewayStore, type GatewayStore } from '../src/store.js';
 import { SqliteGatewayStore } from '../src/sqlite-store.js';
 
 function registerGateway(store: GatewayStore, input: { displayName: string; handle: string }) {
@@ -67,6 +67,29 @@ test('createGatewayStore accepts sqlite backend', () => {
   const store = createGatewayStore({ backend: 'sqlite', databaseUrl: ':memory:' });
   assert.ok(store instanceof SqliteGatewayStore);
   store.close();
+});
+
+test('GatewayStore rejects new gateway and host handles longer than the shared max length', () => {
+  const store: GatewayStore = createGatewayStore();
+  const tooLongHandle = `claw-${'x'.repeat(HANDLE_MAX_LENGTH)}`;
+
+  assert.throws(
+    () =>
+      store.register({
+        displayName: 'Too Long Gateway Handle',
+        handle: tooLongHandle,
+      }),
+    new RegExp(`handle must be at most ${HANDLE_MAX_LENGTH} characters`),
+  );
+
+  assert.throws(
+    () =>
+      store.bootstrapHostedSession({
+        displayName: 'Too Long Hosted Owner Handle',
+        handle: tooLongHandle,
+      }),
+    new RegExp(`handle must be at most ${HANDLE_MAX_LENGTH} characters`),
+  );
 });
 
 test('GatewayStore exposes managed community cast registry and default policy', () => {
@@ -2031,7 +2054,7 @@ test('GatewayStore persists legacy owner gateway ids across snapshot export and 
   });
   const hostedOwnerGateway = registerGateway(store, {
     displayName: 'Legacy Hosted Owner Gateway',
-    handle: 'legacy-hosted-owner-gateway-store',
+    handle: 'legacy-hosted-owner-gateway',
   });
   const publicGateway = registerGateway(store, {
     displayName: 'Visible Public Gateway',
@@ -2165,6 +2188,60 @@ test('GatewayStore hosted invite join reuses an existing remote runtime identity
   assert.equal(secondJoin.runtime.binding.runtimeId, 'hosted-rejoin-runtime-store-two');
   assert.equal(secondJoin.runtime.binding.source, 'hosted_rejoin_store_test_again');
   assert.equal(secondJoin.claim.inviteId, secondInvite.id);
+});
+
+test('GatewayStore migrates legacy overlong hosted participant handles on snapshot import before installation-based reuse', () => {
+  const store: GatewayStore = createGatewayStore();
+  const host = store.bootstrapHostedSession({
+    displayName: 'Hosted Import Migration Owner',
+    handle: 'hosted-import-migration-owner',
+  }).host;
+
+  const firstInvite = store.createInvite({
+    createdByHostId: host.id,
+    maxUses: 1,
+  });
+  const firstJoin = store.joinHostedRuntimeWithInvite({
+    inviteCode: firstInvite.code,
+    displayName: 'Legacy Import Gateway',
+    handle: 'legacy-import-gateway',
+    installationId: 'legacy-import-installation',
+    runtimeId: 'legacy-import-runtime',
+    label: 'Legacy Import Runtime',
+    source: 'store_test_import_first',
+  });
+
+  const snapshot = store.exportSnapshot();
+  const gateway = snapshot.gateways.find((item) => item.id === firstJoin.gateway.id);
+  assert.ok(gateway);
+  gateway.handle = 'claw-jingxianmacbook-pro-local-3beb99';
+
+  const imported: GatewayStore = createGatewayStore();
+  imported.importSnapshot(snapshot);
+
+  const migratedGateway = imported.findById(firstJoin.gateway.id);
+  assert.equal(migratedGateway?.handle, 'claw-3beb99');
+  assert.equal(imported.findByHandle('claw-3beb99')?.id, firstJoin.gateway.id);
+  assert.equal(imported.findByHandle('claw-jingxianmacbook-pro-local-3beb99'), null);
+
+  const secondInvite = imported.createInvite({
+    createdByHostId: host.id,
+    maxUses: 1,
+  });
+  const secondJoin = imported.joinHostedRuntimeWithInvite({
+    inviteCode: secondInvite.code,
+    displayName: 'Legacy Import Gateway Again',
+    handle: 'legacy-import-gateway-again',
+    installationId: 'legacy-import-installation',
+    runtimeId: 'legacy-import-runtime-updated',
+    label: 'Legacy Import Runtime Updated',
+    source: 'store_test_import_second',
+  });
+
+  assert.equal(secondJoin.reusedGateway, true);
+  assert.equal(secondJoin.gateway.id, firstJoin.gateway.id);
+  assert.equal(secondJoin.gateway.handle, 'claw-3beb99');
+  assert.equal(secondJoin.runtime.binding.runtimeId, 'legacy-import-runtime-updated');
 });
 
 test('GatewayStore hosted invite join rolls back cleanly on handle conflict', () => {

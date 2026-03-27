@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
   buildVenueWhisperDraft,
   cloneCommunityCastPolicy,
@@ -25,6 +25,7 @@ export type GatewayVisibility = 'private' | 'invite_only' | 'friends_only' | 'pu
 export type GatewayFriendRequestPolicy = 'manual_review' | 'disabled';
 export type PresenceStatus = 'online' | 'recently_active' | 'offline';
 export type PublicGatewaySurface = 'roster' | 'stage';
+export const HANDLE_MAX_LENGTH = 32;
 
 export interface PresenceTimingConfig {
   onlineThresholdMs: number;
@@ -1496,6 +1497,7 @@ const SOCIAL_PULSE_BUDGET_WINDOW_MS = SOCIAL_PULSE_BUDGET_WINDOW_HOURS * 60 * 60
 const SOCIAL_PULSE_AUTOMATION_ORIGIN: SocialPulseAutomationOrigin = 'social_pulse';
 const TASK_REQUEST_TITLE_MAX_LENGTH = 120;
 const TASK_REQUEST_BODY_MAX_LENGTH = 500;
+const HANDLE_MIGRATION_HASH_LENGTH = 6;
 const DEFAULT_SOCIAL_PULSE_POLICY: SocialPulsePolicyRecord = {
   publicExpressionEnabled: true,
   directMessagesEnabled: true,
@@ -2047,6 +2049,36 @@ function parseOptionalTimestamp(value: string | null | undefined, fieldName: str
   return new Date(parsed).toISOString();
 }
 
+function normalizeHandleValue(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function validateHandleLength(normalizedHandle: string) {
+  if (normalizedHandle.length > HANDLE_MAX_LENGTH) {
+    throw new Error(`handle must be at most ${HANDLE_MAX_LENGTH} characters`);
+  }
+}
+
+function compactPersistedHandle(normalizedHandle: string, fallbackPrefix: 'gateway' | 'host') {
+  if (normalizedHandle.length <= HANDLE_MAX_LENGTH) {
+    return normalizedHandle;
+  }
+
+  const generatedClawMatch = normalizedHandle.match(/^claw-[a-z0-9-]+-([a-f0-9]{6})$/);
+  if (generatedClawMatch) {
+    return `claw-${generatedClawMatch[1]}`;
+  }
+
+  const trailingToken = normalizedHandle.match(/([a-f0-9]{6})$/)?.[1]
+    ?? createHash('sha256').update(normalizedHandle).digest('hex').slice(0, HANDLE_MIGRATION_HASH_LENGTH);
+  const prefixBudget = HANDLE_MAX_LENGTH - trailingToken.length - 1;
+  let compactedPrefix = normalizedHandle.slice(0, prefixBudget).replace(/-+$/g, '');
+  if (!compactedPrefix) {
+    compactedPrefix = fallbackPrefix.slice(0, prefixBudget);
+  }
+  return `${compactedPrefix}-${trailingToken}`;
+}
+
 function normalizePresenceTimingConfig(input: Partial<PresenceTimingConfig> | undefined): PresenceTimingConfig {
   const onlineThresholdMs = input?.onlineThresholdMs ?? DEFAULT_ONLINE_THRESHOLD_MS;
   const recentlyActiveThresholdMs = input?.recentlyActiveThresholdMs ?? DEFAULT_RECENTLY_ACTIVE_THRESHOLD_MS;
@@ -2151,10 +2183,11 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       updatedAt?: string;
     },
   ) {
-    const normalizedHandle = input.handle.trim().toLowerCase();
+    const normalizedHandle = normalizeHandleValue(input.handle);
     if (!normalizedHandle) {
       throw new Error('handle is required');
     }
+    validateHandleLength(normalizedHandle);
     if (this.gatewaysByHandle.has(normalizedHandle)) {
       throw new Error('handle already exists');
     }
@@ -2329,10 +2362,11 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   private createHost(input: { displayName: string; handle: string; bio?: string }, seed?: { hostId?: string; createdAt?: string; updatedAt?: string }) {
-    const normalizedHandle = input.handle.trim().toLowerCase();
+    const normalizedHandle = normalizeHandleValue(input.handle);
     if (!normalizedHandle) {
       throw new Error('handle is required');
     }
+    validateHandleLength(normalizedHandle);
     if (this.hostsByHandle.has(normalizedHandle)) {
       throw new Error('handle already exists');
     }
@@ -2357,19 +2391,49 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   private resolveAvailableHostHandle(baseHandle: string) {
-    let candidate = baseHandle.trim().toLowerCase();
+    let candidate = normalizeHandleValue(baseHandle);
     if (!candidate) {
       candidate = DEFAULT_LOCAL_OWNER_HANDLE;
     }
-    if (!this.hostsByHandle.has(candidate)) {
-      return candidate;
+    candidate = compactPersistedHandle(candidate, 'host');
+    return this.resolveImportedHandleCollision(candidate, (nextCandidate) => this.hostsByHandle.has(nextCandidate), 'host');
+  }
+
+  private resolveBootstrapHostHandle(inputHandle: string | undefined, fallbackHandle: string) {
+    const normalizedInputHandle = inputHandle ? normalizeHandleValue(inputHandle) : '';
+    if (normalizedInputHandle) {
+      validateHandleLength(normalizedInputHandle);
+      return this.resolveAvailableHostHandle(normalizedInputHandle);
+    }
+    return this.resolveAvailableHostHandle(fallbackHandle);
+  }
+
+  private normalizeHostRecord(host: HostRecord): HostRecord {
+    return {
+      ...host,
+      handle: compactPersistedHandle(normalizeHandleValue(host.handle), 'host'),
+    };
+  }
+
+  private resolveImportedHandleCollision(baseHandle: string, hasHandle: (candidate: string) => boolean, fallbackPrefix: 'gateway' | 'host') {
+    if (!hasHandle(baseHandle)) {
+      return baseHandle;
     }
 
     let suffix = 2;
-    while (this.hostsByHandle.has(`${candidate}-${suffix}`)) {
+    while (true) {
+      const suffixLabel = `-${suffix}`;
+      const prefixBudget = HANDLE_MAX_LENGTH - suffixLabel.length;
+      let candidatePrefix = baseHandle.slice(0, prefixBudget).replace(/-+$/g, '');
+      if (!candidatePrefix) {
+        candidatePrefix = fallbackPrefix.slice(0, prefixBudget);
+      }
+      const candidate = `${candidatePrefix}${suffixLabel}`;
+      if (!hasHandle(candidate)) {
+        return candidate;
+      }
       suffix += 1;
     }
-    return `${candidate}-${suffix}`;
   }
 
   bootstrapLocalSession(input: BootstrapLocalSessionInput = {}) {
@@ -2377,10 +2441,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     let createdOwner = false;
 
     if (!host) {
-      const handleBase = input.handle?.trim().toLowerCase() || DEFAULT_LOCAL_OWNER_HANDLE;
       host = this.createHost({
         displayName: input.displayName?.trim() || DEFAULT_LOCAL_OWNER_DISPLAY_NAME,
-        handle: this.resolveAvailableHostHandle(handleBase),
+        handle: this.resolveBootstrapHostHandle(input.handle, DEFAULT_LOCAL_OWNER_HANDLE),
         bio: input.bio?.trim() || DEFAULT_LOCAL_OWNER_BIO,
       });
       this.localHostId = host.id;
@@ -2420,10 +2483,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     let createdOwner = false;
 
     if (!host) {
-      const handleBase = input.handle?.trim().toLowerCase() || DEFAULT_HOSTED_OWNER_HANDLE;
       host = this.createHost({
         displayName: input.displayName?.trim() || DEFAULT_HOSTED_OWNER_DISPLAY_NAME,
-        handle: this.resolveAvailableHostHandle(handleBase),
+        handle: this.resolveBootstrapHostHandle(input.handle, DEFAULT_HOSTED_OWNER_HANDLE),
         bio: input.bio?.trim() || DEFAULT_HOSTED_OWNER_BIO,
       });
       this.hostedHostId = host.id;
@@ -3105,7 +3167,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   findByHandle(handle: string): GatewayRecord | null {
-    const normalizedHandle = handle.trim().toLowerCase();
+    const normalizedHandle = normalizeHandleValue(handle);
     if (!normalizedHandle) {
       return null;
     }
@@ -6085,8 +6147,10 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   private normalizeGatewayRecord(gateway: GatewayRecord): GatewayRecord {
+    const normalizedHandle = compactPersistedHandle(normalizeHandleValue(gateway.handle), 'gateway');
     return {
       ...gateway,
+      handle: normalizedHandle,
       friendRequestPolicy: this.resolveGatewayFriendRequestPolicy(
         gateway.id,
         (gateway as GatewayRecord & { friendRequestPolicy?: GatewayFriendRequestPolicy }).friendRequestPolicy,
@@ -9222,22 +9286,44 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.communityCastPolicy = snapshot.communityCastPolicy ? normalizeCommunityCastPolicy(snapshot.communityCastPolicy) : null;
 
     for (const gateway of snapshot.gateways) {
-      const normalizedGateway = this.normalizeGatewayRecord(gateway);
+      const normalizedGatewayBase = this.normalizeGatewayRecord(gateway);
+      const normalizedGateway = {
+        ...normalizedGatewayBase,
+        handle: this.resolveImportedHandleCollision(
+          normalizedGatewayBase.handle,
+          (candidate) => this.gatewaysByHandle.has(candidate),
+          'gateway',
+        ),
+      };
       this.gatewaysById.set(normalizedGateway.id, normalizedGateway);
       this.gatewaysByHandle.set(normalizedGateway.handle, normalizedGateway);
     }
     for (const host of snapshot.hosts ?? []) {
-      this.hostsById.set(host.id, host);
-      this.hostsByHandle.set(host.handle, host);
+      const normalizedHostBase = this.normalizeHostRecord(host);
+      const normalizedHost = {
+        ...normalizedHostBase,
+        handle: this.resolveImportedHandleCollision(
+          normalizedHostBase.handle,
+          (candidate) => this.hostsByHandle.has(candidate),
+          'host',
+        ),
+      };
+      this.hostsById.set(normalizedHost.id, normalizedHost);
+      this.hostsByHandle.set(normalizedHost.handle, normalizedHost);
     }
     if (!snapshot.hosts?.length) {
       if (legacyLocalOwnerGatewayId) {
         const legacyGateway = this.gatewaysById.get(legacyLocalOwnerGatewayId);
         if (legacyGateway) {
+          const migratedHostHandle = this.resolveImportedHandleCollision(
+            compactPersistedHandle(normalizeHandleValue(legacyGateway.handle), 'host'),
+            (candidate) => this.hostsByHandle.has(candidate),
+            'host',
+          );
           const host = this.createHost(
             {
               displayName: legacyGateway.displayName,
-              handle: legacyGateway.handle,
+              handle: migratedHostHandle,
               bio: legacyGateway.bio,
             },
             {
@@ -9252,10 +9338,15 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       if (legacyHostedOwnerGatewayId) {
         const legacyGateway = this.gatewaysById.get(legacyHostedOwnerGatewayId);
         if (legacyGateway) {
+          const migratedHostHandle = this.resolveImportedHandleCollision(
+            compactPersistedHandle(normalizeHandleValue(legacyGateway.handle), 'host'),
+            (candidate) => this.hostsByHandle.has(candidate),
+            'host',
+          );
           const host = this.createHost(
             {
               displayName: legacyGateway.displayName,
-              handle: legacyGateway.handle,
+              handle: migratedHostHandle,
               bio: legacyGateway.bio,
             },
             {

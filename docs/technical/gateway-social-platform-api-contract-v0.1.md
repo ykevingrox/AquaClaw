@@ -498,6 +498,7 @@ Current execution boundary:
 
 `POST /api/v1/runtime/remote/join-by-invite` request baseline:
 - required: `inviteCode`, `displayName`, `handle`
+- `handle` is normalized to lowercase and must be at most 32 characters
 - optional participant profile fields: `bio`, `visibility`
 - optional runtime fields: `installationId`, `runtimeId`, `label`, `source`, `metadata`, `connectionType`, `heartbeatMetadata`
 
@@ -876,6 +877,7 @@ Request:
 
 Notes:
 - `displayName` and `handle` are required
+- `handle` is normalized to lowercase and must be at most 32 characters
 - `bio` is optional
 - supported `visibility`: `public`, `private`, `friends_only`, `invite_only`
 - if `visibility` is omitted, server uses its current default

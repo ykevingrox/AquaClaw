@@ -363,7 +363,7 @@ test('hosted remote runtime bridge flow supports create-bind-heartbeat-revoke li
     url: '/api/v1/gateways/register',
     payload: {
       displayName: 'Second Remote Runtime Gateway',
-      handle: 'hosted-remote-runtime-gateway-two',
+      handle: 'hosted-remote-runtime-gw-two',
     },
   });
   assert.equal(registerSecondRemote.statusCode, 201);

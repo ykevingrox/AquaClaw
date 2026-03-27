@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { buildApp } from '../src/app.js';
+import { HANDLE_MAX_LENGTH } from '../src/store.js';
 
 function buildActiveCurrentWindow(durationMinutes = 2 * 60) {
   return {
@@ -531,6 +532,44 @@ test('hosted invite join lets a remote gateway enter and bind without opening gl
   });
   assert.equal(inviteReuse.statusCode, 409);
   assert.equal(inviteReuse.json().error.code, 'invalid_state');
+
+  await app.close();
+});
+
+test('hosted invite join rejects overlong handles before creating a participant identity', async () => {
+  const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
+
+  const owner = await bootstrapHostedOwner(app, 'hosted-overlong-handle-owner');
+  const inviteResponse = await app.inject({
+    method: 'POST',
+    url: '/api/v1/invites',
+    headers: {
+      authorization: `Bearer ${owner.credential.token}`,
+    },
+    payload: {
+      maxUses: 1,
+    },
+  });
+  assert.equal(inviteResponse.statusCode, 201);
+
+  const tooLongHandle = `claw-${'x'.repeat(HANDLE_MAX_LENGTH)}`;
+  const joinAttempt = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/remote/join-by-invite',
+    payload: {
+      inviteCode: inviteResponse.json().data.invite.code,
+      displayName: 'Hosted Too Long Handle',
+      handle: tooLongHandle,
+      installationId: 'hosted-overlong-installation',
+      runtimeId: 'hosted-overlong-runtime',
+      label: 'Hosted Overlong Runtime',
+      source: 'deployment_test_overlong_handle',
+    },
+  });
+
+  assert.equal(joinAttempt.statusCode, 400);
+  assert.equal(joinAttempt.json().error.code, 'validation_failed');
+  assert.equal(joinAttempt.json().error.message, `handle must be at most ${HANDLE_MAX_LENGTH} characters`);
 
   await app.close();
 });
@@ -1735,7 +1774,7 @@ test('hosted owner session can run imported community cast queue items while gat
 test('hosted owner session can inspect community cast bulletins and notes while gateway tokens stay excluded', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
-  const owner = await bootstrapHostedOwner(app, 'hosted-community-cast-inspection-owner');
+  const owner = await bootstrapHostedOwner(app, 'hosted-cast-inspection-owner');
   await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
 
   const alphaRegister = await app.inject({
@@ -1931,7 +1970,7 @@ test('hosted participant can read community memory notes while owner sessions st
 test('hosted participant social pulse endpoint returns a DM reply plan while owner sessions stay ashore', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
-  const owner = await bootstrapHostedOwner(app, 'hosted-participant-dm-social-pulse-owner');
+  const owner = await bootstrapHostedOwner(app, 'hosted-dm-pulse-owner');
   await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
 
   const alphaRegister = await app.inject({
@@ -2127,7 +2166,7 @@ test('hosted public expression write requires a gateway bearer token while owner
 test('hosted participant social pulse endpoint returns a public reply plan while owner sessions stay ashore', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
-  const owner = await bootstrapHostedOwner(app, 'hosted-participant-social-pulse-owner');
+  const owner = await bootstrapHostedOwner(app, 'hosted-social-pulse-owner');
   await setHostedRegistrationPolicy(app, owner.credential.token, 'open');
 
   const alphaRegister = await app.inject({
@@ -2510,7 +2549,7 @@ test('hosted owner session gate protects owner-only hosted-session/current/audit
 test('hosted registration policy matrix keeps invite create/claim/revoke available for existing hosted gateways', async () => {
   const app = buildApp({ deploymentMode: 'hosted', hostedOwnerBootstrapKey: 'hosted-secret' });
 
-  const owner = await bootstrapHostedOwner(app, 'hosted-registration-invite-matrix-owner');
+  const owner = await bootstrapHostedOwner(app, 'hosted-registration-matrix-own');
   const ownerToken = owner.credential.token;
   await setHostedRegistrationPolicy(app, ownerToken, 'open');
 
@@ -2617,7 +2656,7 @@ test('hosted registration policy matrix keeps invite create/claim/revoke availab
     url: '/api/v1/gateways/register',
     payload: {
       displayName: 'Hosted Matrix Invite-only Register',
-      handle: 'hosted-matrix-invite-only-register',
+      handle: 'hosted-matrix-invite-only-reg',
     },
   });
   assert.equal(inviteOnlyRegister.statusCode, 403);
