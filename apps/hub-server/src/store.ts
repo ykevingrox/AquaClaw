@@ -2106,6 +2106,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   private communityCastPolicy: CommunityCastPolicyRecord | null = null;
   private localHostId: string | null = null;
   private hostedHostId: string | null = null;
+  private localOwnerGatewayId: string | null = null;
+  private hostedOwnerGatewayId: string | null = null;
   private hostedRegistrationPolicy: HostedRegistrationPolicy | null = null;
   private localRuntimeBinding: LocalRuntimeBindingRecord | null = null;
   private readonly remoteRuntimeBridgeCredentialsById = new Map<string, RemoteRuntimeBridgeCredentialRecord>();
@@ -4408,6 +4410,9 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       createdAt,
       updatedAt: createdAt,
     };
+    const replyTargetGateway = expression.replyToGatewayId
+      ? this.gatewaysById.get(expression.replyToGatewayId) ?? null
+      : null;
 
     this.storePublicExpression(expression);
     this.appendSeaEvent({
@@ -4424,9 +4429,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
         rootExpressionId: expression.rootExpressionId,
         parentExpressionId: expression.parentExpressionId,
         replyToGatewayId: expression.replyToGatewayId,
-        replyToGatewayHandle: expression.replyToGatewayId
-          ? this.gatewaysById.get(expression.replyToGatewayId)?.handle ?? null
-          : null,
+        replyToGatewayHandle: replyTargetGateway?.handle ?? null,
+        replyToGatewayDisplayName: replyTargetGateway?.displayName ?? null,
       },
       createdAt,
     });
@@ -5855,7 +5859,7 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
   }
 
   private isOwnerGatewayId(gatewayId: string) {
-    return this.legacyOwnerGatewayIds.has(gatewayId);
+    return gatewayId === this.localOwnerGatewayId || gatewayId === this.hostedOwnerGatewayId || this.legacyOwnerGatewayIds.has(gatewayId);
   }
 
   private hostViewerId(hostId: string) {
@@ -9121,6 +9125,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
       gatewayTokens: [...this.tokensToGatewayId.entries()].map(([token, gatewayId]) => ({ token, gatewayId })),
       localHostId: this.localHostId,
       hostedHostId: this.hostedHostId,
+      localOwnerGatewayId: this.localOwnerGatewayId,
+      hostedOwnerGatewayId: this.hostedOwnerGatewayId,
       hostedRegistrationPolicy: this.hostedRegistrationPolicy,
       localSessions: [...this.localSessionsByToken.values()],
       hostedSessions: [...this.hostedSessionsByToken.values()],
@@ -9177,6 +9183,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.reset();
     const legacyLocalOwnerGatewayId = snapshot.localOwnerGatewayId ?? null;
     const legacyHostedOwnerGatewayId = snapshot.hostedOwnerGatewayId ?? null;
+    this.localOwnerGatewayId = legacyLocalOwnerGatewayId;
+    this.hostedOwnerGatewayId = legacyHostedOwnerGatewayId;
     if (legacyLocalOwnerGatewayId) {
       this.legacyOwnerGatewayIds.add(legacyLocalOwnerGatewayId);
     }
@@ -9483,6 +9491,8 @@ export class InMemoryGatewayStore implements GatewayStore, SeaEventLiveSource {
     this.communityCastPolicy = null;
     this.localHostId = null;
     this.hostedHostId = null;
+    this.localOwnerGatewayId = null;
+    this.hostedOwnerGatewayId = null;
     this.hostedRegistrationPolicy = null;
     this.localRuntimeBinding = null;
     this.activeCurrentId = null;

@@ -1041,6 +1041,8 @@ function toPublicSeaEventMetadata(event: SeaEvent) {
       parentExpressionId: typeof event.metadata.parentExpressionId === 'string' ? event.metadata.parentExpressionId : null,
       replyToGatewayId: typeof event.metadata.replyToGatewayId === 'string' ? event.metadata.replyToGatewayId : null,
       replyToGatewayHandle: typeof event.metadata.replyToGatewayHandle === 'string' ? event.metadata.replyToGatewayHandle : null,
+      replyToGatewayDisplayName:
+        typeof event.metadata.replyToGatewayDisplayName === 'string' ? event.metadata.replyToGatewayDisplayName : null,
     };
   }
 

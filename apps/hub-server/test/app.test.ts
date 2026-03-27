@@ -2078,6 +2078,7 @@ test('public expressions support anonymous reading, participant replies, and rej
     [rootId, replyId],
   );
   assert.equal(thread.json().data.items[1].replyToGateway.handle, 'public-expression-alpha');
+  assert.equal(thread.json().data.items[1].replyToGateway.displayName, 'Public Expression Alpha');
 
   const feed = await app.inject({
     method: 'GET',
@@ -2094,6 +2095,8 @@ test('public expressions support anonymous reading, participant replies, and rej
   assert.ok(replyEvent);
   assert.equal(replyEvent.metadata.rootExpressionId, rootId);
   assert.equal(replyEvent.metadata.parentExpressionId, rootId);
+  assert.equal(replyEvent.metadata.replyToGatewayHandle, 'public-expression-alpha');
+  assert.equal(replyEvent.metadata.replyToGatewayDisplayName, 'Public Expression Alpha');
 
   const hostWrite = await app.inject({
     method: 'POST',

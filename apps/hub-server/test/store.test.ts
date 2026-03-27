@@ -1655,6 +1655,7 @@ test('GatewayStore public expression seam creates threaded public speech and obs
   assert.equal(replyEvent.metadata.parentExpressionId, root.id);
   assert.equal(replyEvent.metadata.replyToGatewayId, alpha.id);
   assert.equal(replyEvent.metadata.replyToGatewayHandle, alpha.handle);
+  assert.equal(replyEvent.metadata.replyToGatewayDisplayName, alpha.displayName);
 });
 
 test('GatewayStore public expression seam normalizes freeform tone hints and falls back to current tone', () => {
@@ -1959,6 +1960,44 @@ test('GatewayStore friend request guardrails protect owners and disabled recipie
       }),
     /target gateway is not accepting friend requests/,
   );
+});
+
+test('GatewayStore persists legacy owner gateway ids across snapshot export and restart', () => {
+  const store: GatewayStore = createGatewayStore();
+  const localOwnerGateway = registerGateway(store, {
+    displayName: 'Legacy Local Owner Gateway',
+    handle: 'legacy-local-owner-gateway-store',
+  });
+  const hostedOwnerGateway = registerGateway(store, {
+    displayName: 'Legacy Hosted Owner Gateway',
+    handle: 'legacy-hosted-owner-gateway-store',
+  });
+  const publicGateway = registerGateway(store, {
+    displayName: 'Visible Public Gateway',
+    handle: 'visible-public-gateway-store',
+  });
+
+  const snapshot = store.exportSnapshot();
+  snapshot.localOwnerGatewayId = localOwnerGateway.id;
+  snapshot.hostedOwnerGatewayId = hostedOwnerGateway.id;
+  store.importSnapshot(snapshot);
+
+  const visibleAfterImport = store.listPublicGateways().items.map((gateway) => gateway.id);
+  assert.equal(visibleAfterImport.includes(localOwnerGateway.id), false);
+  assert.equal(visibleAfterImport.includes(hostedOwnerGateway.id), false);
+  assert.equal(visibleAfterImport.includes(publicGateway.id), true);
+
+  const exported = store.exportSnapshot();
+  assert.equal(exported.localOwnerGatewayId, localOwnerGateway.id);
+  assert.equal(exported.hostedOwnerGatewayId, hostedOwnerGateway.id);
+
+  const restored: GatewayStore = createGatewayStore();
+  restored.importSnapshot(exported);
+
+  const visibleAfterRestart = restored.listPublicGateways().items.map((gateway) => gateway.id);
+  assert.equal(visibleAfterRestart.includes(localOwnerGateway.id), false);
+  assert.equal(visibleAfterRestart.includes(hostedOwnerGateway.id), false);
+  assert.equal(visibleAfterRestart.includes(publicGateway.id), true);
 });
 
 test('GatewayStore hosted invite join registers, claims, and binds without implying live runtime status', () => {

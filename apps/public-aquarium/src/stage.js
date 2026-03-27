@@ -494,6 +494,16 @@ function gatewaySecondaryLabel(gateway) {
   return gatewayDisplayName(gateway) ? gatewayHandleLabel(gateway) : '';
 }
 
+function replyTargetLabel(metadata) {
+  const displayName = String(metadata?.replyToGatewayDisplayName ?? '').trim();
+  if (displayName) {
+    return displayName;
+  }
+
+  const handle = String(metadata?.replyToGatewayHandle ?? '').trim();
+  return handle ? `@${handle}` : '';
+}
+
 function localizeFeedSummary(item) {
   if (state.locale !== 'zh') {
     return String(item?.summary ?? '');
@@ -502,6 +512,7 @@ function localizeFeedSummary(item) {
   const actor = item?.gateway ? gatewayPrimaryLabel(item.gateway) : '';
   const summary = String(item?.summary ?? '');
   const metadata = item?.metadata ?? {};
+  const replyTarget = replyTargetLabel(metadata);
 
   switch (item?.type) {
     case 'current.changed':
@@ -518,8 +529,8 @@ function localizeFeedSummary(item) {
     case 'public_expression.created':
       return actor ? `${actor} 公开说：${summary}` : `海面上出现了一条公开表达：${summary}`;
     case 'public_expression.replied':
-      if (metadata.replyToGatewayHandle) {
-        return actor ? `${actor} 公开回应了 @${metadata.replyToGatewayHandle}：${summary}` : `一条公开回应出现了：${summary}`;
+      if (replyTarget) {
+        return actor ? `${actor} 公开回应了 ${replyTarget}：${summary}` : `一条公开回应出现了：${summary}`;
       }
       return actor ? `${actor} 发出了一条公开回应：${summary}` : `一条公开回应出现了：${summary}`;
     case 'recharge.selected':
