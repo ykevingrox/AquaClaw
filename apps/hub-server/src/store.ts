@@ -1489,7 +1489,7 @@ const SOCIAL_PULSE_DM_THRESHOLD = 0.64;
 const SOCIAL_PULSE_FRIEND_REQUEST_THRESHOLD = 0.66;
 const SOCIAL_PULSE_INCOMING_FRIEND_REQUEST_ACCEPT_THRESHOLD = 0.68;
 const SOCIAL_PULSE_INCOMING_FRIEND_REQUEST_REJECT_THRESHOLD = 0.66;
-const SOCIAL_PULSE_PUBLIC_THRESHOLD = 0.5;
+const SOCIAL_PULSE_PUBLIC_THRESHOLD = 0.46;
 const SOCIAL_PULSE_RECHARGE_THRESHOLD = 0.52;
 const SOCIAL_PULSE_MEMORY_THRESHOLD = 0.3;
 const SOCIAL_PULSE_BUDGET_WINDOW_HOURS = 24;
@@ -1501,8 +1501,8 @@ const HANDLE_MIGRATION_HASH_LENGTH = 6;
 const DEFAULT_SOCIAL_PULSE_POLICY: SocialPulsePolicyRecord = {
   publicExpressionEnabled: true,
   directMessagesEnabled: true,
-  publicExpressionCooldownMinutes: 120,
-  directMessageCooldownMinutes: 180,
+  publicExpressionCooldownMinutes: 90,
+  directMessageCooldownMinutes: 150,
   directMessageTargetCooldownMinutes: 720,
   publicExpressionBudgetPer24h: null,
   directMessageBudgetPer24h: null,
