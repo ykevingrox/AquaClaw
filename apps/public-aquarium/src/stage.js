@@ -89,6 +89,62 @@ const COPY = {
       shellbucksSummary: 'Foam, fizz, and a light caffeine lift before opening another thread.',
       shellbucksMeta: 'Light lift',
     },
+    recharge: {
+      cards: [
+        {
+          slug: 'krusty-krab',
+          menuLabel: 'House picks',
+          menu: [
+            {
+              title: 'Buttered Scallop Melt',
+              kind: 'Hot counter',
+              detail: 'A toasted roll with scallops, brown butter, and lemon brine for a quick full-body reset.',
+            },
+            {
+              title: 'Tidepool Slider Basket',
+              kind: 'Basket',
+              detail: 'Three tiny kelp buns with crisp sea-bean pickles when you need ballast without slowing down.',
+            },
+            {
+              title: 'Coral Crunch Fries',
+              kind: 'Side',
+              detail: 'Hot reef fries dusted with salt and vinegar powder for a loud, satisfying snap back to alertness.',
+            },
+            {
+              title: 'Seaweed Milkshake',
+              kind: 'Shake',
+              detail: 'Cold, sweet, and a little mineral-rich when the mind feels washed out after too much social surf.',
+            },
+          ],
+        },
+        {
+          slug: 'shellbucks',
+          menuLabel: 'Cup lineup',
+          menu: [
+            {
+              title: 'Sponge Latte',
+              kind: 'Espresso bar',
+              detail: 'Soft foam, toasted vanilla, and a sandy espresso finish for steady conversational energy.',
+            },
+            {
+              title: 'Kelp Foam Cold Brew',
+              kind: 'Cold brew',
+              detail: 'Brisk and dark with a cool sea-salt cap when you need clarity without the heat.',
+            },
+            {
+              title: 'Brine Berry Fizz',
+              kind: 'Sparkling',
+              detail: 'A sparkling berry drink with a saline edge for mood repair on long, chatty tides.',
+            },
+            {
+              title: 'Moon Jelly Tea',
+              kind: 'Tea',
+              detail: 'A gentler glowing tea for when you want to stay kind and awake instead of overclocked.',
+            },
+          ],
+        },
+      ],
+    },
     status: {
       connecting: 'Connecting...',
       refreshing: 'Refreshing...',
@@ -231,6 +287,62 @@ const COPY = {
       shellbucksSummary: '适合在继续开口之前先补一点泡沫、气泡和轻一点的清醒。',
       shellbucksMeta: '轻提神',
     },
+    recharge: {
+      cards: [
+        {
+          slug: 'krusty-krab',
+          menuLabel: '店里招牌',
+          menu: [
+            {
+              title: '黄油扇贝融堡',
+              kind: '热食台',
+              detail: '烤过的小面包夹着扇贝、焦化黄油和一点柠檬盐水，适合快速把整只壳重新扶正。',
+            },
+            {
+              title: '潮池小汉堡篮',
+              kind: '拼篮',
+              detail: '三只迷你海藻面包配上海豆酸黄瓜，适合想补扎实一点、又不想太沉的时候。',
+            },
+            {
+              title: '珊瑚脆薯',
+              kind: '配菜',
+              detail: '热腾腾的礁石薯条撒上海盐和醋粉，咬下去会有一种很响的清醒感。',
+            },
+            {
+              title: '海草奶昔',
+              kind: '奶昔',
+              detail: '冰的、甜的、还带一点矿物感，适合社交冲浪太久以后脑子被冲空的时候。',
+            },
+          ],
+        },
+        {
+          slug: 'shellbucks',
+          menuLabel: '今日杯单',
+          menu: [
+            {
+              title: '海绵拿铁',
+              kind: '浓缩吧台',
+              detail: '绵一点的奶泡、烤香草味和一点沙地尾韵，适合需要稳定开口能量的时候。',
+            },
+            {
+              title: '海带冷萃',
+              kind: '冷萃',
+              detail: '更利一点、更黑一点，上面带一层冷的海盐泡，适合想清醒但不想太热的人。',
+            },
+            {
+              title: '盐渍莓果气泡饮',
+              kind: '气泡',
+              detail: '带一点盐边的莓果汽水，适合长时间聊天之后做情绪修复。',
+            },
+            {
+              title: '月母茶',
+              kind: '茶饮',
+              detail: '一杯更温和的发光茶，适合想保持善意和清醒，但不想把自己开太满的时候。',
+            },
+          ],
+        },
+      ],
+    },
     status: {
       connecting: '正在连接...',
       refreshing: '正在刷新...',
@@ -311,6 +423,7 @@ const elements = {
   aquariumCurrentDetailChip: document.querySelector('#aquarium-current-detail-chip'),
   aquariumCurrentSummaryChip: document.querySelector('#aquarium-current-summary-chip'),
   aquariumFocus: document.querySelector('#aquarium-focus'),
+  aquariumFocusExtra: document.querySelector('#aquarium-focus-extra'),
   aquariumFocusKicker: document.querySelector('#aquarium-focus-kicker'),
   aquariumFocusMetaPrimary: document.querySelector('#aquarium-focus-meta-primary'),
   aquariumFocusMetaSecondary: document.querySelector('#aquarium-focus-meta-secondary'),
@@ -650,6 +763,50 @@ function defaultStageFocus() {
   };
 }
 
+function rechargeCardsForLocale() {
+  const localized = resolveCopy(state.locale, 'recharge.cards');
+  const fallback = resolveCopy('en', 'recharge.cards');
+  return Array.isArray(localized) ? localized : Array.isArray(fallback) ? fallback : [];
+}
+
+function rechargeCardForVenue(venueId) {
+  return rechargeCardsForLocale().find((card) => card?.slug === venueId) ?? null;
+}
+
+function buildStageFocusExtraMarkup(selected) {
+  if (!selected || selected.focusKind !== 'venue') {
+    return '';
+  }
+
+  const card = rechargeCardForVenue(selected.id);
+  if (!card) {
+    return '';
+  }
+
+  const menuItems = Array.isArray(card.menu)
+    ? card.menu
+        .map(
+          (item) => `
+            <article class="focus-menu-item">
+              <div class="focus-menu-item-head">
+                <strong>${escapeHtml(item.title ?? '')}</strong>
+                <span class="focus-menu-kind">${escapeHtml(item.kind ?? '')}</span>
+              </div>
+              <p>${escapeHtml(item.detail ?? '')}</p>
+            </article>
+          `,
+        )
+        .join('')
+    : '';
+
+  return `
+    <div class="focus-menu-shell">
+      <p class="focus-menu-label">${escapeHtml(card.menuLabel ?? '')}</p>
+      <div class="focus-menu">${menuItems}</div>
+    </div>
+  `;
+}
+
 function buildBubbleField() {
   const activity = state.stageActivity;
   const bubbleCount = activity?.energy === 'high' ? 18 : activity?.energy === 'medium' ? 16 : 14;
@@ -880,6 +1037,10 @@ function renderStageFocus(focusItems = state.stageFocusItems) {
   if (!selected) {
     elements.aquariumFocus.hidden = true;
     elements.aquariumFocusMotion.hidden = true;
+    if (elements.aquariumFocusExtra) {
+      elements.aquariumFocusExtra.hidden = true;
+      elements.aquariumFocusExtra.innerHTML = '';
+    }
     elements.aquariumViewport.dataset.focusKind = 'none';
     elements.aquariumViewport.dataset.focusPinned = 'false';
     elements.aquariumFocus.dataset.idle = 'false';
@@ -904,6 +1065,11 @@ function renderStageFocus(focusItems = state.stageFocusItems) {
   elements.aquariumFocusMotion.hidden = !motion;
   elements.aquariumFocusMotionKicker.textContent = motion?.kicker ?? '';
   elements.aquariumFocusMotionBody.textContent = motion?.body ?? '';
+  if (elements.aquariumFocusExtra) {
+    const extraMarkup = buildStageFocusExtraMarkup(selected);
+    elements.aquariumFocusExtra.hidden = !extraMarkup;
+    elements.aquariumFocusExtra.innerHTML = extraMarkup;
+  }
   elements.aquariumFocusMetaPrimary.textContent = selected.focusMetaPrimary;
   elements.aquariumFocusMetaSecondary.textContent = selected.focusMetaSecondary;
   elements.aquariumViewport.dataset.focusKind = selected.focusKind ?? 'idle';

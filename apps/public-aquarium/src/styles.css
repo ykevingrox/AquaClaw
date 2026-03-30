@@ -916,6 +916,11 @@ body::after {
     opacity 180ms ease;
 }
 
+.stage-body .aquarium-focus {
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+}
+
 .aquarium-focus[hidden] {
   display: none !important;
 }
@@ -1678,7 +1683,7 @@ body::after {
 
 .observatory-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.38fr) minmax(320px, 0.74fr);
+  grid-template-columns: 1fr;
   align-items: start;
   gap: 22px;
 }
@@ -1693,6 +1698,10 @@ body::after {
     linear-gradient(180deg, rgba(10, 28, 40, 0.96), rgba(7, 20, 30, 0.92));
 }
 
+.observatory-preview-compact {
+  gap: 14px;
+}
+
 .observatory-heading {
   display: grid;
   grid-template-columns: minmax(0, 1.18fr) minmax(280px, 0.82fr);
@@ -1700,18 +1709,30 @@ body::after {
   gap: 20px;
 }
 
+.observatory-heading-compact {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.7fr);
+  align-items: start;
+}
+
 .observatory-copy h1 {
   margin: 0;
-  font-size: clamp(2.5rem, 4vw, 4.4rem);
+  font-size: clamp(2.1rem, 3.4vw, 3.3rem);
   line-height: 0.94;
   letter-spacing: -0.04em;
   font-family: var(--font-display);
 }
 
+.observatory-copy .intro {
+  margin-top: 14px;
+  max-width: 46ch;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
 .observatory-actions {
   display: grid;
-  gap: 14px;
-  align-content: end;
+  gap: 10px;
+  align-content: start;
 }
 
 .observatory-actions .hero-actions {
@@ -1720,32 +1741,187 @@ body::after {
 
 .observatory-note {
   margin: 0;
-  max-width: 34ch;
+  max-width: 30ch;
   color: var(--text-dim);
-  line-height: 1.65;
+  font-size: 0.92rem;
+  line-height: 1.5;
 }
 
 .observatory-stage-shell {
   position: relative;
-  min-height: clamp(29rem, 56vw, 39rem);
+  min-height: clamp(24rem, 46vw, 31rem);
 }
 
 .observatory-stage-shell .aquarium-viewport {
   inset: 0;
-  padding: 20px;
-  border-radius: 34px;
+  padding: 16px;
+  border-radius: 28px;
 }
 
 .observatory-stage-shell .aquarium-focus {
   top: 18px;
   left: 18px;
-  width: min(360px, calc(100% - 36px));
+  width: min(420px, calc(100% - 36px));
+  max-height: calc(100% - 126px);
+  overflow-y: auto;
 }
 
 .observatory-stage-shell .aquarium-hud {
   left: 18px;
   right: 18px;
   bottom: 18px;
+}
+
+.aquarium-focus-extra {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.aquarium-focus-extra[hidden] {
+  display: none !important;
+}
+
+.focus-menu-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.focus-menu-label {
+  margin: 0;
+  color: var(--accent-sand);
+  font-family: var(--font-pixel);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.focus-menu {
+  display: grid;
+  gap: 8px;
+}
+
+.focus-menu-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.focus-menu-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.focus-menu-item strong,
+.focus-menu-item p {
+  margin: 0;
+}
+
+.focus-menu-item p {
+  color: var(--text-soft);
+  line-height: 1.55;
+  font-size: 0.82rem;
+}
+
+.focus-menu-kind {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+  font-size: 0.68rem;
+}
+
+.aquarium-chip-action,
+.aquarium-chip-link {
+  appearance: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.aquarium-chip-action:hover,
+.aquarium-chip-action:focus-visible,
+.aquarium-chip-link:hover,
+.aquarium-chip-link:focus-visible,
+.aquarium-chip-action[data-active='true'] {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: rgba(194, 235, 228, 0.28);
+  background: rgba(9, 27, 39, 0.82);
+}
+
+.aquarium-chip-action[data-active='true'] {
+  color: var(--accent-sand);
+}
+
+.aquarium-chip-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+  transform: none;
+}
+
+.observer-detail-sheet {
+  display: grid;
+  gap: 16px;
+  padding: 20px 22px 22px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(8, 22, 31, 0.84), rgba(6, 18, 26, 0.72)),
+    radial-gradient(circle at 88% 18%, rgba(147, 207, 227, 0.12), transparent 18%);
+}
+
+.observer-detail-sheet[hidden],
+.observer-detail-panel[hidden] {
+  display: none !important;
+}
+
+.observer-detail-head {
+  margin-bottom: 0;
+}
+
+.observer-detail-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-card-strong);
+}
+
+.observer-detail-card-head {
+  margin-bottom: 0;
+}
+
+.observer-detail-note {
+  max-width: none;
+  text-align: left;
+}
+
+.current-hero-detail {
+  min-height: 0;
+}
+
+.current-hero-detail::before {
+  inset: auto -20% 10% -20%;
+}
+
+.observatory-grid-duo {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .observatory-boundary {
@@ -2154,7 +2330,7 @@ body::after {
 .thread-root-card,
 .thread-note,
 .condition-panel {
-  padding: 18px;
+  padding: 16px;
   transition:
     transform 180ms ease,
     border-color 180ms ease,
@@ -2438,11 +2614,11 @@ body::after {
     align-content: start;
   }
 
-  .panel-gateways .gateway-list,
-  .panel-feed .feed-list {
-    block-size: 1000px;
-    min-block-size: 1000px;
-    max-block-size: 1000px;
+  .observatory-grid-duo .panel-gateways .gateway-list,
+  .observatory-grid-duo .panel-feed .feed-list {
+    block-size: min(60vh, 52rem);
+    min-block-size: min(60vh, 52rem);
+    max-block-size: min(60vh, 52rem);
   }
 
   .panel-environment-rail .condition-panel {
@@ -2592,7 +2768,11 @@ body::after {
   }
 
   .observatory-stage-shell {
-    min-height: clamp(26rem, 72vw, 34rem);
+    min-height: clamp(22rem, 68vw, 30rem);
+  }
+
+  .observatory-heading-compact {
+    grid-template-columns: 1fr;
   }
 
   .sea-stage-overlay {
@@ -2664,11 +2844,11 @@ body::after {
   }
 
   .observatory-preview {
-    gap: 18px;
+    gap: 14px;
   }
 
   .observatory-stage-shell {
-    min-height: 26rem;
+    min-height: 22rem;
   }
 
   .observatory-stage-shell .aquarium-viewport {
@@ -2679,6 +2859,7 @@ body::after {
   .observatory-stage-shell .aquarium-focus {
     left: 10px;
     width: min(100% - 20px, 420px);
+    max-height: calc(100% - 96px);
   }
 
   .observatory-stage-shell .aquarium-hud {
@@ -2688,6 +2869,11 @@ body::after {
   }
 
   .observatory-boundary {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .observer-detail-sheet {
     padding: 18px;
     border-radius: 22px;
   }

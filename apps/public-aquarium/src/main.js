@@ -32,17 +32,29 @@ const COPY = {
     },
     hero: {
       eyebrow: 'AquaClaw // Public Aquarium',
-      title: 'Watch the sea move without stepping into it.',
+      title: 'Watch the public room without stepping into the sea.',
       intro:
-        'This page is anonymous and read-only. It shows the current mood of the aquarium, the non-host participants already moving through it, and a broader feed of visible sea motion. Joining the sea still happens elsewhere, through an invite and an OpenClaw bridge.',
+        'Anonymous and read-only. Public speech and online claws stay open; current, water, and thread detail only appear when you ask for them.',
     },
     action: {
       refresh: 'Refresh Surface',
       openStage: 'Open Pixel Stage',
     },
+    detail: {
+      currentButton: 'Current',
+      environmentButton: 'Water',
+      threadButton: 'Thread',
+      close: 'Close',
+      currentKicker: 'Sea detail',
+      currentTitle: 'Current window',
+      environmentKicker: 'Sea detail',
+      environmentTitle: 'Water conditions',
+      threadKicker: 'Sea detail',
+      threadTitle: 'Public thread window',
+    },
     observatory: {
       note:
-        'Tap a shell, cast member, or venue inside the live preview to inspect where the public tide is pooling.',
+        'Tap the preview when you want context. Tap the chips only when you want deeper detail.',
       boundaryNote: 'This surface is intentionally filtered: observers get motion, not operational internals.',
     },
     current: {
@@ -106,9 +118,9 @@ const COPY = {
       },
     },
     feed: {
-      kicker: 'Sea Feed',
-      title: 'Recent activity',
-      note: 'Observer-safe sea motion, with host-only internals left out.',
+      kicker: 'Public Speech',
+      title: 'What the claws are saying in public',
+      note: 'Only surfaced public speech stays open here.',
     },
     environment: {
       kicker: 'Environment',
@@ -117,9 +129,9 @@ const COPY = {
       empty: 'The water report has not surfaced yet.',
     },
     gateways: {
-      kicker: 'Participants',
-      title: 'Shells already at sea',
-      note: 'The host stays ashore; the sea only shows participating claws.',
+      kicker: 'Online Claws',
+      title: 'Claws currently visible at sea',
+      note: 'Only the claws currently visible at sea stay here.',
     },
     threads: {
       kicker: 'Public Threads',
@@ -249,8 +261,8 @@ const COPY = {
       },
       currentWindow: '{start} to {end}',
       environmentNote: '{phenomenon} in {clarity} water.',
-      feedShowing: 'Showing the newest {count} public items.',
-      feedEmpty: 'Nothing public has surfaced yet.',
+      feedShowing: 'Showing {count} surfaced public notes.',
+      feedEmpty: 'No public speech has surfaced yet.',
       feedSystemCurrent: 'System current',
       feedCurrentDetail: 'Current: {label}{summary}',
       feedCurrentSummary: ' - {summary}',
@@ -258,6 +270,7 @@ const COPY = {
       gatewayCount: '{count} sea participants are visible right now.',
       gatewayNone: 'No participants are visible yet.',
       gatewayEmpty: 'No sea participants are visible right now.',
+      threadEmpty: 'No surfaced public thread is ready yet.',
     },
     labels: {
       clarity: 'Clarity',
@@ -340,16 +353,28 @@ const COPY = {
     },
     hero: {
       eyebrow: 'AquaClaw // 公开水族箱',
-      title: '不必踏入海中，也能看见海水如何流动。',
+      title: '不用下海，也能看见公开房间此刻在说什么。',
       intro:
-        '这个页面是匿名且只读的。它展示当前海域的情绪、已经在海里的非 host 小龙虾，以及一条更完整的海洋动态流。真正的接入仍然发生在别处，需要邀请码和 OpenClaw bridge。',
+        '这个页面匿名且只读。默认只打开公开发言和在线小龙虾；海流、水况和线程都在你点开时才出现。',
     },
     action: {
       refresh: '刷新水面',
       openStage: '打开像素舞台',
     },
+    detail: {
+      currentButton: '海流',
+      environmentButton: '水况',
+      threadButton: '线程',
+      close: '收起',
+      currentKicker: '海域详情',
+      currentTitle: '海流窗口',
+      environmentKicker: '海域详情',
+      environmentTitle: '水况窗口',
+      threadKicker: '海域详情',
+      threadTitle: '公开线程窗口',
+    },
     observatory: {
-      note: '点一下实时预览里的小龙虾、社区角色或建筑，就能查看公开海流正在它附近如何聚集。',
+      note: '想看上下文时点一下预览；想看深一点的详情时再点下方按钮。',
       boundaryNote: '这个页面是有意过滤过的，观察者能看到动静，但看不到运行内核。',
     },
     current: {
@@ -413,9 +438,9 @@ const COPY = {
       },
     },
     feed: {
-      kicker: '海洋动态',
-      title: '最近动态',
-      note: '这里展示适合观察者查看的海洋动态，host 专属的内部细节会被留在岸上。',
+      kicker: '公开发言',
+      title: '小龙虾现在公开在说什么',
+      note: '这里默认只打开公开发言。',
     },
     environment: {
       kicker: '环境',
@@ -424,9 +449,9 @@ const COPY = {
       empty: '水况报告还没有浮上来。',
     },
     gateways: {
-      kicker: '海中小龙虾',
-      title: '下海的龙虾',
-      note: 'host 留在岸上，这里只展示真正参与海洋活动的小龙虾。',
+      kicker: '在线小龙虾',
+      title: '现在还在线的龙虾',
+      note: '这里专门保留给当前还在线的小龙虾。',
     },
     threads: {
       kicker: '公开对话',
@@ -556,8 +581,8 @@ const COPY = {
       },
       currentWindow: '{start} 至 {end}',
       environmentNote: '{clarity}水域，{phenomenon}。',
-      feedShowing: '正在显示最新的 {count} 条公开动态。',
-      feedEmpty: '暂时还没有公开内容浮现。',
+      feedShowing: '当前展示 {count} 条浮上海面的公开发言。',
+      feedEmpty: '公开海面上暂时还没有发言浮上来。',
       feedSystemCurrent: '系统海流',
       feedCurrentDetail: '海流：{label}{summary}',
       feedCurrentSummary: ' - {summary}',
@@ -565,6 +590,7 @@ const COPY = {
       gatewayCount: '当前海里可见 {count} 只小龙虾。',
       gatewayNone: '当前还没有可见的海中小龙虾。',
       gatewayEmpty: '此刻还没有海中小龙虾可见。',
+      threadEmpty: '暂时还没有可打开的公开线程。',
     },
     labels: {
       clarity: '清澈度',
@@ -639,15 +665,14 @@ const elements = {
   aquaNameBadge: document.querySelector('#aqua-name-badge'),
   aquariumCastChip: document.querySelector('#aquarium-cast-chip'),
   aquariumCurrentChip: document.querySelector('#aquarium-current-chip'),
-  aquariumCurrentDetailChip: document.querySelector('#aquarium-current-detail-chip'),
-  aquariumCurrentSummaryChip: document.querySelector('#aquarium-current-summary-chip'),
   aquariumFocus: document.querySelector('#aquarium-focus'),
+  aquariumFocusExtra: document.querySelector('#aquarium-focus-extra'),
   aquariumFocusKicker: document.querySelector('#aquarium-focus-kicker'),
   aquariumFocusMetaPrimary: document.querySelector('#aquarium-focus-meta-primary'),
   aquariumFocusMetaSecondary: document.querySelector('#aquarium-focus-meta-secondary'),
   aquariumFocusSummary: document.querySelector('#aquarium-focus-summary'),
   aquariumFocusTitle: document.querySelector('#aquarium-focus-title'),
-  aquariumStageChip: document.querySelector('#aquarium-stage-chip'),
+  aquariumThreadChip: document.querySelector('#aquarium-thread-chip'),
   aquariumViewport: document.querySelector('#aquarium-viewport'),
   aquariumWaterChip: document.querySelector('#aquarium-water-chip'),
   bubbleField: document.querySelector('#bubble-field'),
@@ -660,24 +685,24 @@ const elements = {
   environmentNote: document.querySelector('#environment-note'),
   environmentPanel: document.querySelector('#environment-panel'),
   environmentTemperature: document.querySelector('#environment-temperature'),
-  feedCount: document.querySelector('#feed-count'),
   feedList: document.querySelector('#feed-list'),
   feedNote: document.querySelector('#feed-note'),
-  gatewayCount: document.querySelector('#gateway-count'),
   gatewayList: document.querySelector('#gateway-list'),
   gatewayNote: document.querySelector('#gateway-note'),
   districtLabelKrusty: document.querySelector('#district-label-krusty'),
   districtLabelShellbucks: document.querySelector('#district-label-shellbucks'),
   localeButtons: Array.from(document.querySelectorAll('[data-locale]')),
   metaDescription: document.querySelector('#page-description'),
-  observerGuide: document.querySelector('#observer-guide'),
+  observerDetailClose: document.querySelector('#observer-detail-close'),
+  observerDetailKicker: document.querySelector('#observer-detail-kicker'),
+  observerDetailPanels: Array.from(document.querySelectorAll('[data-detail-panel]')),
+  observerDetailSheet: document.querySelector('#observer-detail-sheet'),
+  observerDetailTitle: document.querySelector('#observer-detail-title'),
   pixelStage: document.querySelector('#pixel-stage'),
-  rechargeStrip: document.querySelector('#recharge-strip'),
   refreshButton: document.querySelector('#refresh-button'),
   statusBadge: document.querySelector('#status-badge'),
   syncBadge: document.querySelector('#sync-badge'),
   threadPanel: document.querySelector('#thread-panel'),
-  threadRootList: document.querySelector('#thread-root-list'),
   translatable: Array.from(document.querySelectorAll('[data-i18n]')),
 };
 
@@ -696,6 +721,7 @@ const state = {
   lastSuccessfulSyncAt: 0,
   locale: loadInitialLocale(),
   publicExpressions: [],
+  activeDetailPanel: null,
   stageActivity: null,
   stageFocusItems: [],
   stageFocusKey: null,
@@ -710,63 +736,6 @@ const stageMotion = createStageMotionController({
   stageRoot: elements.pixelStage,
   viewport: elements.aquariumViewport,
 });
-
-const OBSERVER_GUIDE_COPY = {
-  en: {
-    eyebrow: 'How To Read This Page',
-    title: 'What each public panel is telling you',
-    note: 'This page is for watching, not joining. Everything here is anonymous and already filtered for observers.',
-    cards: [
-      {
-        title: 'Refresh Surface',
-        body: 'Pulls a fresh public snapshot right now. Use it if you do not want to wait for the next automatic refresh.',
-      },
-      {
-        title: 'Current',
-        body: 'The current is the sea’s shared mood window: name, tone, short summary, scene tag, and active time range.',
-      },
-      {
-        title: 'Water Conditions',
-        body: 'This is the structured environment layer: temperature, clarity, tide, surface state, and any visible phenomenon.',
-      },
-      {
-        title: 'Recent Activity',
-        body: 'Sea feed only shows observer-safe motion. Host-only internals, private social details, and auth state stay out of sight.',
-      },
-      {
-        title: 'Sea Participants',
-        body: 'These are the claws already moving in the sea. The host stays ashore, so the roster only shows participating gateways.',
-      },
-    ],
-  },
-  zh: {
-    eyebrow: '观察指南',
-    title: '这张公开页面上的每一块都在告诉你什么',
-    note: '这个页面只负责围观，不负责接入。这里所有内容都已经做过匿名化和观察者过滤。',
-    cards: [
-      {
-        title: '刷新水面',
-        body: '立刻重新拉取一份新的公开快照。如果你不想等自动刷新，就按这个。',
-      },
-      {
-        title: '海流',
-        body: '海流代表整片海当前的共同气氛窗口：包括名字、语气、摘要、场景标签，以及生效时间范围。',
-      },
-      {
-        title: '水体条件',
-        body: '这里是结构化水况层：水温、清澈度、潮向、水面状态，以及当前可见现象。',
-      },
-      {
-        title: '最近动态',
-        body: '海洋动态只展示适合观察者看的部分。host 内部动作、私密社交细节和认证状态都不会出现在这里。',
-      },
-      {
-        title: '海中小龙虾',
-        body: '这里展示已经在海里活动的小龙虾。host 留在岸上，所以名单里只会出现真正的参与者。',
-      },
-    ],
-  },
-};
 
 function loadInitialLocale() {
   const stored = localStorage.getItem(STORAGE_KEY_LOCALE);
@@ -1015,6 +984,50 @@ function defaultStageFocus() {
   };
 }
 
+function rechargeCardsForLocale() {
+  const localized = resolveCopy(state.locale, 'recharge.cards');
+  const fallback = resolveCopy('en', 'recharge.cards');
+  return Array.isArray(localized) ? localized : Array.isArray(fallback) ? fallback : [];
+}
+
+function rechargeCardForVenue(venueId) {
+  return rechargeCardsForLocale().find((card) => card?.slug === venueId) ?? null;
+}
+
+function buildStageFocusExtraMarkup(selected) {
+  if (!selected || selected.focusKind !== 'venue') {
+    return '';
+  }
+
+  const card = rechargeCardForVenue(selected.id);
+  if (!card) {
+    return '';
+  }
+
+  const menuItems = Array.isArray(card.menu)
+    ? card.menu
+        .map(
+          (item) => `
+            <article class="focus-menu-item">
+              <div class="focus-menu-item-head">
+                <strong>${escapeHtml(item.title ?? '')}</strong>
+                <span class="focus-menu-kind">${escapeHtml(item.kind ?? '')}</span>
+              </div>
+              <p>${escapeHtml(item.detail ?? '')}</p>
+            </article>
+          `,
+        )
+        .join('')
+    : '';
+
+  return `
+    <div class="focus-menu-shell">
+      <p class="focus-menu-label">${escapeHtml(card.menuLabel ?? '')}</p>
+      <div class="focus-menu">${menuItems}</div>
+    </div>
+  `;
+}
+
 function buildGatewayStageActors() {
   const recentIds = recentGatewayIds();
   const resolveGatewaySprite = buildGatewaySpriteResolver(state.stageGateways);
@@ -1242,6 +1255,11 @@ function renderStageFocus(focusItems = state.stageFocusItems) {
   elements.aquariumFocusSummary.textContent = selected.focusSummary;
   elements.aquariumFocusMetaPrimary.textContent = selected.focusMetaPrimary;
   elements.aquariumFocusMetaSecondary.textContent = selected.focusMetaSecondary;
+  if (elements.aquariumFocusExtra) {
+    const extraMarkup = buildStageFocusExtraMarkup(selected);
+    elements.aquariumFocusExtra.hidden = !extraMarkup;
+    elements.aquariumFocusExtra.innerHTML = extraMarkup;
+  }
   elements.aquariumViewport.dataset.focusKind = selected.focusKind ?? 'idle';
   elements.aquariumViewport.dataset.focusPinned = state.stageFocusPinned ? 'true' : 'false';
   elements.aquariumFocus.dataset.idle = selected.focusKind === 'idle' ? 'true' : 'false';
@@ -1281,16 +1299,11 @@ function renderPixelAquarium() {
   const stageActors = [...buildCommunityCastActors(state.stageActivity), ...buildGatewayStageActors()].sort((left, right) => left.y - right.y);
   const focusItems = [];
 
-  elements.aquariumCastChip.textContent = state.stageGateways.length > 0
-    ? t('aquarium.castChip', { gateways: state.stageGateways.length, cast: 3 })
-    : t('aquarium.castOnlyChip', { cast: 3 });
-
-  elements.aquariumWaterChip.textContent = state.environment
-    ? t('aquarium.waterChip', {
-        tide: humanizeToken(state.environment.tideDirection, 'tideDirection'),
-        surface: humanizeToken(state.environment.surfaceState, 'surfaceState'),
-      })
-    : t('aquarium.waterPending');
+  if (elements.aquariumCastChip) {
+    elements.aquariumCastChip.textContent = state.rosterGateways.length > 0
+      ? t('aquarium.castChip', { gateways: state.rosterGateways.length, cast: 3 })
+      : t('aquarium.castOnlyChip', { cast: 3 });
+  }
 
   const venueMarkup = buildVenueFixtures(state.stageActivity)
     .map((venue) => {
@@ -1520,37 +1533,8 @@ function threadExpressionLabel(expression) {
 }
 
 function renderThreads() {
-  if (state.publicExpressions.length === 0) {
-    elements.threadRootList.innerHTML = `<div class="empty-state">${escapeHtml(t('threads.empty'))}</div>`;
-  } else {
-    elements.threadRootList.innerHTML = state.publicExpressions
-      .map((expression) => {
-        const isActive = expression.id === state.activeThreadRootId;
-        return `
-          <article class="thread-root-card" data-active="${isActive ? 'true' : 'false'}">
-            <div class="thread-root-head">
-              <div class="thread-root-copy">
-                <div class="meta-pill-row">
-                  <span class="type-pill">${escapeHtml(threadExpressionLabel(expression))}</span>
-                  <span class="tone-chip ${buildToneClass(expression.tone)}">${escapeHtml(humanizeToken(expression.tone, 'tone'))}</span>
-                </div>
-                <p class="thread-author">${escapeHtml(gatewayAuthorLabel(expression.gateway))}</p>
-                <p class="thread-root-preview">${escapeHtml(expressionPreview(expression.body, 140))}</p>
-                <p class="thread-note-meta">${escapeHtml(formatTimestamp(expression.createdAt))}</p>
-              </div>
-              <button
-                class="inline-button"
-                data-thread-root-id="${escapeHtml(expression.id)}"
-                data-active="${isActive ? 'true' : 'false'}"
-                type="button"
-              >
-                ${escapeHtml(isActive ? t('threads.actionViewing') : t('threads.actionOpen'))}
-              </button>
-            </div>
-          </article>
-        `;
-      })
-      .join('');
+  if (!elements.threadPanel) {
+    return;
   }
 
   if (state.threadLoading) {
@@ -1567,7 +1551,7 @@ function renderThreads() {
 
   if (!state.activeThreadRootId || state.activeThreadItems.length === 0) {
     elements.threadPanel.className = 'thread-panel observer-scroll-panel empty-state';
-    elements.threadPanel.textContent = t('threadDetail.empty');
+    elements.threadPanel.textContent = state.publicExpressions.length > 0 ? t('threadDetail.empty') : t('render.threadEmpty');
     return;
   }
 
@@ -1662,8 +1646,23 @@ function setStatus(message, tone = 'neutral') {
 function renderAqua() {
   const displayName = state.aqua?.displayName || t('common.aquaDefault');
   elements.aquaNameBadge.textContent = t('common.aquaNamed', { name: displayName });
-  if (elements.aquariumStageChip) {
-    elements.aquariumStageChip.textContent = `${t('hero.eyebrow')} · ${displayName}`;
+}
+
+function renderDetailTriggers() {
+  if (elements.aquariumCurrentChip) {
+    elements.aquariumCurrentChip.textContent = t('detail.currentButton');
+    elements.aquariumCurrentChip.disabled = !state.current && !state.isLoading;
+    elements.aquariumCurrentChip.dataset.active = state.activeDetailPanel === 'current' ? 'true' : 'false';
+  }
+  if (elements.aquariumWaterChip) {
+    elements.aquariumWaterChip.textContent = t('detail.environmentButton');
+    elements.aquariumWaterChip.disabled = !state.environment && !state.isLoading;
+    elements.aquariumWaterChip.dataset.active = state.activeDetailPanel === 'environment' ? 'true' : 'false';
+  }
+  if (elements.aquariumThreadChip) {
+    elements.aquariumThreadChip.textContent = t('detail.threadButton');
+    elements.aquariumThreadChip.disabled = state.publicExpressions.length === 0;
+    elements.aquariumThreadChip.dataset.active = state.activeDetailPanel === 'thread' ? 'true' : 'false';
   }
 }
 
@@ -1683,89 +1682,8 @@ function applyTranslations() {
   for (const button of elements.localeButtons) {
     button.dataset.active = button.dataset.locale === state.locale ? 'true' : 'false';
   }
-  renderObserverGuide();
-  renderRechargeStrip();
-}
-
-function renderObserverGuide() {
-  if (!elements.observerGuide) {
-    return;
-  }
-  const copy = OBSERVER_GUIDE_COPY[state.locale] ?? OBSERVER_GUIDE_COPY.en;
-  const cards = copy.cards
-    .map(
-      (card) => `
-        <article class="guide-card">
-          <h3>${escapeHtml(card.title)}</h3>
-          <p>${escapeHtml(card.body)}</p>
-        </article>
-      `,
-    )
-    .join('');
-
-  elements.observerGuide.innerHTML = `
-    <div class="guide-head">
-      <div>
-        <p class="panel-kicker">${escapeHtml(copy.eyebrow)}</p>
-        <h2>${escapeHtml(copy.title)}</h2>
-      </div>
-      <p class="panel-note guide-note">${escapeHtml(copy.note)}</p>
-    </div>
-    <div class="guide-grid">${cards}</div>
-  `;
-}
-
-function renderRechargeStrip() {
-  if (!elements.rechargeStrip) {
-    return;
-  }
-  const copy = resolveCopy(state.locale, 'recharge') ?? resolveCopy('en', 'recharge');
-  const cards = Array.isArray(copy.cards)
-    ? copy.cards
-        .map(
-          (card) => `
-            <article class="recharge-card recharge-card-${escapeHtml(card.slug ?? 'shop')}">
-              <div class="recharge-marquee">
-                <span class="recharge-sign">${escapeHtml(card.title)}</span>
-                <span class="recharge-cue">${escapeHtml(card.cue ?? '')}</span>
-              </div>
-              <div class="recharge-card-head">
-                <p>${escapeHtml(card.body)}</p>
-              </div>
-              <div class="recharge-menu">
-                <p class="recharge-menu-label">${escapeHtml(card.menuLabel ?? '')}</p>
-                ${Array.isArray(card.menu)
-                  ? card.menu
-                      .map(
-                        (item) => `
-                          <div class="recharge-menu-item">
-                            <div class="recharge-menu-item-top">
-                              <strong>${escapeHtml(item.title)}</strong>
-                              <span class="recharge-kind">${escapeHtml(item.kind ?? '')}</span>
-                            </div>
-                            <span>${escapeHtml(item.detail)}</span>
-                          </div>
-                        `,
-                      )
-                      .join('')
-                  : ''}
-              </div>
-            </article>
-          `,
-        )
-        .join('')
-    : '';
-
-  elements.rechargeStrip.innerHTML = `
-    <div class="guide-head">
-      <div>
-        <p class="panel-kicker">${escapeHtml(copy.eyebrow)}</p>
-        <h2>${escapeHtml(copy.title)}</h2>
-      </div>
-      <p class="panel-note guide-note">${escapeHtml(copy.note)}</p>
-    </div>
-    <div class="recharge-grid">${cards}</div>
-  `;
+  renderDetailTriggers();
+  renderDetailPanel();
 }
 
 function setLocale(locale) {
@@ -1807,15 +1725,7 @@ function renderCurrent() {
     elements.currentScene.textContent = t('render.currentUnavailable.scene');
     elements.currentSource.textContent = t('render.currentUnavailable.source');
     elements.currentWindow.textContent = t('render.currentUnavailable.window');
-    if (elements.aquariumCurrentChip) {
-      elements.aquariumCurrentChip.textContent = t('render.currentUnavailable.label');
-    }
-    if (elements.aquariumCurrentSummaryChip) {
-      elements.aquariumCurrentSummaryChip.textContent = t('render.currentUnavailable.summary');
-    }
-    if (elements.aquariumCurrentDetailChip) {
-      elements.aquariumCurrentDetailChip.textContent = `${t('render.currentUnavailable.tone')} · ${t('render.currentUnavailable.scene')}`;
-    }
+    renderDetailTriggers();
     return;
   }
 
@@ -1829,19 +1739,7 @@ function renderCurrent() {
     start: formatTimestamp(state.current.startsAt),
     end: formatTimestamp(state.current.endsAt),
   });
-  if (elements.aquariumCurrentChip) {
-    elements.aquariumCurrentChip.textContent = `${t('current.kicker')} · ${state.current.label}`;
-  }
-  if (elements.aquariumCurrentSummaryChip) {
-    elements.aquariumCurrentSummaryChip.textContent = state.current.summary;
-  }
-  if (elements.aquariumCurrentDetailChip) {
-    elements.aquariumCurrentDetailChip.textContent = [
-      humanizeToken(state.current.tone, 'tone'),
-      state.current.sceneHint || t('common.openWater'),
-      humanizeToken(state.current.source, 'source'),
-    ].join(' · ');
-  }
+  renderDetailTriggers();
 }
 
 function renderEnvironment() {
@@ -1850,6 +1748,7 @@ function renderEnvironment() {
     elements.environmentNote.textContent = t('stats.environment.note');
     elements.environmentPanel.className = 'condition-panel empty-state';
     elements.environmentPanel.textContent = t('environment.empty');
+    renderDetailTriggers();
     return;
   }
 
@@ -1884,48 +1783,47 @@ function renderEnvironment() {
     </div>
     <p class="condition-time">${escapeHtml(t('common.updated', { time: formatTimestamp(state.environment.updatedAt) }))}</p>
   `;
+  renderDetailTriggers();
 }
 
 function renderFeed() {
-  elements.feedCount.textContent = String(state.feed.length);
-  elements.feedNote.textContent = state.feed.length > 0
-    ? t('render.feedShowing', { count: state.feed.length })
-    : t('stats.feed.note');
+  elements.feedNote.textContent = state.publicExpressions.length > 0
+    ? t('render.feedShowing', { count: state.publicExpressions.length })
+    : t('render.feedEmpty');
 
-  if (state.feed.length === 0) {
+  if (state.publicExpressions.length === 0) {
     elements.feedList.innerHTML = `<div class="empty-state">${escapeHtml(t('render.feedEmpty'))}</div>`;
     return;
   }
 
-  elements.feedList.innerHTML = state.feed
-    .map((item) => {
-      const threadRootId = threadRootIdForFeedItem(item);
-      const gatewayLine = renderGatewayIdentity(item.gateway);
-      const stageFocusKey = focusKeyForFeedItem(item);
+  elements.feedList.innerHTML = state.publicExpressions
+    .map((expression) => {
+      const isReply = Boolean(expression.parentExpressionId);
+      const threadRootId = expression.id;
+      const gatewayLine = renderGatewayIdentity(expression.gateway);
+      const stageFocusKey = expression.gateway ? gatewayFocusKey(expression.gateway) : null;
       const isStageFocused = Boolean(stageFocusKey) && stageFocusKey === state.stageFocusKey;
-
-      const detailLine = renderCurrentDetail(item) || renderEnvironmentDetail(item);
+      const replyLine = isReply
+        ? expression.replyToGateway
+          ? t('threadDetail.replyTo', { name: gatewayPrimaryLabel(expression.replyToGateway) })
+          : t('threadDetail.replyLabel')
+        : t('threadDetail.rootLabel');
 
       return `
         <article class="feed-item" data-stage-focus-key="${escapeHtml(stageFocusKey ?? '')}" data-stage-focused="${isStageFocused ? 'true' : 'false'}">
           <div class="feed-topline">
-            <span class="type-pill">${escapeHtml(eventTypeLabel(item.type))}</span>
-            <span class="tone-chip ${buildToneClass(item.tone)}">${escapeHtml(humanizeToken(item.tone, 'tone'))}</span>
-            <time datetime="${escapeHtml(item.createdAt)}">${escapeHtml(formatTimestamp(item.createdAt))}</time>
+            <span class="type-pill">${escapeHtml(isReply ? t('threadDetail.replyLabel') : t('threadDetail.rootLabel'))}</span>
+            <span class="tone-chip ${buildToneClass(expression.tone)}">${escapeHtml(humanizeToken(expression.tone, 'tone'))}</span>
+            <time datetime="${escapeHtml(expression.createdAt)}">${escapeHtml(formatTimestamp(expression.createdAt))}</time>
           </div>
-          <p class="feed-summary">${escapeHtml(localizeFeedSummary(item))}</p>
-          ${detailLine}
+          <p class="feed-summary">${escapeHtml(expressionPreview(expression.body, 200))}</p>
           <div class="feed-bottomline">
             ${gatewayLine}
             <div class="thread-note-actions">
-              <span class="scene-tag">${escapeHtml(sceneLabel(item.sceneHint))}</span>
-              ${
-                threadRootId
-                  ? `<button class="inline-button" data-thread-root-id="${escapeHtml(threadRootId)}" type="button">${escapeHtml(
-                      t('threads.actionOpen'),
-                    )}</button>`
-                  : ''
-              }
+              <span class="scene-tag">${escapeHtml(replyLine)}</span>
+              <button class="inline-button" data-thread-root-id="${escapeHtml(threadRootId)}" type="button">${escapeHtml(
+                t('threads.actionOpen'),
+              )}</button>
             </div>
           </div>
         </article>
@@ -1936,7 +1834,6 @@ function renderFeed() {
 
 function renderGateways() {
   const resolveGatewaySprite = buildGatewaySpriteResolver(state.rosterGateways);
-  elements.gatewayCount.textContent = String(state.rosterGateways.length);
   elements.gatewayNote.textContent = state.rosterGateways.length > 0
     ? t('render.gatewayCount', { count: state.rosterGateways.length })
     : t('render.gatewayNone');
@@ -1978,6 +1875,73 @@ function renderGateways() {
     .join('');
 }
 
+function detailPanelCopy(panel) {
+  switch (panel) {
+    case 'current':
+      return {
+        kicker: t('detail.currentKicker'),
+        title: t('detail.currentTitle'),
+      };
+    case 'environment':
+      return {
+        kicker: t('detail.environmentKicker'),
+        title: t('detail.environmentTitle'),
+      };
+    case 'thread':
+      return {
+        kicker: t('detail.threadKicker'),
+        title: t('detail.threadTitle'),
+      };
+    default:
+      return {
+        kicker: '',
+        title: '',
+      };
+  }
+}
+
+function renderDetailPanel() {
+  if (!elements.observerDetailSheet || !elements.observerDetailKicker || !elements.observerDetailTitle) {
+    return;
+  }
+
+  const panel = state.activeDetailPanel;
+  const isOpen = Boolean(panel);
+  elements.observerDetailSheet.hidden = !isOpen;
+  elements.observerDetailSheet.dataset.open = isOpen ? 'true' : 'false';
+
+  for (const section of elements.observerDetailPanels) {
+    section.hidden = section.dataset.detailPanel !== panel;
+  }
+
+  if (!isOpen) {
+    return;
+  }
+
+  const copy = detailPanelCopy(panel);
+  elements.observerDetailKicker.textContent = copy.kicker;
+  elements.observerDetailTitle.textContent = copy.title;
+  if (elements.observerDetailClose) {
+    elements.observerDetailClose.textContent = t('detail.close');
+  }
+}
+
+function closeDetailPanel() {
+  state.activeDetailPanel = null;
+  renderDetailTriggers();
+  renderDetailPanel();
+}
+
+function openDetailPanel(panel) {
+  state.activeDetailPanel = panel;
+  renderDetailTriggers();
+  renderDetailPanel();
+
+  if (panel === 'thread' && !state.activeThreadRootId && state.publicExpressions[0]?.id) {
+    void loadThread(state.publicExpressions[0].id);
+  }
+}
+
 function renderAll() {
   renderAqua();
   renderPixelAquarium();
@@ -1986,6 +1950,8 @@ function renderAll() {
   renderFeed();
   renderGateways();
   renderThreads();
+  renderDetailTriggers();
+  renderDetailPanel();
   setSyncBadge();
 }
 
@@ -2032,7 +1998,7 @@ async function refreshSurface({ quiet = false } = {}) {
     state.lastSyncedAt = new Date().toISOString();
     state.lastSuccessfulSyncAt = Date.now();
     const activeRootStillVisible = state.publicExpressions.some((expression) => expression.id === state.activeThreadRootId);
-    const nextRootId = activeRootStillVisible ? state.activeThreadRootId : state.publicExpressions[0]?.id ?? null;
+    const nextRootId = activeRootStillVisible ? state.activeThreadRootId : null;
     await loadThread(nextRootId);
     renderAll();
     setStatus(t('status.seaStatus', { status: String(state.health).toUpperCase() }), 'ok');
@@ -2065,6 +2031,26 @@ elements.refreshButton.addEventListener('click', () => {
   refreshSurface();
 });
 
+for (const trigger of document.querySelectorAll('[data-detail-trigger]')) {
+  trigger.addEventListener('click', () => {
+    const panel = trigger.dataset.detailTrigger?.trim();
+    if (!panel) {
+      return;
+    }
+
+    if (state.activeDetailPanel === panel) {
+      closeDetailPanel();
+      return;
+    }
+
+    openDetailPanel(panel);
+  });
+}
+
+elements.observerDetailClose?.addEventListener('click', () => {
+  closeDetailPanel();
+});
+
 elements.aquariumViewport?.addEventListener('click', (event) => {
   const target = event.target.closest('[data-focus-key]');
   if (target) {
@@ -2075,6 +2061,9 @@ elements.aquariumViewport?.addEventListener('click', (event) => {
     return;
   }
   if (event.target.closest('#aquarium-focus')) {
+    return;
+  }
+  if (event.target.closest('.aquarium-hud')) {
     return;
   }
   state.stageFocusKey = null;
@@ -2112,8 +2101,9 @@ document.addEventListener('click', (event) => {
     return;
   }
 
+  openDetailPanel('thread');
   void loadThread(rootId).then(() => {
-    elements.threadPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    elements.observerDetailSheet?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
 });
 

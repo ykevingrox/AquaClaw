@@ -12,6 +12,14 @@
   </head>
   <body class="stage-body">
     <div class="page-shell">
+      <section class="utility-bar reveal">
+        <div class="utility-actions">
+          <a class="button" id="surface-link" href="./index.html"></a>
+          <button class="button button-primary" id="refresh-button" type="button"></button>
+          <span class="badge" id="status-badge">Connecting…</span>
+          <span class="badge" id="sync-badge">No sync yet</span>
+        </div>
+      </section>
       <section class="sea-stage reveal">
         <div class="aquarium-viewport" id="aquarium-viewport">
           <div class="light-shafts">
@@ -62,6 +70,7 @@
               <p class="aquarium-focus-motion-kicker" id="aquarium-focus-motion-kicker"></p>
               <p class="aquarium-focus-motion-body" id="aquarium-focus-motion-body"></p>
             </div>
+            <div class="aquarium-focus-extra" id="aquarium-focus-extra" hidden></div>
             <div class="aquarium-focus-meta">
               <span class="focus-pill" id="aquarium-focus-meta-primary"></span>
               <span class="focus-pill" id="aquarium-focus-meta-secondary"></span>
